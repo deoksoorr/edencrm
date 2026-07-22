@@ -128,7 +128,7 @@ INSERT INTO `company_targets` (`period_type`,`year`,`period_no`,`target_revenue`
 UPDATE contracts c JOIN quotes q ON q.id=c.quote_id JOIN quote_versions qv ON qv.id=q.current_version_id
   SET c.vat_amount=qv.vat, c.supply_amount=c.contract_amount-qv.vat WHERE c.quote_id IS NOT NULL;
 UPDATE contracts c SET c.vat_amount=c.contract_amount-ROUND(c.contract_amount/1.1), c.supply_amount=ROUND(c.contract_amount/1.1) WHERE c.vat_amount IS NULL;
-UPDATE projects p JOIN contracts c ON c.id=p.contract_id SET p.supply_amount=c.supply_amount, p.vat_amount=c.vat_amount WHERE p.contract_id IS NOT NULL;
+UPDATE projects p JOIN contracts c ON c.id=p.contract_id SET p.vat_amount=c.vat_amount, p.supply_amount=p.contract_amount-c.vat_amount WHERE p.contract_id IS NOT NULL;
 UPDATE projects p SET p.vat_amount=p.contract_amount-ROUND(p.contract_amount/1.1), p.supply_amount=ROUND(p.contract_amount/1.1) WHERE p.vat_amount IS NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;
