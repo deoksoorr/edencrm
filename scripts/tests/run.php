@@ -1,6 +1,6 @@
 <?php
 /** 전체 회계 테스트 스위트 실행 + A~G 대사표. */
-$suites = ['unit_money', 'unit_profit', 'unit_settings', 'db_schema', 'db_aggregations'];
+$suites = ['unit_money', 'unit_profit', 'unit_p2_service', 'unit_settings', 'db_schema', 'db_aggregations'];
 $fail = 0;
 foreach ($suites as $s) {
     echo "\n=== $s ===\n";

@@ -133,4 +133,53 @@ class AccountingService
             WHERE p.deleted_at IS NULL AND p.status='completed' AND p.actual_end_date IS NOT NULL
               AND pa.user_id=:u $r", $p);
     }
+
+    /** 계약금액을 공급가/부가세로 분리. 견적 연결·total>0이면 견적 vat 비례, 아니면 ÷(1+rate). */
+    public static function computeSplit(int $contractAmount, ?int $quoteId = null): array
+    {
+        $vat = null;
+        if ($quoteId) {
+            $row = Db::one("SELECT qv.vat, qv.total_amount FROM quotes q
+                JOIN quote_versions qv ON qv.id = q.current_version_id WHERE q.id = :id", [':id' => $quoteId]);
+            if ($row && (int) $row['total_amount'] > 0) {
+                $vat = (int) round($contractAmount * (int) $row['vat'] / (int) $row['total_amount']);
+            }
+        }
+        if ($vat === null) { $vat = self::deriveVat($contractAmount); }
+        return ['supply' => $contractAmount - $vat, 'vat' => $vat];
+    }
+
+    /** 확정(완료) 실제원가 합. */
+    public static function confirmedCost(?string $from = null, ?string $to = null): int
+    {
+        $p = [];
+        $r = self::range('actual_end_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(actual_cost),0) FROM projects
+            WHERE deleted_at IS NULL AND status='completed' AND actual_end_date IS NOT NULL $r", $p);
+    }
+
+    /** 직원 귀속 확정매출(완료 프로젝트 Σ 공급가×기여도) — 가중 순이익률 분모. */
+    public static function employeeConfirmedRevenue(int $uid, ?string $from = null, ?string $to = null): int
+    {
+        $p = [':u' => $uid];
+        $r = self::range('p.actual_end_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(p.supply_amount * pa.contribution_pct/100),0)
+            FROM project_assignments pa JOIN projects p ON p.id=pa.project_id
+            WHERE p.deleted_at IS NULL AND p.status='completed' AND p.actual_end_date IS NOT NULL
+              AND pa.user_id=:u $r", $p);
+    }
+
+    /** open 리드 가중 예상매출 합. $uid=null 전체. */
+    public static function weightedPipeline(?int $uid = null): int
+    {
+        $scope = $uid !== null ? ' AND l.sales_user_id=:u' : '';
+        $p = $uid !== null ? [':u' => $uid] : [];
+        $sum = 0.0;
+        foreach (Db::all("SELECT l.expected_amount, l.win_probability FROM leads l
+            JOIN pipeline_stages ps ON ps.id=l.stage_id
+            WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0 $scope", $p) as $l) {
+            $sum += Calc::weightedRevenue((float) ($l['expected_amount'] ?? 0), (float) ($l['win_probability'] ?? 0));
+        }
+        return (int) round($sum);
+    }
 }
