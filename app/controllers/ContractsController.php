@@ -208,6 +208,7 @@ class ContractsController
         if ($contractAmount <= 0) {
             Response::redirect('contracts.form', $id ? ['id' => $id] : [], '계약금액을 올바르게 입력하세요.', 'error');
         }
+        $contractAmount = (int) round($contractAmount); // 원 단위 정수 정규화 — 저장값과 split 을 동일 정수로
         if (!array_key_exists($status, self::STATUS_LABELS)) {
             $status = 'draft';
         }

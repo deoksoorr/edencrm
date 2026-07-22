@@ -283,7 +283,7 @@ class ProjectsController
             'customer_id'        => $customerId,
             'site_address'       => Util::nullIfEmpty(Util::postStr('site_address')),
             'work_type'          => Util::nullIfEmpty(Util::postStr('work_type')),
-            'contract_amount'    => (float) Util::postFloat('contract_amount', 0),
+            'contract_amount'    => (int) round((float) Util::postFloat('contract_amount', 0)),
             'estimated_cost'     => (float) Util::postFloat('estimated_cost', 0),
             'process_stage_id'   => $processStageId > 0 ? $processStageId : null,
             'status'             => $status,
