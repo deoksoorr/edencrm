@@ -20,4 +20,10 @@ t_int('직원2 귀속매출(seed)=0', 0, AccountingService::employeeConfirmedRev
 // weightedPipeline: seed 리드 없음 → 0 (leads 미시딩)
 t_int('가중 파이프라인(seed)=0', 0, AccountingService::weightedPipeline());
 
+// boss 대시보드: 이번 달 확정매출/수주액/미수금(seed)
+$mf = date('Y-m-01'); $mt = date('Y-m-t');
+t_int('이번달 확정매출(seed)=0', 0, AccountingService::confirmedRevenue($mf, $mt));
+t_int('이번달 수주액(seed)=34,000,000', 34000000, AccountingService::contractedAmount($mf, $mt));
+t_int('미수금(seed)=26,223,575', 26223575, AccountingService::receivable());
+
 exit(t_summary());

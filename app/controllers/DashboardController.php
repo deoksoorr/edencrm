@@ -129,13 +129,16 @@ class DashboardController
         return ['today' => $today, 'attendance' => $attendance];
     }
 
-    /** 핵심 KPI 6종(전월 대비 델타 포함). */
+    /** 핵심 KPI 6종(전월 대비 델타 포함). 확정 = completed·actual_end_date·공급가 기준(AccountingService). */
     private function bossKpi(): array
     {
-        $rev = $this->monthRevenue(0);
-        $prevRev = $this->monthRevenue(-1);
-        $cost = $this->monthCost(0, 'estimated_cost');
-        $profit = Calc::profit($rev, $cost);
+        $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
+        $pFrom = date('Y-m-01', strtotime('first day of last month'));
+        $pTo   = date('Y-m-t', strtotime('last month'));
+
+        $rev     = (float) AccountingService::confirmedRevenue($mFrom, $mTo);
+        $prevRev = (float) AccountingService::confirmedRevenue($pFrom, $pTo);
+        $profit  = (float) AccountingService::confirmedProfit($mFrom, $mTo);
 
         return [
             'revenue'  => ['value' => $rev, 'delta' => $this->delta($rev, $prevRev)],
@@ -143,7 +146,7 @@ class DashboardController
             'active'   => ['value' => $this->countProjects("status='in_progress'")],
             'delayed'  => ['value' => $this->countProjects($this->delayedCond())],
             'pending'  => ['value' => $this->stageCount(['contract_pending'])],
-            'recv'     => ['value' => $this->receivableTotal()],
+            'recv'     => ['value' => (float) AccountingService::receivable()],
         ];
     }
 
@@ -329,45 +332,43 @@ class DashboardController
         ];
     }
 
-    /** 재무 요약 + 목표. */
+    /** 재무 요약 + 목표. 확정매출/확정순이익 = completed·actual_end_date·공급가 기준(AccountingService). */
     private function finance(?int $uid): array
     {
-        $rev = $this->monthRevenue(0);
-        $estCost = $this->monthCost(0, 'estimated_cost');
-        $actCost = $this->monthCost(0, 'actual_cost');
-        $pipeline = 0.0;
-        foreach (Db::all("SELECT l.expected_amount, l.win_probability FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0") as $l) {
-            $pipeline += Calc::weightedRevenue((float) ($l['expected_amount'] ?? 0), (float) ($l['win_probability'] ?? 0));
-        }
+        $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
+        $revenue = (float) AccountingService::confirmedRevenue($mFrom, $mTo);
+        $cost    = (float) AccountingService::confirmedCost($mFrom, $mTo);
         return [
-            'revenue'       => $rev,
-            'pipeline'      => $pipeline,
-            'actual_cost'   => $actCost,
-            'expected_profit' => Calc::profit($rev, $estCost),
-            'actual_profit' => Calc::profit($rev, $actCost),
-            'profit_rate'   => Calc::profitRate($rev, $actCost),
-            'receivable'    => $this->receivableTotal(),
-            'goal'          => $this->goal(null),
+            'revenue'          => $revenue,                                              // 확정매출
+            'contracted'       => (float) AccountingService::contractedAmount($mFrom, $mTo), // 이번달 수주액(신규)
+            'pipeline'         => (float) AccountingService::weightedPipeline(),          // 가중 예상매출
+            'expected_rev'     => (float) AccountingService::expectedRevenue(),           // 진행+미착공 공급가
+            'actual_cost'      => $cost,
+            'confirmed_profit' => (float) AccountingService::confirmedProfit($mFrom, $mTo),
+            'profit_rate'      => Calc::profitRate($revenue, $cost),
+            'receivable'       => (float) AccountingService::receivable(),
+            'goal'             => $this->goal(null),
         ];
     }
 
-    /** 목표 진행: target/actual/remaining/rate. $uid=null → 전체 합. */
+    /** 목표 진행: target/actual/remaining/rate. $uid=null → 전체(회사) 목표, actual=확정매출. */
     private function goal(?int $uid): array
     {
         $y = (int) date('Y'); $m = (int) date('n');
         if ($uid !== null) {
+            // 개인 목표: 실제(actual)는 계약금액 기준 유지(귀속 확정매출 범위 전환은 Task4에서 처리)
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM targets WHERE user_id=:u AND year=:y AND month=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
             $actual = (float) Db::val("SELECT COALESCE(SUM(contract_amount),0) FROM projects WHERE deleted_at IS NULL AND sales_user_id=:u AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
         } else {
-            // 회사 월 목표(목표 관리 화면의 company_targets 기준)
+            // 회사 월 목표(목표 관리 화면의 company_targets 기준), actual = 확정매출
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM company_targets WHERE period_type='month' AND year=:y AND period_no=:m", [':y' => $y, ':m' => $m]);
-            $actual = $this->monthRevenue(0);
+            $actual = (float) AccountingService::confirmedRevenue(date('Y-m-01'), date('Y-m-t'));
         }
         return [
             'target'    => $target,
             'actual'    => $actual,
             'remaining' => max(0, $target - $actual),
-            'rate'      => Calc::achievement($actual, $target),
+            'rate'      => AccountingService::achievement($actual, $target),
             'set'       => $target > 0,   // 목표 미설정 판별
         ];
     }
@@ -429,19 +430,16 @@ class DashboardController
         );
     }
 
-    /** 직원 성과 표(boss). 담당 프로젝트수·이번달 매출·순이익 기여액·목표 달성률·일정 준수율. */
+    /**
+     * 직원 성과 표(boss). 담당 프로젝트수·이번달 수주액(담당)·순이익 기여(확정)·순이익률(가중)·회사기여율·일정준수율.
+     * 순이익 기여 = 완료 프로젝트만·공급가 기준(AccountingService::employeeConfirmedContribution).
+     */
     private function staffPerformance(): array
     {
-        $y = (int) date('Y'); $m = (int) date('n');
+        $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
         $users = Db::all("SELECT id, name, role_key FROM users WHERE deleted_at IS NULL AND status='active' AND role_key IN ('sales_manager','site_manager','staff') ORDER BY name");
         if (!$users) { return []; }
 
-        // 이번달 매출(영업담당 기준)
-        $revRows = Db::all("SELECT sales_user_id uid, COALESCE(SUM(contract_amount),0) rev FROM projects WHERE deleted_at IS NULL AND sales_user_id IS NOT NULL AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m GROUP BY sales_user_id", [':y' => $y, ':m' => $m]);
-        $revBy = array_column($revRows, 'rev', 'uid');
-        // 목표
-        $tgtRows = Db::all("SELECT user_id uid, target_revenue t FROM targets WHERE year=:y AND month=:m", [':y' => $y, ':m' => $m]);
-        $tgtBy = array_column($tgtRows, 't', 'uid');
         // 담당 프로젝트 수(배정+담당)
         $cntRows = Db::all(
             "SELECT uid, COUNT(DISTINCT pid) c FROM (
@@ -451,13 +449,14 @@ class DashboardController
              ) t GROUP BY uid"
         );
         $cntBy = array_column($cntRows, 'c', 'uid');
-        // 순이익 기여액(배정 기여도 × 프로젝트 실제순이익)
-        $contribRows = Db::all(
-            "SELECT pa.user_id uid, COALESCE(SUM((p.contract_amount - p.actual_cost) * pa.contribution_pct/100),0) contrib
-             FROM project_assignments pa JOIN projects p ON p.id=pa.project_id AND p.deleted_at IS NULL
-             GROUP BY pa.user_id"
+        // 이번달 담당 수주액(공급가, 영업담당 기준)
+        $ctrRows = Db::all(
+            "SELECT sales_user_id uid, COALESCE(SUM(supply_amount),0) c FROM projects
+             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id IS NOT NULL
+               AND contract_date BETWEEN :f AND :t GROUP BY sales_user_id",
+            [':f' => $mFrom, ':t' => $mTo]
         );
-        $contribBy = array_column($contribRows, 'contrib', 'uid');
+        $ctrBy = array_column($ctrRows, 'c', 'uid');
         // 일정 준수율(완료 프로젝트 중 기한 내 완료 비율)
         $onRows = Db::all(
             "SELECT pa.user_id uid,
@@ -469,25 +468,31 @@ class DashboardController
         $onBy = [];
         foreach ($onRows as $r) { $onBy[$r['uid']] = ['ontime' => (int) $r['ontime'], 'done' => (int) $r['done']]; }
 
+        // 회사 전체 확정순이익(회사기여율 분모) — 루프 밖 1회 조회(N+1 방지)
+        $companyProfit = (float) AccountingService::companyConfirmedProfit();
+
         $roleLabel = ['sales_manager' => '영업', 'site_manager' => '현장', 'staff' => '직원'];
         $out = [];
         foreach ($users as $usr) {
             $id = (int) $usr['id'];
-            $rev = (float) ($revBy[$id] ?? 0);
-            $tgt = (float) ($tgtBy[$id] ?? 0);
+            $contrib = (float) AccountingService::employeeConfirmedContribution($id);
+            $attrRev = (float) AccountingService::employeeConfirmedRevenue($id);
             $on = $onBy[$id] ?? ['ontime' => 0, 'done' => 0];
             $out[] = [
-                'name'     => $usr['name'],
-                'role'     => $roleLabel[$usr['role_key']] ?? '직원',
-                'projects' => (int) ($cntBy[$id] ?? 0),
-                'revenue'  => $rev,
-                'contrib'  => (float) ($contribBy[$id] ?? 0),
-                'achieve'  => Calc::achievement($rev, $tgt),
-                'ontime'   => $on['done'] > 0 ? Calc::rate($on['ontime'], $on['done']) : null,
+                'user_id'      => $id,
+                'name'         => $usr['name'],
+                'role'         => $roleLabel[$usr['role_key']] ?? '직원',
+                'assigned'     => (int) ($cntBy[$id] ?? 0),
+                'contracted'   => (float) ($ctrBy[$id] ?? 0),
+                'contrib'      => $contrib,
+                'attr_rev'     => $attrRev,
+                'margin'       => Calc::rate($contrib, $attrRev),        // 귀속순이익÷귀속매출×100
+                'company_rate' => Calc::rate($contrib, $companyProfit),  // 회사 순이익 기여율
+                'ontime'       => $on['done'] > 0 ? Calc::rate($on['ontime'], $on['done']) : null,
             ];
         }
-        // 매출·기여액 큰 순
-        usort($out, fn($a, $b) => ($b['revenue'] + $b['contrib']) <=> ($a['revenue'] + $a['contrib']));
+        // 순이익 기여(확정) 큰 순
+        usort($out, fn($a, $b) => $b['contrib'] <=> $a['contrib']);
         return $out;
     }
 
@@ -563,43 +568,12 @@ class DashboardController
         return (int) Db::val("SELECT COUNT(*) FROM projects p WHERE p.deleted_at IS NULL AND ($cond) AND ($scope)", $params);
     }
 
-    private function monthRevenue(int $offset): float
-    {
-        return (float) Db::val(
-            "SELECT COALESCE(SUM(contract_amount),0) FROM projects
-             WHERE deleted_at IS NULL AND contract_date IS NOT NULL
-               AND DATE_FORMAT(contract_date,'%Y-%m')=DATE_FORMAT(CURDATE()+INTERVAL :o MONTH,'%Y-%m')",
-            [':o' => $offset]
-        );
-    }
-
-    private function monthCost(int $offset, string $col): float
-    {
-        $col = $col === 'actual_cost' ? 'actual_cost' : 'estimated_cost';
-        return (float) Db::val(
-            "SELECT COALESCE(SUM($col),0) FROM projects
-             WHERE deleted_at IS NULL AND contract_date IS NOT NULL
-               AND DATE_FORMAT(contract_date,'%Y-%m')=DATE_FORMAT(CURDATE()+INTERVAL :o MONTH,'%Y-%m')",
-            [':o' => $offset]
-        );
-    }
-
     private function stageCount(array $stageKeys): int
     {
         $in = implode(',', array_fill(0, count($stageKeys), '?'));
         return (int) Db::val(
             "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
              WHERE l.deleted_at IS NULL AND ps.stage_key IN ($in)", $stageKeys
-        );
-    }
-
-    private function receivableTotal(): float
-    {
-        return (float) Db::val(
-            "SELECT COALESCE(SUM(c.contract_amount),0) - COALESCE((
-                SELECT SUM(p.amount) FROM payments p JOIN contracts c2 ON c2.id=p.contract_id
-                WHERE p.status='paid' AND c2.deleted_at IS NULL),0)
-             FROM contracts c WHERE c.deleted_at IS NULL"
         );
     }
 

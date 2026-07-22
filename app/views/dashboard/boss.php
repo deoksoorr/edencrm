@@ -34,7 +34,7 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
     <div class="kpi-grid k6">
       <?php
       $kpiCard(url('reports.index'), '이번 달 확정매출', moneyCell($kpi['revenue']['value']), 'brand', $kpi['revenue']['delta'], '전월 대비');
-      $kpiCard(url('reports.index'), '이번 달 예상순이익', moneyCell($kpi['profit']['value']), $kpi['profit']['value'] < 0 ? 'danger' : 'ok', null, $kpi['profit']['value'] < 0 ? '적자 주의' : '');
+      $kpiCard(url('reports.index'), '이번 달 확정순이익', moneyCell($kpi['profit']['value']), $kpi['profit']['value'] < 0 ? 'danger' : 'ok', null, $kpi['profit']['value'] < 0 ? '적자 주의' : '');
       $kpiCard(url('projects.index', ['status' => 'in_progress']), '진행 중 공사', number_format($kpi['active']['value']) . '<span class="u">건</span>');
       $kpiCard(url('projects.index', ['status' => 'delayed']), '지연 공사', number_format($kpi['delayed']['value']) . '<span class="u">건</span>', $kpi['delayed']['value'] > 0 ? 'danger' : '', null, $kpi['delayed']['value'] > 0 ? '확인 필요' : '정상');
       $kpiCard(url('pipeline.index', ['tab' => 'contract']), '계약 대기', number_format($kpi['pending']['value']) . '<span class="u">건</span>', $kpi['pending']['value'] > 0 ? 'warn' : '');
@@ -94,11 +94,11 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
         <div class="section-head"><div class="st"><h2>재무 현황</h2><span class="section-desc">이번 달</span></div>
           <a class="section-link" href="<?= e(url('reports.index')) ?>">상세 리포트 →</a></div>
         <div class="kv-row mb-14">
-          <div class="kv"><span class="kv-label">확정 매출</span><span class="kv-value mono"><?= e(moneyShort($finance['revenue'])) ?></span></div>
-          <div class="kv"><span class="kv-label">예상 매출(가중)</span><span class="kv-value mono"><?= e(moneyShort($finance['pipeline'])) ?></span></div>
-          <div class="kv"><span class="kv-label">실제 원가</span><span class="kv-value mono"><?= e(moneyShort($finance['actual_cost'])) ?></span></div>
-          <div class="kv"><span class="kv-label">예상 순이익</span><span class="kv-value mono <?= $finance['expected_profit'] < 0 ? 'text-danger' : '' ?>"><?= e(moneyShort($finance['expected_profit'])) ?></span></div>
-          <div class="kv"><span class="kv-label">실제 순이익률</span><span class="kv-value mono"><?= e(pct($finance['profit_rate'])) ?></span></div>
+          <div class="kv"><span class="kv-label">확정매출</span><span class="kv-value mono"><?= e(moneyShort($finance['revenue'])) ?></span></div>
+          <div class="kv"><span class="kv-label">이번달 수주액</span><span class="kv-value mono"><?= e(moneyShort($finance['contracted'])) ?></span></div>
+          <div class="kv"><span class="kv-label">예상매출(가중)</span><span class="kv-value mono"><?= e(moneyShort($finance['pipeline'])) ?></span></div>
+          <div class="kv"><span class="kv-label">실제원가</span><span class="kv-value mono"><?= e(moneyShort($finance['actual_cost'])) ?></span></div>
+          <div class="kv"><span class="kv-label">확정순이익률</span><span class="kv-value mono"><?= e(pct($finance['profit_rate'])) ?></span></div>
           <div class="kv"><span class="kv-label">미수금</span><span class="kv-value mono <?= $finance['receivable'] > 0 ? 'text-warn' : '' ?>"><?= e(moneyShort($finance['receivable'])) ?></span></div>
         </div>
         <?php View::partial('partials/goal', ['g' => $g, 'title' => '이번 달 매출 목표 달성률']); ?>
@@ -159,22 +159,33 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
 
   <!-- E. 직원 성과 (전체 폭) -->
   <div class="card pad">
-    <div class="section-head"><div class="st"><h2>직원 성과</h2><span class="section-desc">이번 달</span></div>
+    <div class="section-head"><div class="st"><h2>직원 성과</h2><span class="section-desc" title="순이익 기여 = 완료 프로젝트만·공급가 기준">이번 달 · 순이익 기여는 완료 프로젝트만·공급가 기준</span></div>
       <a class="section-link" href="<?= e(url('performance.index')) ?>">전체 성과 →</a></div>
     <?php if (!$perf): ?>
       <div class="empty"><div class="empty-title">표시할 직원 성과가 없습니다.</div></div>
     <?php else: ?>
     <div class="table-wrap border-0">
       <table class="data">
-        <thead><tr><th>직원</th><th class="num">담당</th><th class="num">이번달 매출</th><th class="num">순이익 기여</th><th class="num">목표 달성</th><th class="num">일정 준수</th></tr></thead>
+        <thead>
+          <tr>
+            <th>직원</th>
+            <th class="num">담당</th>
+            <th class="num">이번달 수주(담당)</th>
+            <th class="num" title="순이익 기여 = 완료 프로젝트만·공급가 기준(공급가-실제원가)×기여도">순이익 기여(확정)</th>
+            <th class="num" title="귀속 확정순이익 ÷ 귀속 확정매출 × 100">순이익률(가중)</th>
+            <th class="num" title="직원 순이익 기여 ÷ 회사 전체 확정순이익 × 100">회사기여율</th>
+            <th class="num">일정준수</th>
+          </tr>
+        </thead>
         <tbody>
           <?php foreach ($perf as $p): ?>
             <tr>
-              <td><?= e($p['name']) ?> <span class="badge badge-muted"><?= e($p['role']) ?></span></td>
-              <td class="num mono"><?= number_format($p['projects']) ?></td>
-              <td class="num mono" title="<?= e(number_format($p['revenue']) . '원') ?>"><?= e(moneyShort($p['revenue'])) ?></td>
-              <td class="num mono <?= $p['contrib'] < 0 ? 'text-danger' : '' ?>" title="<?= e(number_format($p['contrib']) . '원') ?>"><?= e(moneyShort($p['contrib'])) ?></td>
-              <td class="num mono"><?= e(pct($p['achieve'])) ?></td>
+              <td><a href="<?= e(url('performance.user', ['id' => $p['user_id']])) ?>"><?= e($p['name']) ?></a> <span class="badge badge-muted"><?= e($p['role']) ?></span></td>
+              <td class="num mono"><?= number_format($p['assigned']) ?></td>
+              <td class="num mono"><?= moneyCell($p['contracted']) ?></td>
+              <td class="num mono <?= $p['contrib'] < 0 ? 'text-danger' : '' ?>"><?= moneyCell($p['contrib']) ?></td>
+              <td class="num mono"><?= e(pct($p['margin'])) ?></td>
+              <td class="num mono"><?= e(pct($p['company_rate'])) ?></td>
               <td class="num mono"><?= e(pct($p['ontime'])) ?></td>
             </tr>
           <?php endforeach; ?>
