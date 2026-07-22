@@ -168,20 +168,12 @@ class DashboardController
 
     private function salesKpi(int $uid): array
     {
-        // 내 담당 리드 기준
-        $pipeline = 0.0;
-        $rows = Db::all(
-            "SELECT l.expected_amount, l.win_probability FROM leads l
-             JOIN pipeline_stages ps ON ps.id=l.stage_id
-             WHERE l.deleted_at IS NULL AND l.sales_user_id=:u AND ps.is_won=0 AND ps.is_lost=0",
-            [':u' => $uid]
-        );
-        foreach ($rows as $r) {
-            $pipeline += Calc::weightedRevenue((float) ($r['expected_amount'] ?? 0), (float) ($r['win_probability'] ?? 0));
-        }
-        $rev = (float) Db::val(
-            "SELECT COALESCE(SUM(contract_amount),0) FROM projects
-             WHERE deleted_at IS NULL AND sales_user_id=:u
+        // 내 담당 리드 기준(가중) — AccountingService 단일 출처
+        $pipeline = (float) AccountingService::weightedPipeline($uid);
+        // 내 담당 이번달 수주(공급가 기준, 취소 제외)
+        $rev = (int) Db::val(
+            "SELECT COALESCE(SUM(supply_amount),0) FROM projects
+             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id=:u
                AND YEAR(contract_date)=YEAR(CURDATE()) AND MONTH(contract_date)=MONTH(CURDATE())",
             [':u' => $uid]
         );
@@ -356,9 +348,9 @@ class DashboardController
     {
         $y = (int) date('Y'); $m = (int) date('n');
         if ($uid !== null) {
-            // 개인 목표: 실제(actual)는 계약금액 기준 유지(귀속 확정매출 범위 전환은 Task4에서 처리)
+            // 개인 목표: 실제(actual) = 담당 이번달 수주 공급가 합(공급가 기준 통일)
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM targets WHERE user_id=:u AND year=:y AND month=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
-            $actual = (float) Db::val("SELECT COALESCE(SUM(contract_amount),0) FROM projects WHERE deleted_at IS NULL AND sales_user_id=:u AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
+            $actual = (float) Db::val("SELECT COALESCE(SUM(supply_amount),0) FROM projects WHERE deleted_at IS NULL AND sales_user_id=:u AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
         } else {
             // 회사 월 목표(목표 관리 화면의 company_targets 기준), actual = 확정매출
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM company_targets WHERE period_type='month' AND year=:y AND period_no=:m", [':y' => $y, ':m' => $m]);
@@ -514,24 +506,23 @@ class DashboardController
         ];
     }
 
-    /** 최근 6개월 매출·순이익(미래 월 없음 — 현재월까지). */
+    /**
+     * 최근 6개월 확정매출·확정순이익(완료·준공월(actual_end_date)·공급가 기준 — AccountingService,
+     * 리포트 월별추이(ReportsController::monthlyTrend)와 동일 산식으로 대시보드/리포트 차트를 일치시킨다).
+     * $uid 는 salesCharts 호출 시그니처 호환용으로만 남기며 사용하지 않는다 — 담당자별 확정(준공) 매출을
+     * 산출하는 서비스 메서드가 없어, 영업 대시보드도 회사 전체 확정 추이를 표시해 리포트와 정확히 맞춘다.
+     */
     private function monthlyTrend(?int $uid): array
     {
         $months = [];
         for ($i = 5; $i >= 0; $i--) { $months[] = date('Y-m', strtotime("first day of -$i month")); }
-        $scope = $uid !== null ? ' AND sales_user_id=:u' : '';
-        $p = $uid !== null ? [':u' => $uid] : [];
-        $rows = Db::all(
-            "SELECT DATE_FORMAT(contract_date,'%Y-%m') ym, COALESCE(SUM(contract_amount),0) rev, COALESCE(SUM(actual_cost),0) cost
-             FROM projects WHERE deleted_at IS NULL AND contract_date>=:s $scope GROUP BY ym",
-            array_merge([':s' => $months[0] . '-01'], $p)
-        );
-        $by = array_column($rows, null, 'ym');
         $out = [];
         foreach ($months as $ym) {
-            $rev = (float) ($by[$ym]['rev'] ?? 0);
-            $cost = (float) ($by[$ym]['cost'] ?? 0);
-            $out[] = ['ym' => substr($ym, 2), 'revenue' => $rev, 'profit' => Calc::profit($rev, $cost)];
+            $from = $ym . '-01';
+            $to   = date('Y-m-t', strtotime($from));
+            $rev  = (float) AccountingService::confirmedRevenue($from, $to);
+            $profit = (float) AccountingService::confirmedProfit($from, $to);
+            $out[] = ['ym' => substr($ym, 2), 'revenue' => $rev, 'profit' => $profit];
         }
         return $out;
     }

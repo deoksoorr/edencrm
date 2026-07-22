@@ -17,8 +17,8 @@ $pick = ['contact_overdue', 'contact_none', 'contract_stale'];
   <div class="section">
     <div class="section-head"><div class="st"><h2>내 영업 핵심</h2></div></div>
     <div class="kpi-grid">
-      <a class="kpi accent-brand" href="<?= e(url('pipeline.index')) ?>"><div class="kpi-label">내 파이프라인 예상매출</div><div class="kpi-value"><?= moneyCell($kpi['pipeline']['value']) ?></div><div class="kpi-note">가중 예상매출</div></a>
-      <a class="kpi accent-ok" href="<?= e(url('contracts.index')) ?>"><div class="kpi-label">이번 달 계약</div><div class="kpi-value"><?= moneyCell($kpi['revenue']['value']) ?></div></a>
+      <a class="kpi accent-brand" href="<?= e(url('pipeline.index')) ?>"><div class="kpi-label">예상매출(가중)</div><div class="kpi-value"><?= moneyCell($kpi['pipeline']['value']) ?></div></a>
+      <a class="kpi accent-ok" href="<?= e(url('contracts.index')) ?>"><div class="kpi-label">이번 달 수주(공급)</div><div class="kpi-value"><?= moneyCell($kpi['revenue']['value']) ?></div></a>
       <a class="kpi" href="<?= e(url('pipeline.index')) ?>"><div class="kpi-label">계약 전환율</div><div class="kpi-value"><?= e(pct($kpi['conv']['value'])) ?></div></a>
       <a class="kpi <?= $kpi['closing']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('pipeline.index', ['quick' => 'closing'])) ?>"><div class="kpi-label">계약 임박</div><div class="kpi-value"><?= number_format($kpi['closing']['value']) ?><span class="u">건</span></div></a>
       <a class="kpi <?= $kpi['contact']['value'] > 0 ? 'accent-danger' : '' ?>" href="<?= e(url('pipeline.index', ['quick' => 'today'])) ?>"><div class="kpi-label">오늘 연락 필요</div><div class="kpi-value"><?= number_format($kpi['contact']['value']) ?><span class="u">건</span></div></a>
