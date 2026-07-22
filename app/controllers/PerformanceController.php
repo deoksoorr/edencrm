@@ -102,7 +102,7 @@ class PerformanceController
         $totalContribution = 0.0;
         foreach ($assignments as $a) {
             $profit      = AccountingService::projectActualProfit($a);
-            $confirmed   = ($a['status'] === 'completed');
+            $confirmed   = ($a['status'] === 'completed' && $a['actual_end_date'] !== null);
             $myConfirmed = $confirmed ? AccountingService::contribution($profit, (float) $a['contribution_pct']) : 0;
             $myExpected  = $confirmed ? 0 : AccountingService::contribution($profit, (float) $a['contribution_pct']);
             $totalContribution += $myConfirmed;
