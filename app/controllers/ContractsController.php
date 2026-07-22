@@ -230,6 +230,10 @@ class ContractsController
             'sales_user_id'   => $salesUserId,
         ];
 
+        $split = AccountingService::computeSplit((int) $contractAmount, $quoteId);
+        $data['supply_amount'] = $split['supply'];
+        $data['vat_amount']    = $split['vat'];
+
         $contractId = Db::transaction(function () use ($id, $data) {
             if ($id > 0) {
                 $existing = Db::one("SELECT id FROM contracts WHERE id=:id AND deleted_at IS NULL FOR UPDATE", [':id' => $id]);
@@ -337,6 +341,8 @@ class ContractsController
                 'site_address'     => $customer['site_address'] ?? null,
                 'work_type'        => $workType,
                 'contract_amount'  => $contract['contract_amount'],
+                'vat_amount'       => (int) ($contract['vat_amount'] ?? AccountingService::deriveVat((int) $contract['contract_amount'])),
+                'supply_amount'    => (int) $contract['contract_amount'] - (int) ($contract['vat_amount'] ?? AccountingService::deriveVat((int) $contract['contract_amount'])),
                 'estimated_cost'   => 0,
                 'actual_cost'      => 0,
                 'process_stage_id' => $firstStageId,

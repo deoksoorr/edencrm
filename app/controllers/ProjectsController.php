@@ -147,14 +147,17 @@ class ProjectsController
             [':id' => $id]
         );
 
+        $supply = AccountingService::supplyOf($project);
         $calc = [
             'contract_amount'       => $contractAmount,
+            'supply_amount'         => $supply,
+            'vat_amount'            => AccountingService::vatOf($project),
             'estimated_cost'        => $estimatedCost,
             'actual_cost'           => $actualCost,
-            'estimated_profit'      => Calc::profit($contractAmount, $estimatedCost),
-            'estimated_profit_rate' => Calc::profitRate($contractAmount, $estimatedCost),
-            'actual_profit'         => Calc::profit($contractAmount, $actualCost),
-            'actual_profit_rate'    => Calc::profitRate($contractAmount, $actualCost),
+            'estimated_profit'      => Calc::profit($supply, $estimatedCost),
+            'estimated_profit_rate' => Calc::profitRate($supply, $estimatedCost),
+            'actual_profit'         => Calc::profit($supply, $actualCost),
+            'actual_profit_rate'    => Calc::profitRate($supply, $actualCost),
         ];
 
         $assignments = Db::all(
@@ -296,6 +299,10 @@ class ProjectsController
             'contribution_mode'  => $contribMode,
             'memo'               => Util::nullIfEmpty(Util::postStr('memo')),
         ];
+
+        $split = AccountingService::computeSplit((int) $data['contract_amount'], null);
+        $data['supply_amount'] = $split['supply'];
+        $data['vat_amount']    = $split['vat'];
 
         if ($id) {
             $before = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $id]);
