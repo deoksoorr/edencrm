@@ -124,4 +124,11 @@ INSERT INTO `company_targets` (`period_type`,`year`,`period_no`,`target_revenue`
 ('month',2026,7,50000000,15000000),('month',2026,8,60000000,18000000),('month',2026,9,55000000,16000000),
 ('quarter',2026,3,165000000,49000000),('year',2026,0,600000000,180000000);
 
+-- 공급가액/부가세 백필 (schema 컬럼 기준)
+UPDATE contracts c JOIN quotes q ON q.id=c.quote_id JOIN quote_versions qv ON qv.id=q.current_version_id
+  SET c.vat_amount=qv.vat, c.supply_amount=c.contract_amount-qv.vat WHERE c.quote_id IS NOT NULL;
+UPDATE contracts c SET c.vat_amount=c.contract_amount-ROUND(c.contract_amount/1.1), c.supply_amount=ROUND(c.contract_amount/1.1) WHERE c.vat_amount IS NULL;
+UPDATE projects p JOIN contracts c ON c.id=p.contract_id SET p.supply_amount=c.supply_amount, p.vat_amount=c.vat_amount WHERE p.contract_id IS NOT NULL;
+UPDATE projects p SET p.vat_amount=p.contract_amount-ROUND(p.contract_amount/1.1), p.supply_amount=ROUND(p.contract_amount/1.1) WHERE p.vat_amount IS NULL;
+
 SET FOREIGN_KEY_CHECKS = 1;
