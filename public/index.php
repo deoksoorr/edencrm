@@ -68,6 +68,16 @@ if (!empty($opts['perm'])) {
     Rbac::require($opts['perm']);
 }
 
+// ── 4.5) 기능 플래그 게이트 ──
+if (!empty($opts['feature']) && !Settings::enabled('feature_' . $opts['feature'])) {
+    if (Response::wantsJson()) {
+        Response::error('현재 비활성화된 기능입니다.', 404);
+    }
+    http_response_code(404);
+    View::renderError(404, '비활성화된 기능', '이 기능은 현재 사용하도록 설정되어 있지 않습니다. 관리자에게 문의하세요.');
+    exit;
+}
+
 // ── 5) 컨트롤러 실행 ──
 try {
     load_controller($controllerName);

@@ -86,12 +86,12 @@ return [
     'assignments.delete'=> ['AssignmentsController', 'delete', 'perm' => 'project.assign', 'method' => 'POST'],
 
     // ── 작업일지 (T7) ──
-    'worklogs.index'    => ['WorklogsController', 'index'],
-    'worklogs.form'     => ['WorklogsController', 'form',   'perm' => 'worklog.create'],
-    'worklogs.save'     => ['WorklogsController', 'save',   'perm' => 'worklog.create', 'method' => 'POST'],
-    'worklogs.show'     => ['WorklogsController', 'show'],
-    'worklogs.confirm'  => ['WorklogsController', 'confirm', 'perm' => 'worklog.confirm', 'method' => 'POST'],
-    'worklogs.photo'    => ['WorklogsController', 'uploadPhoto', 'perm' => 'worklog.create', 'method' => 'POST'],
+    'worklogs.index'    => ['WorklogsController', 'index', 'feature' => 'worklog'],
+    'worklogs.form'     => ['WorklogsController', 'form',   'perm' => 'worklog.create', 'feature' => 'worklog'],
+    'worklogs.save'     => ['WorklogsController', 'save',   'perm' => 'worklog.create', 'method' => 'POST', 'feature' => 'worklog'],
+    'worklogs.show'     => ['WorklogsController', 'show', 'feature' => 'worklog'],
+    'worklogs.confirm'  => ['WorklogsController', 'confirm', 'perm' => 'worklog.confirm', 'method' => 'POST', 'feature' => 'worklog'],
+    'worklogs.photo'    => ['WorklogsController', 'uploadPhoto', 'perm' => 'worklog.create', 'method' => 'POST', 'feature' => 'worklog'],
 
     // ── 비용 (T8) ──
     'costs.save'        => ['CostsController', 'save',   'perm' => 'cost.manage', 'method' => 'POST'],

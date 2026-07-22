@@ -18,12 +18,12 @@ class Nav
                 ['quotes.index', '견적', 'quote.view', 'file'],
                 ['contracts.index', '계약', 'contract.view', 'check'],
             ],
-            '현장' => [
+            '현장' => array_values(array_filter([
                 ['projects.index', '프로젝트', null, 'briefcase'],
                 ['process.board', '공정 보드', null, 'trello'],
                 ['schedule.index', '일정', null, 'calendar'],
-                ['worklogs.index', '작업일지', null, 'book'],
-            ],
+                Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', null, 'book'] : null,
+            ])),
             '분석' => [
                 ['performance.index', '직원 성과', null, 'trending'],
                 ['reports.index', '리포트', 'report.view', 'bar'],
