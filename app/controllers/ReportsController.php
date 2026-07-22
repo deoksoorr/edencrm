@@ -97,7 +97,7 @@ class ReportsController
 
         return [
             'period'              => ['from' => $from, 'to' => $to, 'label' => $label],
-            'monthly_trend'       => $this->monthlyTrend($to, $projWhere, $projParams),
+            'monthly_trend'       => $this->monthlyTrend($to),
             'new_customers'       => $this->newCustomers($from, $to, $custWhere, $custParams),
             'by_source'           => $this->bySource($from, $to, $custWhere, $custParams),
             'by_stage'            => $this->byStage(),
@@ -113,38 +113,30 @@ class ReportsController
         ];
     }
 
-    /** 월별 매출·순이익·순이익률(최근 6개월, 마감월=선택 기간의 종료월). projects.contract_date 기준. */
-    private function monthlyTrend(string $to, string $projWhere, array $projParams): array
+    /**
+     * 월별 확정매출·확정순이익·순이익률(최근 6개월, 마감월=선택 기간의 종료월).
+     * 완료 프로젝트·준공월(actual_end_date)·공급가 기준 — AccountingService::confirmedRevenue/confirmedProfit
+     * (대시보드 DashboardController::bossKpi/finance 와 동일 산식). 월별로 서비스 메서드를 호출한다(6회).
+     */
+    private function monthlyTrend(string $to): array
     {
         $endTs = strtotime(date('Y-m-01', strtotime($to)));
         $months = [];
         for ($i = 5; $i >= 0; $i--) {
             $months[] = date('Y-m', strtotime("-$i month", $endTs));
         }
-        $rangeStart = $months[0] . '-01';
-        $rangeEnd = date('Y-m-t', strtotime(end($months) . '-01'));
-
-        $rows = Db::all(
-            "SELECT DATE_FORMAT(p.contract_date, '%Y-%m') AS ym,
-                    COALESCE(SUM(p.contract_amount), 0) AS revenue,
-                    COALESCE(SUM(p.actual_cost), 0) AS cost
-             FROM projects p
-             WHERE $projWhere AND p.deleted_at IS NULL
-               AND p.contract_date BETWEEN :rs AND :re
-             GROUP BY ym",
-            $projParams + [':rs' => $rangeStart, ':re' => $rangeEnd]
-        );
-        $byYm = array_column($rows, null, 'ym');
 
         $out = [];
         foreach ($months as $ym) {
-            $revenue = (float) ($byYm[$ym]['revenue'] ?? 0);
-            $cost = (float) ($byYm[$ym]['cost'] ?? 0);
+            $from = $ym . '-01';
+            $end = date('Y-m-t', strtotime($from));
+            $revenue = (float) AccountingService::confirmedRevenue($from, $end);
+            $profit = (float) AccountingService::confirmedProfit($from, $end);
             $out[] = [
                 'ym'          => $ym,
                 'revenue'     => $revenue,
-                'profit'      => Calc::profit($revenue, $cost),
-                'profit_rate' => Calc::profitRate($revenue, $cost),
+                'profit'      => $profit,
+                'profit_rate' => Calc::rate($profit, $revenue),
             ];
         }
         return $out;
@@ -217,11 +209,11 @@ class ReportsController
         return ['total_quotes' => $total, 'converted' => $converted, 'rate' => Calc::rate($converted, $total)];
     }
 
-    /** 프로젝트별 손익(기간 내 계약일). */
+    /** 프로젝트별 손익(기간 내 계약일). 매출=공급가액, 순이익(률)=AccountingService::projectActualProfit/Rate(공급가 기준). */
     private function projectPl(string $from, string $to, string $projWhere, array $projParams): array
     {
         $rows = Db::all(
-            "SELECT p.id, p.project_no, p.name, p.contract_amount, p.actual_cost, p.status
+            "SELECT p.id, p.project_no, p.name, p.contract_amount, p.supply_amount, p.vat_amount, p.actual_cost, p.status
              FROM projects p
              WHERE $projWhere AND p.deleted_at IS NULL AND p.contract_date BETWEEN :f AND :t
              ORDER BY p.contract_date DESC",
@@ -229,23 +221,21 @@ class ReportsController
         );
         $out = [];
         foreach ($rows as $r) {
-            $revenue = (float) $r['contract_amount'];
-            $cost = (float) $r['actual_cost'];
             $out[] = [
                 'project_no' => $r['project_no'], 'name' => $r['name'], 'status' => $r['status'],
-                'revenue' => $revenue, 'cost' => $cost,
-                'profit' => Calc::profit($revenue, $cost), 'profit_rate' => Calc::profitRate($revenue, $cost),
+                'revenue' => (float) AccountingService::supplyOf($r), 'cost' => (float) $r['actual_cost'],
+                'profit' => AccountingService::projectActualProfit($r), 'profit_rate' => AccountingService::projectActualProfitRate($r),
             ];
         }
         return $out;
     }
 
-    /** 공사유형별 매출·평균수익률(기간 내 계약일, 집계 기준 수익률). */
+    /** 공사유형별 매출(공급가)·평균수익률(기간 내 계약일, 집계 기준 수익률). */
     private function byWorkType(string $from, string $to, string $projWhere, array $projParams): array
     {
         $rows = Db::all(
             "SELECT COALESCE(NULLIF(p.work_type,''),'미상') AS work_type,
-                    COUNT(*) AS cnt, COALESCE(SUM(p.contract_amount),0) AS revenue, COALESCE(SUM(p.actual_cost),0) AS cost
+                    COUNT(*) AS cnt, COALESCE(SUM(p.supply_amount),0) AS revenue, COALESCE(SUM(p.actual_cost),0) AS cost
              FROM projects p
              WHERE $projWhere AND p.deleted_at IS NULL AND p.contract_date BETWEEN :f AND :t
              GROUP BY work_type ORDER BY revenue DESC",
@@ -260,13 +250,13 @@ class ReportsController
         return $rows;
     }
 
-    /** 직원별 성과 요약(기간 내 계약일 기준 매출/원가/순이익). */
+    /** 직원별 성과 요약(기간 내 계약일 기준 매출(공급가)/원가/순이익). */
     private function staffPerformance(string $from, string $to, string $projWhere, array $projParams): array
     {
         $rows = Db::all(
             "SELECT u.id AS user_id, u.name,
                     COUNT(DISTINCT p.id) AS cnt,
-                    COALESCE(SUM(p.contract_amount),0) AS revenue, COALESCE(SUM(p.actual_cost),0) AS cost
+                    COALESCE(SUM(p.supply_amount),0) AS revenue, COALESCE(SUM(p.actual_cost),0) AS cost
              FROM users u
              JOIN projects p ON p.sales_user_id = u.id AND $projWhere AND p.deleted_at IS NULL AND p.contract_date BETWEEN :f AND :t
              WHERE u.deleted_at IS NULL
@@ -297,31 +287,31 @@ class ReportsController
         );
     }
 
-    /** 미수금 현황(현재 스냅샷, 기간 미적용). */
+    /**
+     * 미수금 현황(현재 스냅샷, 기간 미적용). 총액=AccountingService::receivable()(terminated·삭제 제외).
+     * 목록의 계약별 미수금 = GREATEST(0, 계약총액 − Σ입금)(VAT포함, 현금 축) — 총액과 동일 기준으로 산출.
+     */
     private function receivables(): array
     {
         $rows = Db::all(
-            "SELECT c.id, c.contract_no, cu.name AS customer_name, c.contract_amount,
-                    COALESCE((SELECT SUM(pm.amount) FROM payments pm WHERE pm.contract_id = c.id AND pm.status='paid'),0) AS paid
+            "SELECT c.contract_no, cu.name AS customer_name, c.contract_amount,
+                    COALESCE((SELECT SUM(pm.amount) FROM payments pm WHERE pm.contract_id = c.id AND pm.status='paid'),0) AS paid,
+                    GREATEST(0, c.contract_amount - COALESCE((SELECT SUM(pm.amount) FROM payments pm WHERE pm.contract_id = c.id AND pm.status='paid'),0)) AS receivable
              FROM contracts c
              JOIN customers cu ON cu.id = c.customer_id
-             WHERE c.deleted_at IS NULL"
+             WHERE c.deleted_at IS NULL AND c.status <> 'terminated'
+             HAVING receivable > 0
+             ORDER BY receivable DESC"
         );
-        $out = [];
-        $total = 0.0;
+        $list = [];
         foreach ($rows as $r) {
-            $receivable = (float) $r['contract_amount'] - (float) $r['paid'];
-            if ($receivable > 0) {
-                $total += $receivable;
-                $out[] = [
-                    'contract_no' => $r['contract_no'], 'customer_name' => $r['customer_name'],
-                    'contract_amount' => (float) $r['contract_amount'], 'paid' => (float) $r['paid'],
-                    'receivable' => $receivable,
-                ];
-            }
+            $list[] = [
+                'contract_no' => $r['contract_no'], 'customer_name' => $r['customer_name'],
+                'contract_amount' => (float) $r['contract_amount'], 'paid' => (float) $r['paid'],
+                'receivable' => (float) $r['receivable'],
+            ];
         }
-        usort($out, fn($a, $b) => $b['receivable'] <=> $a['receivable']);
-        return ['total' => $total, 'list' => $out];
+        return ['total' => (float) AccountingService::receivable(), 'list' => $list];
     }
 
     /** 원가초과 프로젝트(실제원가 > 예상원가, 현재 스냅샷). */
@@ -343,7 +333,7 @@ class ReportsController
         return $rows;
     }
 
-    /** 목표대비 달성률(기간에 포함된 월들의 회사 월목표 합계 vs projects 실적 합계). 대시보드와 동일 기준(company_targets). */
+    /** 목표대비 달성률(기간에 포함된 월들의 회사 월목표 합계 vs 확정 실적). 대시보드와 동일 기준(company_targets + AccountingService). */
     private function targetAchievement(string $from, string $to): array
     {
         $months = [];
@@ -366,19 +356,15 @@ class ReportsController
             $targetProfit += (float) ($t['tp'] ?? 0);
         }
 
-        $actual = Db::one(
-            "SELECT COALESCE(SUM(contract_amount),0) AS rev, COALESCE(SUM(actual_cost),0) AS cost
-             FROM projects WHERE deleted_at IS NULL AND contract_date BETWEEN :f AND :t",
-            [':f' => $from, ':t' => $to]
-        );
-        $actualRevenue = (float) $actual['rev'];
-        $actualProfit = Calc::profit($actualRevenue, (float) $actual['cost']);
+        // 실적 = 완료·준공일(actual_end_date)·공급가 기준(AccountingService, 대시보드와 동일 산식).
+        $actualRevenue = (float) AccountingService::confirmedRevenue($from, $to);
+        $actualProfit = (float) AccountingService::confirmedProfit($from, $to);
 
         return [
             'target_revenue' => $targetRevenue, 'actual_revenue' => $actualRevenue,
-            'revenue_rate'   => Calc::achievement($actualRevenue, $targetRevenue),
+            'revenue_rate'   => AccountingService::achievement($actualRevenue, $targetRevenue),
             'target_profit'  => $targetProfit, 'actual_profit' => $actualProfit,
-            'profit_rate'    => Calc::achievement($actualProfit, $targetProfit),
+            'profit_rate'    => AccountingService::achievement($actualProfit, $targetProfit),
         ];
     }
 
@@ -388,7 +374,7 @@ class ReportsController
     {
         switch ($type) {
             case 'monthly_trend':
-                $headers = ['년월', '매출', '순이익', '순이익률(%)'];
+                $headers = ['년월', '확정매출', '확정순이익', '순이익률(%)'];
                 $rows = array_map(fn($r) => [$r['ym'], $r['revenue'], $r['profit'], $r['profit_rate'] ?? ''], $report['monthly_trend']);
                 return [$headers, $rows];
             case 'by_source':
@@ -408,15 +394,15 @@ class ReportsController
                 $q = $report['quote_conversion'];
                 return [$headers, [[$q['total_quotes'], $q['converted'], $q['rate'] ?? '']]];
             case 'project_pl':
-                $headers = ['프로젝트번호', '이름', '상태', '매출', '원가', '순이익', '순이익률(%)'];
+                $headers = ['프로젝트번호', '이름', '상태', '매출(공급가)', '원가', '순이익', '순이익률(%)'];
                 $rows = array_map(fn($r) => [$r['project_no'], $r['name'], $r['status'], $r['revenue'], $r['cost'], $r['profit'], $r['profit_rate'] ?? ''], $report['project_pl']);
                 return [$headers, $rows];
             case 'by_work_type':
-                $headers = ['공사유형', '건수', '매출', '원가', '순이익', '평균수익률(%)'];
+                $headers = ['공사유형', '건수', '매출(공급가)', '원가', '순이익', '평균수익률(%)'];
                 $rows = array_map(fn($r) => [$r['work_type'], $r['cnt'], $r['revenue'], $r['cost'], $r['profit'], $r['avg_rate'] ?? ''], $report['by_work_type']);
                 return [$headers, $rows];
             case 'staff_performance':
-                $headers = ['직원', '프로젝트수', '매출', '원가', '순이익'];
+                $headers = ['직원', '프로젝트수', '매출(공급가)', '원가', '순이익'];
                 $rows = array_map(fn($r) => [$r['name'], $r['cnt'], $r['revenue'], $r['cost'], $r['profit']], $report['staff_performance']);
                 return [$headers, $rows];
             case 'delayed_projects':
@@ -435,8 +421,8 @@ class ReportsController
                 $headers = ['구분', '목표', '실적', '달성률(%)'];
                 $ta = $report['target_achievement'];
                 return [$headers, [
-                    ['매출', $ta['target_revenue'], $ta['actual_revenue'], $ta['revenue_rate'] ?? ''],
-                    ['순이익', $ta['target_profit'], $ta['actual_profit'], $ta['profit_rate'] ?? ''],
+                    ['확정매출', $ta['target_revenue'], $ta['actual_revenue'], $ta['revenue_rate'] ?? ''],
+                    ['확정순이익', $ta['target_profit'], $ta['actual_profit'], $ta['profit_rate'] ?? ''],
                 ]];
             default:
                 return [['항목'], []];

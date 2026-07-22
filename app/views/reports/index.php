@@ -21,13 +21,13 @@
     <div class="toolbar-spacer"></div>
     <?php if (can('report.export')): ?>
     <select id="exportType" class="select">
-      <option value="monthly_trend">월별 매출·순이익</option>
+      <option value="monthly_trend">월별 확정매출·확정순이익</option>
       <option value="by_source">유입경로별 고객</option>
       <option value="by_stage">영업단계별 건수</option>
       <option value="sales_conversion">영업직원별 계약률</option>
       <option value="quote_conversion">견적→계약 전환율</option>
-      <option value="project_pl">프로젝트별 손익</option>
-      <option value="by_work_type">공사유형별 매출</option>
+      <option value="project_pl">프로젝트별 손익(공급가)</option>
+      <option value="by_work_type">공사유형별 매출(공급가)</option>
       <option value="staff_performance">직원별 성과</option>
       <option value="delayed_projects">지연 프로젝트</option>
       <option value="receivables">미수금 현황</option>
@@ -52,18 +52,18 @@
       <div class="kpi-value" id="stReceivable">-</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">매출 목표달성률</div>
+      <div class="kpi-label">확정매출 목표달성률</div>
       <div class="kpi-value" id="stRevenueRate">-</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">순이익 목표달성률</div>
+      <div class="kpi-label">확정순이익 목표달성률</div>
       <div class="kpi-value" id="stProfitRate">-</div>
     </div>
   </div>
 
   <div class="grid-2 mb-14">
     <div class="card pad">
-      <div class="section-head"><div class="st"><h2>월별 매출·순이익 추이</h2><span class="section-desc">최근 6개월</span></div></div>
+      <div class="section-head"><div class="st"><h2>월별 확정매출·확정순이익 추이</h2><span class="section-desc">최근 6개월 · 준공월 기준</span></div></div>
       <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
     </div>
     <div class="card pad">
@@ -77,7 +77,7 @@
       <div class="chart-box"><canvas id="chartStage"></canvas></div>
     </div>
     <div class="card pad">
-      <div class="section-head"><div class="st"><h2>공사유형별 매출</h2></div></div>
+      <div class="section-head"><div class="st"><h2>공사유형별 매출(공급가)</h2></div></div>
       <div class="chart-box"><canvas id="chartWorkType"></canvas></div>
     </div>
   </div>
@@ -93,10 +93,10 @@
   </div>
 
   <div class="card mb-14">
-    <div class="card-head"><div class="card-title">프로젝트별 손익</div><div class="muted" style="font-size:12.5px">기간 내 계약</div></div>
+    <div class="card-head"><div class="card-title">프로젝트별 손익(공급가)</div><div class="muted" style="font-size:12.5px">기간 내 계약</div></div>
     <div class="table-wrap border-0">
       <table class="data">
-        <thead><tr><th>프로젝트</th><th>상태</th><th class="num">매출</th><th class="num">원가</th><th class="num">순이익</th><th class="num">순이익률</th></tr></thead>
+        <thead><tr><th>프로젝트</th><th>상태</th><th class="num">매출(공급가)</th><th class="num">원가</th><th class="num">순이익</th><th class="num">순이익률</th></tr></thead>
         <tbody id="tbProjectPl"><tr><td colspan="6" class="loading-row">불러오는 중...</td></tr></tbody>
       </table>
     </div>
@@ -106,7 +106,7 @@
     <div class="card-head"><div class="card-title">직원별 성과</div><div class="muted" style="font-size:12.5px">기간 내 계약</div></div>
     <div class="table-wrap border-0">
       <table class="data">
-        <thead><tr><th>직원</th><th class="num">프로젝트수</th><th class="num">매출</th><th class="num">원가</th><th class="num">순이익</th></tr></thead>
+        <thead><tr><th>직원</th><th class="num">프로젝트수</th><th class="num">매출(공급가)</th><th class="num">원가</th><th class="num">순이익</th></tr></thead>
         <tbody id="tbStaffPerf"><tr><td colspan="5" class="loading-row">불러오는 중...</td></tr></tbody>
       </table>
     </div>
