@@ -9,7 +9,7 @@ $config = $GLOBALS['config'];
 
 // ── 코어 클래스 로드 ──
 foreach ([
-    'Util', 'Db', 'Response', 'Csrf', 'Audit', 'Auth', 'Rbac', 'View', 'Calc', 'Upload', 'Nav', 'Notif', 'Scope', 'Stages', 'AccountingService',
+    'Util', 'Db', 'Response', 'Csrf', 'Audit', 'Auth', 'Rbac', 'View', 'Calc', 'Upload', 'Nav', 'Notif', 'Scope', 'Stages', 'AccountingService', 'Settings',
 ] as $cls) {
     require APP_PATH . '/core/' . $cls . '.php';
 }

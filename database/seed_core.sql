@@ -174,7 +174,8 @@ INSERT INTO `settings` (`setting_key`, `value`, `group`, `label`) VALUES
 ('page_size',            '20',      'general', '목록 페이지당 건수'),
 ('upload_max_size_mb',   '10',      'upload',  '업로드 최대 용량(MB)'),
 ('company_name',         '에덴도장', 'general', '회사명'),
-('timezone',             'Asia/Seoul','general','시간대');
+('timezone',             'Asia/Seoul','general','시간대'),
+('feature_worklog',      '0',       '운영 기능','직원 작업일지 사용');
 
 -- ----------------------------------------------------------------------------
 -- 2026년 대한민국 공휴일
