@@ -198,6 +198,105 @@ table.data td.wrap{white-space:normal;max-width:260px}
 .dl dt{color:var(--ink-3)}
 .dl dd{margin:0;color:var(--ink)}
 
+/* ── 상세 정의 리스트 / 섹션 헤더 ── */
+.section-title{font-size:13px;font-weight:700;color:var(--ink-2);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.detail-title{font-size:19px;font-weight:700}
+.detail-meta{color:var(--ink-3);font-size:13px;margin-top:4px}
+
+/* ── 진행바 ── */
+.progress{height:8px;background:var(--line-2);border-radius:20px;overflow:hidden;min-width:80px}
+.progress-bar{height:100%;background:var(--brand);border-radius:20px;transition:width .3s}
+.progress-bar.ok{background:var(--ok)} .progress-bar.warn{background:var(--warn)} .progress-bar.danger{background:var(--danger)}
+.progress-label{font-size:11px;color:var(--ink-3);margin-top:3px}
+
+/* ── 게이지(목표 달성률) ── */
+.gauge{position:relative;width:100%;max-width:180px;margin:0 auto}
+.gauge-value{font-size:22px;font-weight:700;text-align:center}
+
+/* ── 칸반 보드 (영업 파이프라인 / 공정 보드 공용) ── */
+.kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start}
+.kanban-col{flex:0 0 288px;background:#f7f8fa;border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;max-height:calc(100vh - 200px)}
+.kanban-col-head{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#f7f8fa;border-radius:8px 8px 0 0;z-index:2}
+.kanban-col-title{font-size:13px;font-weight:700;color:var(--ink-2);display:flex;align-items:center;gap:7px}
+.kanban-count{background:#fff;border:1px solid var(--line);color:var(--ink-3);font-size:11px;font-weight:700;padding:1px 8px;border-radius:12px}
+.kanban-col-sum{font-size:11px;color:var(--ink-3);font-weight:600}
+.kanban-list{padding:10px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;flex:1;min-height:60px}
+.kanban-card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:11px 12px;box-shadow:var(--shadow);cursor:grab;border-left:3px solid var(--brand)}
+.kanban-card:hover{border-color:#cbd5e1}
+.kanban-card.dragging{opacity:.5}
+.kanban-card.delayed{border-left-color:var(--danger)}
+.kanban-card.warn{border-left-color:var(--warn)}
+.kanban-card-title{font-weight:600;font-size:13.5px;margin-bottom:5px;color:var(--ink);word-break:break-all}
+.kanban-card-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:3px;gap:8px}
+.kanban-card-amount{font-weight:700;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.kanban-card-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}
+.kanban-card-foot{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2);font-size:11.5px;color:var(--ink-3)}
+.sortable-ghost{opacity:.4}
+.sortable-chosen{box-shadow:0 4px 14px rgba(16,24,40,.15)}
+.kanban-avatar{width:22px;height:22px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.kanban-empty{padding:16px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--line);border-radius:6px}
+
+/* ── 타임라인(고객 활동) ── */
+.timeline{position:relative;padding-left:22px}
+.timeline::before{content:"";position:absolute;left:6px;top:4px;bottom:4px;width:2px;background:var(--line)}
+.timeline-item{position:relative;padding-bottom:16px}
+.timeline-item::before{content:"";position:absolute;left:-19px;top:3px;width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid var(--brand)}
+.timeline-item.call::before{border-color:var(--info)} .timeline-item.visit::before{border-color:var(--ok)}
+.timeline-item.note::before{border-color:var(--muted)}
+.timeline-time{font-size:11.5px;color:var(--ink-3)}
+.timeline-body{font-size:13px;margin-top:2px}
+.timeline-tag{font-size:11px;font-weight:600;color:var(--brand)}
+
+/* ── 캘린더(월 그리드) ── */
+.calendar{width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);background:#fafbfc;border-bottom:1px solid var(--line)}
+.cal-head div{padding:8px;text-align:center;font-size:12px;font-weight:600;color:var(--ink-3)}
+.cal-head div:first-child{color:var(--danger)} .cal-head div:last-child{color:var(--info)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-cell{min-height:96px;border-right:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:5px 6px;position:relative;overflow:hidden}
+.cal-cell:nth-child(7n){border-right:none}
+.cal-cell.other{background:#fafbfc;color:var(--muted)}
+.cal-cell.today{background:var(--brand-soft)}
+.cal-cell.holiday .cal-date{color:var(--danger)}
+.cal-date{font-size:12px;font-weight:600;margin-bottom:4px}
+.cal-ev{font-size:11px;padding:2px 5px;border-radius:4px;margin-bottom:2px;background:var(--brand-soft);color:var(--brand-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.cal-more{font-size:10.5px;color:var(--ink-3)}
+
+/* ── 스케줄러(직원별 주간 타임라인) ── */
+.sched{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.sched-row{display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid var(--line-2);min-height:52px}
+.sched-row:last-child{border-bottom:none}
+.sched-name{padding:10px 12px;font-size:13px;font-weight:600;border-right:1px solid var(--line);display:flex;align-items:center;background:#fafbfc;position:sticky;left:0}
+.sched-lane{position:relative;display:grid}
+.sched-bar{position:absolute;top:8px;height:34px;border-radius:5px;background:var(--brand);color:#fff;font-size:11px;padding:3px 7px;overflow:hidden;white-space:nowrap;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center}
+.sched-bar.conflict{outline:2px solid var(--danger);outline-offset:-1px}
+.sched-daycols{position:absolute;inset:0;display:grid;grid-template-columns:repeat(7,1fr);pointer-events:none}
+.sched-daycols div{border-right:1px solid var(--line-2)}
+.sched-header{display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid var(--line);background:#fafbfc}
+.sched-header .sched-days{display:grid;grid-template-columns:repeat(7,1fr)}
+.sched-header .sched-days div{padding:8px;text-align:center;font-size:11.5px;font-weight:600;color:var(--ink-3);border-right:1px solid var(--line-2)}
+
+/* ── 사진 갤러리 ── */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.photo-thumb{position:relative;aspect-ratio:1;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:#f4f6f8}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.file-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+.file-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── 탭 ── */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tab{padding:9px 16px;font-size:13px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--ink-2)}
+.tab.active{color:var(--brand);border-bottom-color:var(--brand)}
+.tab-panel{display:none} .tab-panel.active{display:block}
+
+/* ── 미니 통계행 ── */
+.kv-row{display:flex;gap:20px;flex-wrap:wrap}
+.kv{display:flex;flex-direction:column;gap:2px}
+.kv-label{font-size:11.5px;color:var(--ink-3)}
+.kv-value{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+
 /* ── 반응형 ── */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(17,24,39,.4);z-index:39}
 @media(max-width:960px){
