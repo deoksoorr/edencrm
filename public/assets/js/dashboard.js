@@ -22,7 +22,10 @@
   const won = (n) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('ko-KR') + '원');
   function showEmpty(canvas, msg) {
     const box = canvas.closest('.chart-box');
-    if (box) box.innerHTML = '<div class="chart-empty"><div class="ce-ico">▤</div><div>' + msg + '</div></div>';
+    if (box) {
+      box.classList.add('is-empty'); // 고정 높이 해제 → 컴팩트 안내로 축소
+      box.innerHTML = '<div class="chart-empty"><span class="ce-ico">▤</span><span>' + msg + '</span></div>';
+    }
   }
 
   async function load() {
