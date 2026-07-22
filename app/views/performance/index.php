@@ -1,6 +1,7 @@
 <?php
 /** @var array $rows @var bool $canAll @var int $year @var int $month */
 $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관리자', 'site_manager' => '현장관리자', 'staff' => '직원', 'accountant' => '회계'];
+$wl = Settings::enabled('feature_worklog');
 ?>
 <div class="page">
   <div class="page-head">
@@ -23,7 +24,7 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
           <th class="num">총계약</th><th class="num">확정매출</th><th class="num">확정원가</th><th class="num">확정순이익</th><th class="num">순이익률(가중)</th>
           <th class="num">목표매출</th><th class="num">매출달성률</th>
           <th class="num">목표순이익</th><th class="num">순이익달성률</th>
-          <th class="num">계약전환율</th><th class="num">일지작성률</th>
+          <th class="num">계약전환율</th><?php if ($wl): ?><th class="num">일지작성률</th><?php endif; ?>
           <th></th>
         </tr>
       </thead>
@@ -47,7 +48,7 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
             <td class="num mono"><?= moneyCell($r['target_profit']) ?></td>
             <td class="num mono"><?= pct($r['profit_achieve_rate']) ?></td>
             <td class="num mono"><?= pct($r['conversion_rate']) ?></td>
-            <td class="num mono"><?= pct($r['worklog_rate']) ?></td>
+            <?php if ($wl): ?><td class="num mono"><?= pct($r['worklog_rate']) ?></td><?php endif; ?>
             <td><a href="<?= e(url('performance.user', ['id' => $r['user_id']])) ?>" class="btn btn-sm btn-outline">상세</a></td>
           </tr>
         <?php endforeach; ?>

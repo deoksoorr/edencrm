@@ -44,10 +44,12 @@ $proRemain = max(0.0, (float) $s['target_profit'] - (float) $s['month_profit']);
       <div class="kpi-label">계약전환율</div>
       <div class="kpi-value"><?= pct($s['conversion_rate']) ?></div>
     </div>
+    <?php if ($s['worklog_rate'] !== null): ?>
     <div class="kpi">
       <div class="kpi-label">작업일지 작성률</div>
       <div class="kpi-value"><?= pct($s['worklog_rate']) ?></div>
     </div>
+    <?php endif; ?>
   </div>
 
   <div class="card pad mb-14">

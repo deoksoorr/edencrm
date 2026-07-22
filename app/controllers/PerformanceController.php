@@ -216,7 +216,7 @@ class PerformanceController
             'month_profit'         => $monthProfit,
             'profit_achieve_rate'  => AccountingService::achievement((float) $monthProfit, $targetProfit),
             'conversion_rate'      => Calc::rate($leadWon, $leadTotal),
-            'worklog_rate'         => $this->worklogRate($uid, $year, $month),
+            'worklog_rate'         => Settings::enabled('feature_worklog') ? $this->worklogRate($uid, $year, $month) : null,
         ];
     }
 

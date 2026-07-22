@@ -187,11 +187,12 @@ class ProjectsController
             [':id' => $id]
         );
 
-        $workLogs = Db::all(
+        $wl = Settings::enabled('feature_worklog');
+        $workLogs = $wl ? Db::all(
             "SELECT w.*, u.name AS user_name FROM work_logs w JOIN users u ON u.id = w.user_id
              WHERE w.project_id = :id ORDER BY w.work_date DESC LIMIT 20",
             [':id' => $id]
-        );
+        ) : [];
 
         $files = Db::all(
             "SELECT f.*, u.name AS uploaded_by_name FROM project_files f
@@ -215,6 +216,7 @@ class ProjectsController
             'photos'      => $photos,
             'docs'        => $docs,
             'statuses'    => self::STATUSES,
+            'wl'          => $wl,
         ]);
     }
 

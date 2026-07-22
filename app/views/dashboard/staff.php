@@ -1,5 +1,6 @@
 <?php
-/** 일반직원 대시보드. @var array $me,$kpi,$goal,$pgroups,$schedule,$projects */
+/** 일반직원 대시보드. @var array $me,$kpi,$goal,$pgroups,$schedule,$projects @var bool $wl */
+$wl = $wl ?? false;
 $g = $goal; // 목표 진행바는 partials/goal 이 렌더
 $statusLabel = ['preparing' => '착공준비', 'in_progress' => '진행중', 'paused' => '중지', 'completed' => '완료', 'warranty' => '하자보수'];
 $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수'];
@@ -11,7 +12,7 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
       <div class="page-sub"><?= e($me['name']) ?>님, 오늘도 안전 작업하세요.</div>
     </div>
     <div class="page-actions">
-      <a class="btn btn-primary" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a>
+      <?php if ($wl): ?><a class="btn btn-primary" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a><?php endif; ?>
     </div>
   </div>
 
@@ -21,7 +22,9 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
       <a class="kpi accent-brand" href="<?= e(url('schedule.index')) ?>"><div class="kpi-label">오늘 일정</div><div class="kpi-value"><?= number_format($kpi['today']['value']) ?><span class="u">건</span></div></a>
       <a class="kpi" href="<?= e(url('schedule.index')) ?>"><div class="kpi-label">이번 주 일정</div><div class="kpi-value"><?= number_format($kpi['week']['value']) ?><span class="u">건</span></div></a>
       <a class="kpi" href="<?= e(url('projects.index')) ?>"><div class="kpi-label">내 담당 프로젝트</div><div class="kpi-value"><?= number_format($kpi['projects']['value']) ?><span class="u">건</span></div></a>
+      <?php if ($wl): ?>
       <a class="kpi <?= $kpi['worklog']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('worklogs.index')) ?>"><div class="kpi-label">오늘 일지 미작성</div><div class="kpi-value"><?= number_format($kpi['worklog']['value']) ?><span class="u">건</span></div></a>
+      <?php endif; ?>
       <a class="kpi <?= $kpi['unread']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('notifications.index')) ?>"><div class="kpi-label">안 읽은 알림</div><div class="kpi-value"><?= number_format($kpi['unread']['value']) ?><span class="u">건</span></div></a>
     </div>
   </div>

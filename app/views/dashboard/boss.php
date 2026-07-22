@@ -1,5 +1,6 @@
 <?php
-/** 사장·회계 대시보드. @var array $me,$kpi,$attn,$funnel,$finance,$process,$perf */
+/** 사장·회계 대시보드. @var array $me,$kpi,$attn,$funnel,$finance,$process,$perf @var bool $wl */
+$wl = $wl ?? false;
 
 /** KPI 카드 partial. */
 $kpiCard = function (string $href, string $label, string $valueHtml, string $accent = '', ?array $delta = null, string $note = '') {
@@ -71,6 +72,7 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
   </div>
 
   <!-- 이번 달 출근 현황(작업일수) -->
+  <?php if ($wl): ?>
   <div class="section">
     <div class="section-head"><div class="st"><h2>이번 달 출근 현황</h2><span class="section-desc"><?= date('n') ?>월 작업일수(작업일지 기준)</span></div>
       <a class="section-link" href="<?= e(url('worklogs.index')) ?>">작업일지 →</a></div>
@@ -86,6 +88,7 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <div class="split">
     <div class="col">

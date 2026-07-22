@@ -53,6 +53,7 @@ class DashboardController
             'process'    => $this->processChips(null),
             'workstatus' => $this->employeeWork(),
             'perf'       => $this->staffPerformance(),
+            'wl'         => Settings::enabled('feature_worklog'),
             'scripts'    => ['vendor/chart.umd.js', 'js/dashboard.js'],
         ]);
     }
@@ -103,6 +104,10 @@ class DashboardController
                 'stage'   => $f['stage_name'],
                 'status'  => $status,
             ];
+        }
+
+        if (!Settings::enabled('feature_worklog')) {
+            return ['today' => $today, 'attendance' => []];
         }
 
         // 이번 달 출근(작업일수) — work_logs 고유 근무일
@@ -215,14 +220,17 @@ class DashboardController
         // 현장관리자: 본인 담당(site_manager_id) 또는 배정된 프로젝트 범위
         $scope = "(p.site_manager_id=:u1 OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:u2))";
         $p = [':u1' => $uid, ':u2' => $uid];
-        return [
+        $out = [
             'active'    => ['value' => $this->countProjects("status='in_progress'", $scope, $p)],
             'preparing' => ['value' => $this->countProjects("status='preparing'", $scope, $p)],
             'delayed'   => ['value' => $this->countProjects($this->delayedCond(), $scope, $p)],
             'inspect'   => ['value' => $this->inspectionPending($uid)],
             'unassigned'=> ['value' => $this->unassignedProjects($uid)],
-            'worklog'   => ['value' => $this->worklogMissing($uid)],
         ];
+        if (Settings::enabled('feature_worklog')) {
+            $out['worklog'] = ['value' => $this->worklogMissing($uid)];
+        }
+        return $out;
     }
 
     // ═══════════════════════ STAFF (일반직원) ═══════════════════════
@@ -238,6 +246,7 @@ class DashboardController
             'pgroups'  => $this->processGroupCounts($uid),
             'schedule' => $this->scheduleSummary($uid),
             'projects' => $this->myProjectsList($uid),
+            'wl'       => Settings::enabled('feature_worklog'),
         ]);
     }
 
@@ -245,13 +254,16 @@ class DashboardController
     {
         $mine = "(p.sales_user_id=:a OR p.site_manager_id=:b OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:c))";
         $mp = [':a' => $uid, ':b' => $uid, ':c' => $uid];
-        return [
+        $out = [
             'today'    => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date=CURDATE()", [':u' => $uid])],
             'week'     => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date>=CURDATE() AND s.event_date<CURDATE()+INTERVAL 7 DAY", [':u' => $uid])],
             'projects' => ['value' => $this->countProjects("status IN ('preparing','in_progress')", $mine, $mp)],
-            'worklog'  => ['value' => $this->worklogMissing($uid)],
             'unread'   => ['value' => (int) Db::val("SELECT COUNT(*) FROM notifications WHERE user_id=:u AND is_read=0", [':u' => $uid])],
         ];
+        if (Settings::enabled('feature_worklog')) {
+            $out['worklog'] = ['value' => $this->worklogMissing($uid)];
+        }
+        return $out;
     }
 
     // ═══════════════════════ 공용 집계 블록 ═══════════════════════
@@ -283,16 +295,19 @@ class DashboardController
         );
 
         [$pscope, $pparams] = $this->siteScope($uid);
-        return [
+        $out = [
             'contact_overdue' => ['n' => $contactOverdue, 'label' => '연락 예정일 경과',    'route' => 'pipeline.index', 'params' => ['quick' => 'overdue'], 'sev' => 'danger'],
             'contact_none'    => ['n' => $contactNone,    'label' => '3일+ 미접촉 고객',      'route' => 'pipeline.index', 'params' => ['quick' => 'stale'],   'sev' => 'warn'],
             'contract_stale'  => ['n' => $contractStale,  'label' => '계약 대기 지연(7일+)',  'route' => 'pipeline.index', 'params' => ['tab' => 'contract'], 'sev' => 'warn'],
             'delayed'         => ['n' => $this->countProjects($this->delayedCond(), $pscope, $pparams), 'label' => '공정 지연 프로젝트', 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'],
             'receivable'      => ['n' => $this->receivableCount(), 'label' => '미수금 발생 건',  'route' => 'contracts.index', 'params' => [], 'sev' => 'warn'],
             'unassigned'      => ['n' => $this->unassignedProjects($uid), 'label' => '직원 미배정 공사', 'route' => 'projects.index', 'params' => ['assign' => 'none'], 'sev' => 'warn'],
-            'worklog'         => ['n' => $this->worklogMissing($uid), 'label' => '오늘 작업일지 미작성', 'route' => 'worklogs.index', 'params' => [], 'sev' => 'warn'],
             'inspect'         => ['n' => $this->inspectionPending($uid), 'label' => '검수 대기',      'route' => 'process.board', 'params' => [], 'sev' => 'warn'],
         ];
+        if (Settings::enabled('feature_worklog')) {
+            $out['worklog'] = ['n' => $this->worklogMissing($uid), 'label' => '오늘 작업일지 미작성', 'route' => 'worklogs.index', 'params' => [], 'sev' => 'warn'];
+        }
+        return $out;
     }
 
     /** 영업 퍼널(단계 그룹 카운트). */

@@ -1,8 +1,9 @@
 <?php
 /** @var array $project @var array $calc @var array $assignments @var array $history
  *  @var array $costs @var array $schedules @var array $workLogs @var array $photos @var array $docs
- *  @var array $statuses
+ *  @var array $statuses @var bool $wl
  */
+$wl = $wl ?? false;
 $p = $project;
 $today = date('Y-m-d');
 $isDelayed = !empty($p['end_date']) && $p['end_date'] < $today && $p['status'] !== 'completed';
@@ -204,6 +205,7 @@ $canFinance = can('finance.view') || can('cost.manage'); // 원가·순이익 �
     <?php endif; ?>
   </div>
 
+  <?php if ($wl): ?>
   <div class="card pad">
     <div class="section-head">
       <div class="st"><h2>작업일지</h2></div>
@@ -230,6 +232,7 @@ $canFinance = can('finance.view') || can('cost.manage'); // 원가·순이익 �
       </div>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
 
   <div class="card pad">
     <div class="section-head"><div class="st"><h2>현장 사진</h2></div></div>

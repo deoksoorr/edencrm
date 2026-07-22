@@ -23,7 +23,9 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
       <a class="kpi <?= $kpi['delayed']['value'] > 0 ? 'accent-danger' : '' ?>" href="<?= e(url('projects.index', ['status' => 'delayed'])) ?>"><div class="kpi-label">지연 공사</div><div class="kpi-value"><?= number_format($kpi['delayed']['value']) ?><span class="u">건</span></div><?php if ($kpi['delayed']['value'] > 0): ?><div class="kpi-note">확인 필요</div><?php endif; ?></a>
       <a class="kpi <?= $kpi['inspect']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('process.board')) ?>"><div class="kpi-label">검수 대기</div><div class="kpi-value"><?= number_format($kpi['inspect']['value']) ?><span class="u">건</span></div></a>
       <a class="kpi <?= $kpi['unassigned']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('projects.index', ['assign' => 'none'])) ?>"><div class="kpi-label">직원 미배정</div><div class="kpi-value"><?= number_format($kpi['unassigned']['value']) ?><span class="u">건</span></div></a>
+      <?php if (isset($kpi['worklog'])): ?>
       <a class="kpi <?= $kpi['worklog']['value'] > 0 ? 'accent-warn' : '' ?>" href="<?= e(url('worklogs.index')) ?>"><div class="kpi-label">오늘 일지 미작성</div><div class="kpi-value"><?= number_format($kpi['worklog']['value']) ?><span class="u">건</span></div></a>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -54,7 +56,7 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
       <div class="card pad">
         <div class="section-head"><div class="st"><h2>주의가 필요한 항목</h2></div></div>
         <div class="attn-list">
-          <?php foreach ($pick as $k): $a = $attn[$k]; ?>
+          <?php foreach ($pick as $k): if (!isset($attn[$k])) { continue; } $a = $attn[$k]; ?>
             <a class="attn-item <?= $a['n'] > 0 ? e($a['sev']) : 'zero' ?>" href="<?= e(url($a['route'], $a['params'])) ?>">
               <span class="attn-label"><?= e($a['label']) ?></span><span class="attn-cnt"><?= number_format($a['n']) ?></span>
             </a>

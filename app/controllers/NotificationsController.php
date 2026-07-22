@@ -87,7 +87,9 @@ class NotificationsController
             self::genProjectStartDue();
             self::genProjectEndDue();
             self::genProjectDelayed();
-            self::genWorklogMissing();
+            if (Settings::enabled('feature_worklog')) {
+                self::genWorklogMissing();
+            }
         } catch (\Throwable $e) {
             // 알림 생성 실패가 페이지 렌더링을 막지 않도록 조용히 로그만 남김
             error_log('[notif-gen] ' . $e->getMessage());
