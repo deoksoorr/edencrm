@@ -1774,3 +1774,6 @@ INSERT INTO `login_attempts` (`id`,`login_id`,`ip`,`success`,`created_at`) VALUE
 (11, 'unknown_user', '203.0.113.5', 0, '2026-07-20 05:23:38');
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- 실제원가 캐시를 costs(actual) 합계와 일치시킴 (앱은 CostsController 가 저장 시 자동 갱신)
+UPDATE projects p SET actual_cost = COALESCE((SELECT SUM(amount) FROM costs c WHERE c.project_id=p.id AND c.type='actual'),0);

@@ -2,11 +2,23 @@
 /**
  * 비용(원가) 등록/수정/삭제 — perm cost.manage.
  * 입력 UI는 프로젝트 상세(T6)에서 폼/모달로 호출한다. 여기서는 저장 로직만 제공.
- * 프로젝트의 실제원가(projects.actual_cost)는 저장하지 않고, 조회 시 costs 를 SUM 하여 계산한다(Calc 사용부는 조회측 책임).
+ * costs 테이블이 실제원가의 단일 소스이며, 저장/삭제 시마다 projects.actual_cost 캐시를
+ * SUM(costs actual)로 갱신한다 — 대시보드·성과·리포트가 이 컬럼을 직접 읽어도 일관되도록.
  */
 class CostsController
 {
     private const TYPES = ['estimate', 'actual'];
+
+    /** projects.actual_cost 를 costs(actual) 합계로 재계산해 캐시 갱신. */
+    private function refreshActualCost(int $projectId): void
+    {
+        Db::run(
+            "UPDATE projects SET actual_cost =
+                COALESCE((SELECT SUM(amount) FROM costs WHERE project_id = :pid AND type = 'actual'), 0)
+             WHERE id = :pid2",
+            [':pid' => $projectId, ':pid2' => $projectId]
+        );
+    }
 
     /** {id?, project_id, type, category, amount, spent_date, memo} — id 있으면 수정. */
     public function save(): void
@@ -61,6 +73,7 @@ class CostsController
             Audit::log('create', 'costs', $id, null, $data);
         }
 
+        $this->refreshActualCost($projectId);
         $data['id'] = $id;
         Response::json($data);
     }
@@ -81,6 +94,7 @@ class CostsController
         }
         Db::run('DELETE FROM costs WHERE id=:id', [':id' => $id]);
         Audit::log('delete', 'costs', $id, $row, null);
+        $this->refreshActualCost((int) $row['project_id']);
         Response::json(['id' => $id]);
     }
 }

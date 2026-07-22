@@ -97,6 +97,11 @@ class ScheduleController
         if (!$userId || $title === '' || $start === '' || $end === '') {
             Response::error('직원, 제목, 시작/종료 일시는 필수입니다.', 422);
         }
+        $start = Util::datetimeOrNull($start);
+        $end = Util::datetimeOrNull($end);
+        if ($start === null || $end === null) {
+            Response::error('시작/종료 일시 형식이 올바르지 않습니다.', 422);
+        }
         if (strtotime($end) <= strtotime($start)) {
             Response::error('종료 일시는 시작 일시보다 이후여야 합니다.', 422);
         }
@@ -152,11 +157,14 @@ class ScheduleController
             Response::error('일정을 찾을 수 없습니다.', 404);
         }
 
-        $start = Util::postStr('start_datetime', $row['start_datetime']);
-        $end = Util::postStr('end_datetime', $row['end_datetime']);
+        $start = Util::datetimeOrNull(Util::postStr('start_datetime', $row['start_datetime']));
+        $end = Util::datetimeOrNull(Util::postStr('end_datetime', $row['end_datetime']));
         $userId = Util::postInt('user_id', null) ?: (int) $row['user_id'];
         $confirmed = Util::postStr('confirmed', '') === '1';
 
+        if ($start === null || $end === null) {
+            Response::error('시작/종료 일시 형식이 올바르지 않습니다.', 422);
+        }
         if (strtotime($end) <= strtotime($start)) {
             Response::error('종료 일시는 시작 일시보다 이후여야 합니다.', 422);
         }

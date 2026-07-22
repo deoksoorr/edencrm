@@ -11,6 +11,7 @@ $progress = (int) $p['progress'];
 $canManage = can('project.manage');
 $canAssign = can('project.assign');
 $canCost   = can('cost.manage');
+$canFinance = can('finance.view') || can('cost.manage'); // 원가·순이익 등 재무 정보 열람 권한
 ?>
 <div class="page">
   <div class="detail-head">
@@ -42,6 +43,7 @@ $canCost   = can('cost.manage');
         <div class="kv"><div class="kv-label">진행률</div><div class="kv-value"><?= $progress ?>%</div>
           <div class="progress" style="width:140px"><div class="progress-bar <?= $progress >= 100 ? 'ok' : ($isDelayed ? 'danger' : '') ?>" style="width:<?= $progress ?>%"></div></div>
         </div>
+        <?php if ($canFinance): ?>
         <div class="kv"><div class="kv-label">계약금액</div><div class="kv-value"><?= money($calc['contract_amount']) ?></div></div>
         <div class="kv"><div class="kv-label">예상원가</div><div class="kv-value"><?= money($calc['estimated_cost']) ?></div></div>
         <div class="kv"><div class="kv-label">실제원가</div><div class="kv-value"><?= money($calc['actual_cost']) ?></div></div>
@@ -49,6 +51,7 @@ $canCost   = can('cost.manage');
         <div class="kv"><div class="kv-label">예상순이익률</div><div class="kv-value"><?= pct($calc['estimated_profit_rate']) ?></div></div>
         <div class="kv"><div class="kv-label">실제순이익</div><div class="kv-value <?= $calc['actual_profit'] < 0 ? 'text-danger' : '' ?>"><?= money($calc['actual_profit']) ?></div></div>
         <div class="kv"><div class="kv-label">실제순이익률</div><div class="kv-value"><?= pct($calc['actual_profit_rate']) ?></div></div>
+        <?php endif; ?>
       </div>
       <dl class="dl">
         <dt>공사유형</dt><dd><?= e($p['work_type'] ?: '-') ?></dd>
@@ -138,6 +141,7 @@ $canCost   = can('cost.manage');
     </div>
   </div>
 
+  <?php if ($canFinance): ?>
   <div class="card">
     <div class="card-head"><div class="card-title">비용</div></div>
     <div class="card-body">
@@ -179,6 +183,7 @@ $canCost   = can('cost.manage');
       <?php endif; ?>
     </div>
   </div>
+  <?php endif; ?>
 
   <div class="card">
     <div class="card-head">

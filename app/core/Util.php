@@ -110,6 +110,42 @@ class Util
         return (float) str_replace([','], '', (string) $v);
     }
 
+    /**
+     * 유효한 날짜(YYYY-MM-DD)면 정규화해 반환, 아니면 null.
+     * 잘못된 사용자 입력이 DATE 컬럼에 들어가 SQL 오류로 500 나는 것을 방지한다.
+     */
+    public static function dateOrNull($v): ?string
+    {
+        $v = is_string($v) ? trim($v) : '';
+        if ($v === '') {
+            return null;
+        }
+        $d = DateTime::createFromFormat('Y-m-d', substr($v, 0, 10));
+        $errors = DateTime::getLastErrors();
+        if ($d === false || ($errors && ($errors['warning_count'] || $errors['error_count']))) {
+            return null;
+        }
+        return $d->format('Y-m-d');
+    }
+
+    /** 유효한 일시(YYYY-MM-DD HH:MM[:SS], 'T' 구분자 허용)면 정규화해 반환, 아니면 null. */
+    public static function datetimeOrNull($v): ?string
+    {
+        $v = is_string($v) ? trim($v) : '';
+        if ($v === '') {
+            return null;
+        }
+        $v = str_replace('T', ' ', $v);
+        foreach (['Y-m-d H:i:s', 'Y-m-d H:i'] as $fmt) {
+            $d = DateTime::createFromFormat($fmt, $v);
+            $errors = DateTime::getLastErrors();
+            if ($d !== false && !($errors && ($errors['warning_count'] || $errors['error_count']))) {
+                return $d->format('Y-m-d H:i:s');
+            }
+        }
+        return null;
+    }
+
     /** null 또는 빈 문자열이면 null 반환 (DATE/nullable 컬럼용) */
     public static function nullIfEmpty($v)
     {
