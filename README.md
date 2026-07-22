@@ -33,16 +33,16 @@ php -S 127.0.0.1:8080 -t public
 #   브라우저: http://127.0.0.1:8080/index.php?r=login
 ```
 
-### 개발 DB(격리 인스턴스) — root 권한이 없을 때
+### 개발 DB(격리 인스턴스) — root 권한이 없을 때 · 원클릭 실행
 로컬에 root 접근이 없으면 프로젝트 전용 MySQL 인스턴스를 별도 포트로 띄워 씁니다(사용자 기존 MySQL 미간섭).
 `.devdb/` 에 데이터디렉토리가 있으며 포트 3307/소켓으로 동작합니다. `config.local.php` 가 이 인스턴스를 가리킵니다.
-운영 배포 시에는 `config.local.php` 를 실제 호스팅 MySQL 정보로 교체하세요.
 
 ```bash
-# 개발 DB 인스턴스 기동(이미 초기화된 경우)
-/opt/homebrew/bin/mysqld --datadir="$PWD/.devdb/data" --port=3307 \
-  --socket="$PWD/.devdb/mysql.sock" --mysqlx=0 --log-error="$PWD/.devdb/error.log" &
+bash scripts/start_dev.sh      # 격리 MySQL(:3307) 기동 + (없으면)스키마·시드 적재 + PHP 서버(:8080)
 ```
+
+이 스크립트는 DB 인스턴스가 없으면 초기화·시드까지 자동 수행합니다.
+운영 배포 시에는 `scripts/start_dev.sh` 대신 실제 호스팅 MySQL + 웹서버를 쓰고, `config.local.php` 를 교체하세요.
 
 ## 테스트 계정 (⚠️ 운영 배포 전 반드시 변경)
 | 아이디 | 비밀번호 | 역할 |
