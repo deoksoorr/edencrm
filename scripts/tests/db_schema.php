@@ -15,8 +15,9 @@ $c1 = Db::one("SELECT supply_amount, vat_amount FROM contracts WHERE contract_no
 t_int('계약1 공급', 34000000, $c1['supply_amount']);
 t_int('계약1 부가세', 3462250, $c1['vat_amount']);
 
-// 시드 프로젝트2(견적無): supply 16,818,182
+// 시드 프로젝트2 이수아 방수(완료, 계약 22,000,000 → 공급 20,000,000 / 부가세 2,000,000)
 $p2 = Db::one("SELECT supply_amount, vat_amount FROM projects WHERE project_no='P2026-0002'");
-t_int('프로젝트2 공급', 16818182, $p2['supply_amount']);
+t_int('프로젝트2 공급', 20000000, $p2['supply_amount']);
+t_int('프로젝트2 부가세', 2000000, $p2['vat_amount']);
 
 exit(t_summary());
