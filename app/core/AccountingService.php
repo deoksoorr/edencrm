@@ -65,6 +65,7 @@ class AccountingService
     }
 
     // ── 기간 WHERE 헬퍼 (기준일 컬럼 지정) ──
+    // 주의: $col 은 SQL 문자열에 그대로 삽입(interpolate)되므로 반드시 하드코딩된 리터럴만 전달해야 하며, 호출자/사용자 입력값을 절대 전달해선 안 된다.
     private static function range(string $col, ?string $from, ?string $to, array &$p): string
     {
         $sql = '';
