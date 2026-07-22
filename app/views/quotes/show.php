@@ -26,91 +26,85 @@
   </div>
 
   <?php if ($contract): ?>
-    <div class="card"><div class="card-body">
+    <div class="card pad">
       이 견적은 계약 <a href="<?= e(url('contracts.show', ['id' => $contract['id']])) ?>"><strong><?= e($contract['contract_no']) ?></strong></a> 으로 전환되었습니다.
-    </div></div>
+    </div>
   <?php endif; ?>
 
-  <div class="card">
-    <div class="card-head"><div class="card-title">견적 항목 (v<?= (int) ($version['version_no'] ?? 1) ?>)</div></div>
-    <div class="card-body">
-      <?php if (!$items): ?>
-        <div class="empty"><div class="empty-title">등록된 항목이 없습니다.</div></div>
-      <?php else: ?>
-        <div class="table-wrap">
-          <table class="data">
-            <thead><tr>
-              <th>항목명</th><th class="num">면적</th><th class="num">수량</th><th class="num">단가</th><th class="num">금액</th>
-            </tr></thead>
-            <tbody>
-              <?php foreach ($items as $it): ?>
-                <tr>
-                  <td class="wrap"><?= e($it['name']) ?></td>
-                  <td class="num"><?= $it['area'] !== null ? number_format((float) $it['area'], 2) : '-' ?></td>
-                  <td class="num"><?= number_format((float) $it['qty'], 2) ?></td>
-                  <td class="num"><?= money($it['unit_price']) ?></td>
-                  <td class="num"><?= money($it['amount']) ?></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php endif; ?>
-
-      <?php if ($version): ?>
-        <div class="kv-row" style="margin-top:16px">
-          <div class="kv"><div class="kv-label">공급가액</div><div class="kv-value"><?= money($version['subtotal']) ?></div></div>
-          <div class="kv"><div class="kv-label">부가세</div><div class="kv-value"><?= money($version['vat']) ?></div></div>
-          <div class="kv"><div class="kv-label">할인</div><div class="kv-value"><?= money($version['discount']) ?></div></div>
-          <div class="kv"><div class="kv-label">총 금액</div><div class="kv-value" style="color:var(--brand)"><?= money($version['total_amount']) ?></div></div>
-        </div>
-        <?php if (!empty($version['note'])): ?><div class="field-hint" style="margin-top:8px">메모: <?= e($version['note']) ?></div><?php endif; ?>
-      <?php endif; ?>
-      <?php if (!empty($quote['memo'])): ?>
-        <div class="section-title" style="margin-top:16px">특이사항</div>
-        <div style="white-space:pre-wrap"><?= e($quote['memo']) ?></div>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-head"><div class="card-title">버전 이력</div></div>
-    <div class="card-body">
+  <div class="card pad">
+    <div class="section-head"><div class="st"><h2>견적 항목 (v<?= (int) ($version['version_no'] ?? 1) ?>)</h2></div></div>
+    <?php if (!$items): ?>
+      <div class="empty"><div class="empty-title">등록된 항목이 없습니다.</div></div>
+    <?php else: ?>
       <div class="table-wrap">
         <table class="data">
-          <thead><tr><th>버전</th><th class="num">공급가액</th><th class="num">부가세</th><th class="num">할인</th><th class="num">총액</th><th>작성자</th><th>작성일</th></tr></thead>
+          <thead><tr>
+            <th>항목명</th><th class="num">면적</th><th class="num">수량</th><th class="num">단가</th><th class="num">금액</th>
+          </tr></thead>
           <tbody>
-            <?php foreach ($versions as $v): ?>
-              <tr<?= $v['id'] == $quote['current_version_id'] ? ' style="font-weight:600;background:#fafbfc"' : '' ?>>
-                <td>v<?= (int) $v['version_no'] ?><?= $v['id'] == $quote['current_version_id'] ? ' <span class="badge badge-info">현재</span>' : '' ?></td>
-                <td class="num"><?= money($v['subtotal']) ?></td>
-                <td class="num"><?= money($v['vat']) ?></td>
-                <td class="num"><?= money($v['discount']) ?></td>
-                <td class="num"><?= money($v['total_amount']) ?></td>
-                <td><?= e($v['created_by_name'] ?? '-') ?></td>
-                <td><?= fmtdate($v['created_at'], 'Y-m-d H:i') ?></td>
+            <?php foreach ($items as $it): ?>
+              <tr>
+                <td class="wrap"><?= e($it['name']) ?></td>
+                <td class="num mono"><?= $it['area'] !== null ? number_format((float) $it['area'], 2) : '-' ?></td>
+                <td class="num mono"><?= number_format((float) $it['qty'], 2) ?></td>
+                <td class="num mono"><?= money($it['unit_price']) ?></td>
+                <td class="num mono"><?= money($it['amount']) ?></td>
               </tr>
             <?php endforeach; ?>
           </tbody>
         </table>
       </div>
+    <?php endif; ?>
+
+    <?php if ($version): ?>
+      <div class="kv-row mt-16">
+        <div class="kv"><div class="kv-label">공급가액</div><div class="kv-value"><?= moneyCell($version['subtotal']) ?></div></div>
+        <div class="kv"><div class="kv-label">부가세</div><div class="kv-value"><?= moneyCell($version['vat']) ?></div></div>
+        <div class="kv"><div class="kv-label">할인</div><div class="kv-value"><?= moneyCell($version['discount']) ?></div></div>
+        <div class="kv"><div class="kv-label">총 금액</div><div class="kv-value" style="color:var(--brand)"><?= moneyCell($version['total_amount']) ?></div></div>
+      </div>
+      <?php if (!empty($version['note'])): ?><div class="field-hint mt-8">메모: <?= e($version['note']) ?></div><?php endif; ?>
+    <?php endif; ?>
+    <?php if (!empty($quote['memo'])): ?>
+      <div class="section-title mt-16">특이사항</div>
+      <div style="white-space:pre-wrap"><?= e($quote['memo']) ?></div>
+    <?php endif; ?>
+  </div>
+
+  <div class="card pad">
+    <div class="section-head"><div class="st"><h2>버전 이력</h2></div></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>버전</th><th class="num">공급가액</th><th class="num">부가세</th><th class="num">할인</th><th class="num">총액</th><th>작성자</th><th>작성일</th></tr></thead>
+        <tbody>
+          <?php foreach ($versions as $v): ?>
+            <tr<?= $v['id'] == $quote['current_version_id'] ? ' style="font-weight:600;background:#fafbfc"' : '' ?>>
+              <td>v<?= (int) $v['version_no'] ?><?= $v['id'] == $quote['current_version_id'] ? ' <span class="badge badge-info">현재</span>' : '' ?></td>
+              <td class="num mono"><?= money($v['subtotal']) ?></td>
+              <td class="num mono"><?= money($v['vat']) ?></td>
+              <td class="num mono"><?= money($v['discount']) ?></td>
+              <td class="num mono"><?= money($v['total_amount']) ?></td>
+              <td><?= e($v['created_by_name'] ?? '-') ?></td>
+              <td class="nowrap"><?= fmtdate($v['created_at'], 'Y-m-d H:i') ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-head"><div class="card-title">첨부파일</div></div>
-    <div class="card-body">
-      <?php if (!$attachments): ?>
-        <div class="muted">첨부된 파일이 없습니다.</div>
-      <?php else: ?>
-        <?php foreach ($attachments as $f): ?>
-          <div class="file-item">
-            <div class="file-name"><?= e($f['original_name']) ?></div>
-            <a href="<?= e(url('files.download', ['id' => $f['id']])) ?>" class="btn btn-sm btn-outline">다운로드</a>
-          </div>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </div>
+  <div class="card pad">
+    <div class="section-head"><div class="st"><h2>첨부파일</h2></div></div>
+    <?php if (!$attachments): ?>
+      <div class="muted">첨부된 파일이 없습니다.</div>
+    <?php else: ?>
+      <?php foreach ($attachments as $f): ?>
+        <div class="file-item">
+          <div class="file-name"><?= e($f['original_name']) ?></div>
+          <a href="<?= e(url('files.download', ['id' => $f['id']])) ?>" class="btn btn-sm btn-outline">다운로드</a>
+        </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
   </div>
 </div>
 

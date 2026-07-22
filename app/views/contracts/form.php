@@ -12,7 +12,7 @@ $isEdit = !empty($contract['id']);
     <input type="hidden" name="id" value="<?= (int) ($contract['id'] ?? 0) ?>">
     <input type="hidden" name="quote_id" value="<?= (int) ($contract['quote_id'] ?? 0) ?>">
 
-    <div class="card"><div class="card-body">
+    <div class="card pad">
       <div class="form-grid">
         <div class="field">
           <label class="field-label">고객 <span class="req">*</span></label>
@@ -72,11 +72,11 @@ $isEdit = !empty($contract['id']);
           <div class="field-hint">PDF, 이미지, 오피스 문서 등 (최대 10MB)</div>
         </div>
       </div>
-    </div></div>
+    </div>
 
-    <div class="card">
-      <div class="card-head"><div class="card-title">대금 지급 계획 (저장 시 입금 예정행 자동 생성)</div></div>
-      <div class="card-body">
+    <div class="card pad">
+      <div class="section-head"><div class="st"><h2>대금 지급 계획 (저장 시 입금 예정행 자동 생성)</h2></div></div>
+      <div>
         <div class="form-grid-3">
           <?php foreach (['down' => '계약금', 'middle' => '중도금', 'balance' => '잔금'] as $type => $label): ?>
             <div class="field">

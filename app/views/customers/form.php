@@ -14,7 +14,7 @@ $interestOptions = ['신축도장', '리모델링도장', '공장도장', '아�
     </div>
   </div>
 
-  <form class="form card" id="customerForm" method="post" action="<?= e(url('customers.save')) ?>" style="padding:20px">
+  <form class="form card pad" id="customerForm" method="post" action="<?= e(url('customers.save')) ?>">
     <?= csrf_field() ?>
     <?php if ($isEdit): ?><input type="hidden" name="id" value="<?= (int) $c['id'] ?>"><?php endif; ?>
 

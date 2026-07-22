@@ -13,7 +13,7 @@ $versionNote = '';
     <?= csrf_field() ?>
     <input type="hidden" name="id" value="<?= (int) ($quote['id'] ?? 0) ?>">
 
-    <div class="card"><div class="card-body">
+    <div class="card pad">
       <div class="form-grid">
         <div class="field">
           <label class="field-label">고객 <span class="req">*</span></label>
@@ -54,14 +54,14 @@ $versionNote = '';
           <textarea name="memo" class="input" rows="2"><?= e($quote['memo'] ?? '') ?></textarea>
         </div>
       </div>
-    </div></div>
+    </div>
 
-    <div class="card">
-      <div class="card-head">
-        <div class="card-title">견적 항목</div>
+    <div class="card pad">
+      <div class="section-head">
+        <div class="st"><h2>견적 항목</h2></div>
         <button type="button" class="btn btn-sm btn-outline" id="btnAddItem">+ 행 추가</button>
       </div>
-      <div class="card-body">
+      <div>
         <div class="table-wrap">
           <table class="data" id="itemsTable">
             <thead>
@@ -82,7 +82,7 @@ $versionNote = '';
             <tbody id="itemsBody"></tbody>
           </table>
         </div>
-        <div class="kv-row" style="margin-top:16px">
+        <div class="kv-row mt-16">
           <div class="kv"><div class="kv-label">공급가액</div><div class="kv-value" id="sumSubtotal">0</div></div>
           <div class="kv"><div class="kv-label">부가세(<?= e(rtrim(rtrim(number_format($vatRate, 1), '0'), '.')) ?>%)</div><div class="kv-value" id="sumVat">0</div></div>
           <div class="field" style="width:160px">
@@ -94,12 +94,12 @@ $versionNote = '';
       </div>
     </div>
 
-    <div class="card"><div class="card-body">
+    <div class="card pad">
       <div class="field">
         <label class="field-label">버전 메모 (수정 사유 등, 선택)</label>
         <input type="text" name="version_note" class="input" value="<?= e($versionNote) ?>" placeholder="예: 단가 조정, 항목 추가 등">
       </div>
-    </div></div>
+    </div>
 
     <div class="page-actions">
       <a href="<?= e(url($isEdit ? 'quotes.show' : 'quotes.index', $isEdit ? ['id' => $quote['id']] : [])) ?>" class="btn btn-outline">취소</a>

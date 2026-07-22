@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div class="kv-row" style="margin-bottom:16px">
+      <div class="kv-row mb-14">
         <div class="kv"><div class="kv-label">시작</div><div class="kv-value"><?= e($row['start_time'] ?? '-') ?></div></div>
         <div class="kv"><div class="kv-label">종료</div><div class="kv-value"><?= e($row['end_time'] ?? '-') ?></div></div>
         <div class="kv"><div class="kv-label">진행률</div><div class="kv-value"><?= $row['progress'] !== null ? pct((float) $row['progress']) : '-' ?></div></div>
@@ -62,7 +62,7 @@
     <div class="card-head"><div class="card-title">현장 사진</div></div>
     <div class="card-body">
       <?php if (!$photos): ?>
-        <div class="empty"><div class="empty-icon">📷</div><div class="empty-title">등록된 사진이 없습니다</div></div>
+        <div class="empty"><div class="empty-title">등록된 사진이 없습니다</div></div>
       <?php else: ?>
         <div class="photo-grid">
           <?php foreach ($photos as $ph): ?>
@@ -74,7 +74,7 @@
       <?php endif; ?>
 
       <?php if ($canUpload): ?>
-        <form class="form" data-ajax action-route="worklogs.photo" data-reload data-success="사진이 업로드되었습니다." style="margin-top:16px">
+        <form class="form mt-16" data-ajax action-route="worklogs.photo" data-reload data-success="사진이 업로드되었습니다.">
           <input type="hidden" name="work_log_id" value="<?= (int) $row['id'] ?>">
           <div class="field">
             <label class="field-label">사진 추가</label>

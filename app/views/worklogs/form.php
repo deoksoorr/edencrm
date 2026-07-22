@@ -81,10 +81,11 @@
         <div class="field"><label class="field-label">지연 사유</label><input class="input" name="delay_reason" value="<?= e($row['delay_reason'] ?? '') ?>"></div>
         <div class="field"><label class="field-label">다음 작업 예정</label><input class="input" name="next_work" value="<?= e($row['next_work'] ?? '') ?>"></div>
       </div>
-    </div>
-    <div style="border-top:1px solid var(--line-2);padding:14px 16px;display:flex;justify-content:flex-end;gap:8px">
-      <a class="btn btn-outline" href="<?= e(url('worklogs.index')) ?>">취소</a>
-      <button class="btn btn-primary" type="submit" <?= $projects ? '' : 'disabled' ?>>저장</button>
+
+      <div class="btn-group mt-8">
+        <button class="btn btn-primary" type="submit" <?= $projects ? '' : 'disabled' ?>>저장</button>
+        <a class="btn btn-outline" href="<?= e(url('worklogs.index')) ?>">취소</a>
+      </div>
     </div>
   </form>
 </div>

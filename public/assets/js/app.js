@@ -177,4 +177,53 @@
     return Number(n).toLocaleString('ko-KR');
   };
   window.EDEN.CSRF = CSRF;
+
+  /**
+   * 전역 이미지 fallback — 깨진 썸네일(엑박) 방지.
+   * error 이벤트는 버블링하지 않으므로 캡처 단계로 문서 전체를 감지한다.
+   * AJAX 로 삽입된 이미지에도 자동 적용된다(별도 배선 불필요).
+   */
+  var IMG_PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">' +
+    '<rect width="120" height="120" fill="#eef1f4"/>' +
+    '<g fill="none" stroke="#b6bfc9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="30" y="34" width="60" height="46" rx="4"/>' +
+    '<circle cx="47" cy="50" r="6"/>' +
+    '<path d="M32 74l18-16 12 10 12-12 14 14"/></g>' +
+    '<text x="60" y="98" font-family="-apple-system,sans-serif" font-size="11" fill="#9aa5b1" text-anchor="middle">이미지 없음</text></svg>'
+  );
+  window.EDEN.IMG_PLACEHOLDER = IMG_PLACEHOLDER;
+  document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== 'IMG') return;
+    if (img.dataset.fbDone || img.src === IMG_PLACEHOLDER) return;
+    img.dataset.fbDone = '1';
+    img.src = IMG_PLACEHOLDER;
+    img.classList.add('img-fallback');
+  }, true);
+
+  /**
+   * 칸반 보드(파이프라인·공정) 빈 영역을 마우스로 잡아 좌우 스크롤.
+   * 카드·입력·버튼·링크·캐럿 위에서는 동작하지 않아 드래그이동/클릭과 충돌하지 않는다.
+   */
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    var board = e.target.closest('.kanban');
+    if (!board) return;
+    if (e.target.closest('.kanban-card, input, textarea, select, button, a, .kanban-caret')) return;
+    var startX = e.pageX;
+    var startScroll = board.scrollLeft;
+    board.classList.add('drag-scrolling');
+    function onMove(ev) {
+      board.scrollLeft = startScroll - (ev.pageX - startX);
+      ev.preventDefault();
+    }
+    function onUp() {
+      board.classList.remove('drag-scrolling');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 })();

@@ -18,6 +18,50 @@ class Util
         return number_format($n, 0);
     }
 
+    /**
+     * 금액 축약: 억/만 단위로 읽기 쉽게. 억은 소수1자리, 만은 정수(천단위 콤마).
+     *   14,636,571,000 → "146.4억"  ·  60,500,000 → "6,050만"  ·  6,050,000 → "605만"  ·  8,900 → "8,900"
+     * null → '-'. 음수는 부호 유지(적자 표시).
+     */
+    public static function moneyShort(?float $n): string
+    {
+        if ($n === null) {
+            return '-';
+        }
+        $sign = $n < 0 ? '-' : '';
+        $a = abs($n);
+        if ($a >= 100000000) {                       // 억
+            $v = $a / 100000000;
+            // 정수 억이면 소수 제거, 아니면 1자리
+            $str = ($v == floor($v)) ? number_format($v, 0) : number_format($v, 1);
+            return $sign . $str . '억';
+        }
+        if ($a >= 10000) {                           // 만
+            return $sign . number_format(round($a / 10000)) . '만';
+        }
+        return $sign . number_format($a);
+    }
+
+    /** 축약 금액 + 정확값 title 툴팁 HTML. 뷰에서 금액 셀에 사용. */
+    public static function moneyCell(?float $n, string $suffix = '원'): string
+    {
+        if ($n === null) {
+            return '<span class="mono">-</span>';
+        }
+        $full = number_format($n) . $suffix;
+        return '<span class="mono" title="' . self::e($full) . '">' . self::e(self::moneyShort($n)) . $suffix . '</span>';
+    }
+
+    /** 부호 있는 퍼센트(증감 표기): +12.3% / -4.0% / 0%. null → '-' */
+    public static function pctSigned(?float $n): string
+    {
+        if ($n === null) {
+            return '-';
+        }
+        $s = $n > 0 ? '+' : '';
+        return $s . number_format($n, 1) . '%';
+    }
+
     /** 퍼센트: 12.3% (소수 1자리). null → '-' */
     public static function pct(?float $n): string
     {
@@ -190,6 +234,9 @@ class Util
 // ── 전역 단축 함수 (뷰에서 사용) ──
 function e(?string $s): string { return Util::e($s); }
 function money(?float $n): string { return Util::money($n); }
+function moneyShort(?float $n): string { return Util::moneyShort($n); }
+function moneyCell(?float $n, string $suffix = '원'): string { return Util::moneyCell($n, $suffix); }
 function pct(?float $n): string { return Util::pct($n); }
+function pctSigned(?float $n): string { return Util::pctSigned($n); }
 function url(string $route, array $params = []): string { return Util::url($route, $params); }
 function fmtdate(?string $d, string $fmt = 'Y-m-d'): string { return Util::date($d, $fmt); }

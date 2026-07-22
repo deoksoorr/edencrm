@@ -349,9 +349,12 @@ class QuotesController
             $num = fn($k, $def = 0) => (float) str_replace(',', '', (string) ($row[$k] ?? $def));
             $qty = $num('qty', 1) ?: 1;
             $unitPrice = $num('unit_price', 0);
+            $area = (isset($row['area']) && $row['area'] !== '') ? $num('area', 0) : null;
+            // 금액 = 단가(원/㎡) × 면적 × 수량. 면적 미입력(개수 기준)이면 단가 × 수량.
+            $areaFactor = ($area !== null && $area > 0) ? $area : 1;
             $out[] = [
                 'name'             => $name,
-                'area'             => (isset($row['area']) && $row['area'] !== '') ? $num('area', 0) : null,
+                'area'             => $area,
                 'qty'              => $qty,
                 'unit_price'       => $unitPrice,
                 'material_cost'    => $num('material_cost', 0),
@@ -359,7 +362,7 @@ class QuotesController
                 'equipment_cost'   => $num('equipment_cost', 0),
                 'outsourcing_cost' => $num('outsourcing_cost', 0),
                 'etc_cost'         => $num('etc_cost', 0),
-                'amount'           => round($qty * $unitPrice, 0),
+                'amount'           => round($areaFactor * $qty * $unitPrice, 0),
             ];
         }
         return $out;

@@ -32,21 +32,17 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
     </div>
   </div>
 
-  <div class="row" style="margin-bottom:16px">
-    <div class="col card" style="min-width:260px">
-      <div class="card-body">
-        <div class="kv-row">
-          <div class="kv"><span class="kv-label">연락처</span><span class="kv-value" style="font-size:14px"><?= e($customer['phone'] ?: '-') ?></span></div>
-          <div class="kv"><span class="kv-label">이메일</span><span class="kv-value" style="font-size:14px"><?= e($customer['email'] ?: '-') ?></span></div>
-          <div class="kv"><span class="kv-label">담당자</span><span class="kv-value" style="font-size:14px"><?= e($customer['contact_name'] ?: '-') ?></span></div>
-          <div class="kv"><span class="kv-label">최근상담일</span><span class="kv-value" style="font-size:14px"><?= fmtdate($customer['last_consult_date']) ?></span></div>
-          <div class="kv">
-            <span class="kv-label">다음연락예정일</span>
-            <span class="kv-value" style="font-size:14px<?= $overdue ? ';color:var(--danger)' : '' ?>">
-              <?= fmtdate($customer['next_contact_date']) ?><?= $overdue ? ' (지연)' : '' ?>
-            </span>
-          </div>
-        </div>
+  <div class="card pad">
+    <div class="kv-row">
+      <div class="kv"><span class="kv-label">연락처</span><span class="kv-value"><?= e($customer['phone'] ?: '-') ?></span></div>
+      <div class="kv"><span class="kv-label">이메일</span><span class="kv-value"><?= e($customer['email'] ?: '-') ?></span></div>
+      <div class="kv"><span class="kv-label">담당자</span><span class="kv-value"><?= e($customer['contact_name'] ?: '-') ?></span></div>
+      <div class="kv"><span class="kv-label">최근상담일</span><span class="kv-value"><?= fmtdate($customer['last_consult_date']) ?></span></div>
+      <div class="kv">
+        <span class="kv-label">다음연락예정일</span>
+        <span class="kv-value<?= $overdue ? ' text-danger' : '' ?>">
+          <?= fmtdate($customer['next_contact_date']) ?><?= $overdue ? ' (지연)' : '' ?>
+        </span>
       </div>
     </div>
   </div>
@@ -70,7 +66,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
         <dt>유입경로</dt><dd><?= e($customer['source'] ?: '-') ?></dd>
         <dt>관심공사</dt><dd><?= e($customer['interest_type'] ?: '-') ?></dd>
         <dt>예상규모</dt><dd><?= e($customer['expected_scale'] ?: '-') ?></dd>
-        <dt>예상예산</dt><dd><?= money($customer['expected_budget'] !== null ? (float) $customer['expected_budget'] : null) ?>원</dd>
+        <dt>예상예산</dt><dd><?= moneyCell($customer['expected_budget'] !== null ? (float) $customer['expected_budget'] : null) ?></dd>
         <dt>상담희망일</dt><dd><?= fmtdate($customer['desired_consult_date']) ?></dd>
         <dt>태그</dt><dd><?= e($customer['tags'] ?: '-') ?></dd>
         <dt>개인정보동의</dt><dd><?= ((int) $customer['privacy_agreed'] === 1) ? '동의' : '미동의' ?></dd>
@@ -119,13 +115,13 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
     <div class="card"><div class="card-body">
       <?php if (!$leads): ?><div class="empty"><div class="empty-title">연결된 영업기회가 없습니다.</div></div><?php else: ?>
         <div class="table-wrap"><table class="data">
-          <thead><tr><th>단계</th><th>공사종류</th><th class="num">예상금액</th><th>성공확률</th><th>다음연락예정일</th></tr></thead>
+          <thead><tr><th>단계</th><th>공사종류</th><th class="num">예상금액</th><th class="num">성공확률</th><th>다음연락예정일</th></tr></thead>
           <tbody><?php foreach ($leads as $l): ?>
             <tr>
               <td><span class="badge" style="background:<?= e($l['stage_color'] ?: '#e5e7eb') ?>22;color:<?= e($l['stage_color'] ?: '#374151') ?>"><?= e($l['stage_name']) ?></span></td>
               <td><?= e($l['work_type'] ?: '-') ?></td>
-              <td class="num"><?= money($l['expected_amount'] !== null ? (float) $l['expected_amount'] : null) ?></td>
-              <td><?= pct($l['win_probability'] !== null ? (float) $l['win_probability'] : null) ?></td>
+              <td class="num mono"><?= money($l['expected_amount'] !== null ? (float) $l['expected_amount'] : null) ?></td>
+              <td class="num mono"><?= pct($l['win_probability'] !== null ? (float) $l['win_probability'] : null) ?></td>
               <td class="nowrap"><?= fmtdate($l['next_contact_date']) ?></td>
             </tr>
           <?php endforeach; ?></tbody>
@@ -156,7 +152,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
         <div class="table-wrap"><table class="data">
           <thead><tr><th>계약번호</th><th class="num">계약금액</th><th>상태</th><th>계약일</th></tr></thead>
           <tbody><?php foreach ($contracts as $c): ?>
-            <tr><td><?= e($c['contract_no']) ?></td><td class="num"><?= money((float) $c['contract_amount']) ?></td><td><span class="badge"><?= e($c['status']) ?></span></td><td><?= fmtdate($c['contract_date']) ?></td></tr>
+            <tr><td><?= e($c['contract_no']) ?></td><td class="num mono"><?= money((float) $c['contract_amount']) ?></td><td><span class="badge"><?= e($c['status']) ?></span></td><td><?= fmtdate($c['contract_date']) ?></td></tr>
           <?php endforeach; ?></tbody>
         </table></div>
       <?php endif; ?>

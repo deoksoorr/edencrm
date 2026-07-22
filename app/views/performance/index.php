@@ -33,21 +33,21 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
             <td><?= e($r['name']) ?></td>
             <td><?= e($r['department']) ?></td>
             <td><?= e($roleLabels[$r['role_key']] ?? $r['role_key']) ?></td>
-            <td class="num"><?= number_format($r['total_projects']) ?></td>
-            <td class="num"><?= number_format($r['completed_projects']) ?></td>
-            <td class="num"><?= number_format($r['in_progress_projects']) ?></td>
-            <td class="num<?= $r['delayed_projects'] > 0 ? ' text-danger' : '' ?>"><?= number_format($r['delayed_projects']) ?></td>
-            <td class="num"><?= money($r['total_contract_amount']) ?></td>
-            <td class="num"><?= money($r['total_revenue']) ?></td>
-            <td class="num"><?= money($r['total_cost']) ?></td>
-            <td class="num<?= $r['total_profit'] < 0 ? ' text-danger' : '' ?>"><?= money($r['total_profit']) ?></td>
-            <td class="num"><?= pct($r['avg_profit_rate']) ?></td>
-            <td class="num"><?= money($r['target_revenue']) ?></td>
-            <td class="num"><?= pct($r['revenue_achieve_rate']) ?></td>
-            <td class="num"><?= money($r['target_profit']) ?></td>
-            <td class="num"><?= pct($r['profit_achieve_rate']) ?></td>
-            <td class="num"><?= pct($r['conversion_rate']) ?></td>
-            <td class="num"><?= pct($r['worklog_rate']) ?></td>
+            <td class="num mono"><?= number_format($r['total_projects']) ?></td>
+            <td class="num mono"><?= number_format($r['completed_projects']) ?></td>
+            <td class="num mono"><?= number_format($r['in_progress_projects']) ?></td>
+            <td class="num mono<?= $r['delayed_projects'] > 0 ? ' text-danger' : '' ?>"><?= number_format($r['delayed_projects']) ?></td>
+            <td class="num mono"><?= money($r['total_contract_amount']) ?></td>
+            <td class="num mono"><?= money($r['total_revenue']) ?></td>
+            <td class="num mono"><?= money($r['total_cost']) ?></td>
+            <td class="num mono<?= $r['total_profit'] < 0 ? ' text-danger' : '' ?>"><?= money($r['total_profit']) ?></td>
+            <td class="num mono"><?= pct($r['avg_profit_rate']) ?></td>
+            <td class="num mono"><?= money($r['target_revenue']) ?></td>
+            <td class="num mono"><?= pct($r['revenue_achieve_rate']) ?></td>
+            <td class="num mono"><?= money($r['target_profit']) ?></td>
+            <td class="num mono"><?= pct($r['profit_achieve_rate']) ?></td>
+            <td class="num mono"><?= pct($r['conversion_rate']) ?></td>
+            <td class="num mono"><?= pct($r['worklog_rate']) ?></td>
             <td><a href="<?= e(url('performance.user', ['id' => $r['user_id']])) ?>" class="btn btn-sm btn-outline">상세</a></td>
           </tr>
         <?php endforeach; ?>

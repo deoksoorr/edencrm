@@ -25,9 +25,8 @@
 
   <?php if (!$rows): ?>
     <div class="empty">
-      <div class="empty-icon">📋</div>
       <div class="empty-title">작업일지가 없습니다</div>
-      <?php if (can('worklog.create')): ?><a class="btn btn-primary" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a><?php endif; ?>
+      <?php if (can('worklog.create')): ?><a class="btn btn-primary mt-8" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a><?php endif; ?>
     </div>
   <?php else: ?>
     <div class="table-wrap">
@@ -44,7 +43,7 @@
             <td class="wrap"><?= e($r['project_no']) ?> · <?= e($r['project_name']) ?></td>
             <td><?= e($r['author_name']) ?></td>
             <td><?= e($r['stage_name'] ?? '-') ?></td>
-            <td class="num"><?= $r['progress'] !== null ? pct((float) $r['progress']) : '-' ?></td>
+            <td class="num mono"><?= $r['progress'] !== null ? pct((float) $r['progress']) : '-' ?></td>
             <td>
               <?php if ($r['confirmed_by']): ?>
                 <span class="badge badge-ok">확인완료</span>

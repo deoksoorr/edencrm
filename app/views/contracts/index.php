@@ -54,9 +54,9 @@
             <tr>
               <td><a href="<?= e(url('contracts.show', ['id' => $r['id']])) ?>"><?= e($r['contract_no']) ?></a></td>
               <td class="ellipsis"><?= e($r['customer_name']) ?></td>
-              <td class="num"><?= money($r['contract_amount']) ?></td>
+              <td class="num mono"><?= money($r['contract_amount']) ?></td>
               <td><span class="badge <?= e($payStatusBadge[$r['payment_status']] ?? 'badge-muted') ?>"><?= e($payStatusLabels[$r['payment_status']] ?? $r['payment_status']) ?></span></td>
-              <td class="num <?= (float) $r['receivable'] > 0 ? 'text-danger' : '' ?>"><?= money((float) $r['receivable']) ?></td>
+              <td class="num mono <?= (float) $r['receivable'] > 0 ? 'text-danger' : '' ?>"><?= money((float) $r['receivable']) ?></td>
               <td><?= fmtdate($r['start_date']) ?></td>
               <td><?= fmtdate($r['end_date']) ?></td>
             </tr>

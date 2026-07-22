@@ -61,6 +61,17 @@
             </select>
             <?php if ($staff && $staff['role_key'] === 'super_admin'): ?><div class="field-hint">슈퍼관리자 계정은 비활성화할 수 없습니다.</div><?php endif; ?>
           </div>
+          <?php $curColor = $staff['color'] ?? Stages::staffColors()[0]; ?>
+          <div class="field col-span-2">
+            <label class="field-label">개인 색</label>
+            <input type="hidden" name="color" id="staffColor" value="<?= e($curColor) ?>">
+            <div class="swatch-row" id="swatchRow">
+              <?php foreach (Stages::staffColors() as $c): ?>
+                <button type="button" class="swatch<?= strtolower($curColor) === strtolower($c) ? ' active' : '' ?>" data-color="<?= e($c) ?>" style="background:<?= e($c) ?>" aria-label="<?= e($c) ?>"></button>
+              <?php endforeach; ?>
+            </div>
+            <div class="field-hint">일정(캘린더·타임라인)에 이 직원이 이 색으로 표시됩니다. 고정 팔레트에서 선택하세요.</div>
+          </div>
           <?php if (!$staff): ?>
           <div class="field col-span-2">
             <label class="field-label">초기 비밀번호 (비우면 자동 발급)</label>
@@ -79,6 +90,17 @@
 </div>
 
 <script>
+// 색상 스와치 선택(고정 팔레트)
+(function () {
+  var row = document.getElementById('swatchRow');
+  if (!row) return;
+  row.addEventListener('click', function (e) {
+    var b = e.target.closest('.swatch'); if (!b) return;
+    row.querySelectorAll('.swatch').forEach(function (s) { s.classList.remove('active'); });
+    b.classList.add('active');
+    document.getElementById('staffColor').value = b.dataset.color;
+  });
+})();
 document.getElementById('staffForm').addEventListener('submit', async function (e) {
   e.preventDefault();
   const form = e.target;

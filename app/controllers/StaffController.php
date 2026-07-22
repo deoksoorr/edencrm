@@ -143,6 +143,8 @@ class StaffController
         $hireDate     = Util::nullIfEmpty(Util::postStr('hire_date'));
         $status       = Util::postStr('status', 'active');
         $initialPw    = Util::postStr('initial_password');
+        $colorIn      = Util::postStr('color');
+        $color        = Stages::isValidColor($colorIn) ? $colorIn : null; // 팔레트 외 값 차단
 
         if ($loginId === '' || $email === '' || $name === '' || $roleId <= 0) {
             Response::error('아이디, 이메일, 이름, 역할은 필수입니다.', 422);
@@ -194,6 +196,7 @@ class StaffController
                 'role_key'      => $role['role_key'],
                 'hire_date'     => $hireDate,
                 'status'        => $status,
+                'color'         => $color ?? ($before['color'] ?: Stages::defaultColorFor($id)),
             ];
             Db::update('users', $data, 'id=:id', [':id' => $id]);
             Audit::log('update', 'users', $id, $before, $data);
@@ -211,6 +214,7 @@ class StaffController
                 'role_key'             => $role['role_key'],
                 'hire_date'            => $hireDate,
                 'status'               => $status,
+                'color'                => $color ?? Stages::staffColors()[0],
                 'must_change_password' => 1,
                 'failed_attempts'      => 0,
             ];

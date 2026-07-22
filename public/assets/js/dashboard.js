@@ -1,104 +1,87 @@
-/* 대시보드 차트: dashboard.data 호출 → Chart.js 렌더 (사장: line/doughnut/bar/gauge, 직원: bar/gauge) */
+/* 대시보드 차트(boss·sales): 월별 매출·순이익 bar+line, 영업단계 6그룹 도넛.
+   금액은 억/만 축약(축·툴팁), 게이지·직원막대는 폐기. .chart-box 높이에 맞춰 렌더. */
 (function () {
   'use strict';
+  if (typeof Chart === 'undefined') return;
+  const trendEl = document.getElementById('chartTrend');
+  const stageEl = document.getElementById('chartStage');
+  if (!trendEl && !stageEl) return; // 차트 없는 화면(site/staff)
 
-  const fmtMoney = (n) => (n === null || n === undefined) ? '-' : Number(n).toLocaleString('ko-KR');
-  const fmtPct = (n) => (n === null || n === undefined) ? '-' : Number(n).toFixed(1) + '%';
-  const COLORS = ['#1a56db', '#0f9d58', '#e8710a', '#d93025', '#6b7280', '#7c3aed', '#0891b2', '#c026d3', '#0284c7', '#65a30d', '#f59e0b', '#059669'];
+  Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = '#6b7280';
 
-  function gaugeColor(rate) {
-    if (rate === null || rate === undefined) return '#9ca3af';
-    if (rate >= 100) return '#0f9d58';
-    if (rate >= 70) return '#1a56db';
-    if (rate >= 40) return '#e8710a';
-    return '#d93025';
+  function moneyShort(n) {
+    if (n === null || n === undefined) return '-';
+    const s = n < 0 ? '-' : '';
+    const a = Math.abs(n);
+    if (a >= 1e8) { const v = a / 1e8; return s + (v === Math.floor(v) ? v : v.toFixed(1)) + '억'; }
+    if (a >= 1e4) return s + Math.round(a / 1e4).toLocaleString('ko-KR') + '만';
+    return s + a.toLocaleString('ko-KR');
   }
-
-  function renderGauge(canvasId, labelId, rate) {
-    const el = document.getElementById(canvasId);
-    if (!el || typeof Chart === 'undefined') return;
-    const value = (rate === null || rate === undefined) ? 0 : Math.max(0, Math.min(100, rate));
-    const color = gaugeColor(rate);
-    new Chart(el.getContext('2d'), {
-      type: 'doughnut',
-      data: { datasets: [{ data: [value, 100 - value], backgroundColor: [color, '#eef1f4'], borderWidth: 0 }] },
-      options: {
-        responsive: true,
-        circumference: 180,
-        rotation: 270,
-        cutout: '75%',
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-      },
-    });
-    const label = document.getElementById(labelId);
-    if (label) {
-      label.textContent = fmtPct(rate);
-      label.style.color = color;
-    }
+  const won = (n) => (n === null || n === undefined ? '-' : Number(n).toLocaleString('ko-KR') + '원');
+  function showEmpty(canvas, msg) {
+    const box = canvas.closest('.chart-box');
+    if (box) box.innerHTML = '<div class="chart-empty"><div class="ce-ico">▤</div><div>' + msg + '</div></div>';
   }
 
   async function load() {
     let data;
-    try {
-      data = await api('dashboard.data', {});
-    } catch (err) {
-      console.error(err);
-      return;
-    }
+    try { data = await api('dashboard.data', {}); }
+    catch (err) { console.error(err); return; }
 
-    // ── 사장 계열 대시보드 ──
-    if (document.getElementById('chartMonthlyTrend') && data.monthly_trend) {
-      new Chart(document.getElementById('chartMonthlyTrend').getContext('2d'), {
+    const trendSum = (data.monthly_trend || []).reduce((s, r) => s + Math.abs(r.revenue) + Math.abs(r.profit), 0);
+    if (trendEl && data.monthly_trend && trendSum === 0) {
+      showEmpty(trendEl, '최근 6개월 계약 매출 데이터가 아직 없습니다.');
+    } else if (trendEl && data.monthly_trend) {
+      new Chart(trendEl.getContext('2d'), {
         data: {
           labels: data.monthly_trend.map((r) => r.ym),
           datasets: [
-            { type: 'bar', label: '매출', data: data.monthly_trend.map((r) => r.revenue), backgroundColor: COLORS[0] },
-            { type: 'line', label: '순이익', data: data.monthly_trend.map((r) => r.profit), borderColor: COLORS[1], backgroundColor: COLORS[1], tension: 0.3 },
+            { type: 'bar', label: '매출', data: data.monthly_trend.map((r) => r.revenue), backgroundColor: '#1a56db', borderRadius: 4, maxBarThickness: 42, order: 2 },
+            { type: 'line', label: '순이익', data: data.monthly_trend.map((r) => r.profit), borderColor: '#0f9d58', backgroundColor: '#0f9d58', borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5, order: 1 },
           ],
         },
-        options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: (v) => fmtMoney(v) } } } },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true } },
+            tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + won(c.parsed.y) } },
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { border: { display: false }, grid: { color: '#eef1f4' }, ticks: { callback: (v) => moneyShort(v) } },
+          },
+        },
       });
     }
 
-    if (document.getElementById('chartStageDist') && data.stage_distribution) {
-      new Chart(document.getElementById('chartStageDist').getContext('2d'), {
+    const g = data.stage_groups || [];
+    const stageTotal = g.reduce((s, r) => s + Number(r.n), 0);
+    if (stageEl && stageTotal === 0) {
+      showEmpty(stageEl, '진행 중인 영업기회가 없습니다.');
+      const lg0 = document.getElementById('stageLegend'); if (lg0) lg0.innerHTML = '';
+    } else if (stageEl && data.stage_groups) {
+      const total = stageTotal;
+      new Chart(stageEl.getContext('2d'), {
         type: 'doughnut',
-        data: {
-          labels: data.stage_distribution.map((r) => r.stage),
-          datasets: [{ data: data.stage_distribution.map((r) => r.cnt), backgroundColor: COLORS }],
+        data: { labels: g.map((r) => r.label), datasets: [{ data: g.map((r) => r.n), backgroundColor: g.map((r) => r.color), borderWidth: 2, borderColor: '#fff' }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '62%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (c) => c.label + ': ' + c.parsed + '건 (' + (total ? (c.parsed / total * 100).toFixed(0) : 0) + '%)' } },
+          },
         },
-        options: { responsive: true, plugins: { legend: { position: 'right' } } },
       });
-    }
-
-    if (document.getElementById('chartStaffRevenue') && data.staff_revenue) {
-      new Chart(document.getElementById('chartStaffRevenue').getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: data.staff_revenue.map((r) => r.name),
-          datasets: [{ label: '매출', data: data.staff_revenue.map((r) => r.revenue), backgroundColor: COLORS[0] }],
-        },
-        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { ticks: { callback: (v) => fmtMoney(v) } } } },
-      });
-    }
-
-    // ── 직원 대시보드 ──
-    if (document.getElementById('chartProcessBreakdown') && data.process_breakdown) {
-      new Chart(document.getElementById('chartProcessBreakdown').getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: data.process_breakdown.map((r) => r.stage || '미지정'),
-          datasets: [{ label: '건수', data: data.process_breakdown.map((r) => r.cnt), backgroundColor: COLORS[2] }],
-        },
-        options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } },
-      });
-    }
-
-    // ── 공통: 목표 달성 게이지 ──
-    if (document.getElementById('chartGoalGauge') && data.goal_gauge) {
-      renderGauge('chartGoalGauge', 'goalGaugeLabel', data.goal_gauge.rate);
+      const legend = document.getElementById('stageLegend');
+      if (legend) {
+        legend.innerHTML = g.map((r) =>
+          `<span class="lg"><span class="sw" style="background:${r.color}"></span>${r.label} <b>${r.n}</b></span>`
+        ).join('');
+      }
     }
   }
-
   load();
 })();

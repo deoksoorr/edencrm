@@ -70,6 +70,7 @@ CREATE TABLE `users` (
   `phone` VARCHAR(20) NULL,
   `department_id` INT UNSIGNED NULL,
   `position` VARCHAR(50) NULL COMMENT '직급',
+  `color` VARCHAR(7) NULL COMMENT '개인 색(고정 팔레트, 일정 표시용)',
   `role_id` INT UNSIGNED NOT NULL,
   `role_key` VARCHAR(30) NOT NULL COMMENT '비정규화 캐시(roles.role_key)',
   `hire_date` DATE NULL,
@@ -482,13 +483,15 @@ DROP TABLE IF EXISTS `schedules`;
 CREATE TABLE `schedules` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_id` INT UNSIGNED NULL,
-  `user_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL COMMENT '주 담당(생성자/대표 참여자) — 참여자 전체는 schedule_participants',
   `title` VARCHAR(150) NOT NULL,
-  `start_datetime` DATETIME NOT NULL,
+  `event_date` DATE NULL COMMENT '일정 날짜(시간대 슬롯 기반)',
+  `slot` VARCHAR(10) NULL COMMENT '시간대 슬롯: am(오전)/pm(오후)/night(야간)',
+  `start_datetime` DATETIME NOT NULL COMMENT '슬롯 기준 대표 시각(호환용, 앱이 event_date+slot 으로 산출)',
   `end_datetime` DATETIME NOT NULL,
   `all_day` TINYINT(1) NOT NULL DEFAULT 0,
   `type` VARCHAR(20) NOT NULL DEFAULT 'work' COMMENT 'work/meeting/etc',
-  `color` VARCHAR(20) NULL,
+  `color` VARCHAR(20) NULL COMMENT '(미사용 — 색상은 참여자 개인색에서 산출)',
   `status` VARCHAR(20) NOT NULL DEFAULT 'scheduled' COMMENT 'scheduled/completed/cancelled',
   `memo` TEXT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -498,8 +501,23 @@ CREATE TABLE `schedules` (
   KEY `idx_schedules_user` (`user_id`),
   KEY `idx_schedules_start` (`start_datetime`),
   KEY `idx_schedules_end` (`end_datetime`),
+  KEY `idx_schedules_date_slot` (`event_date`, `slot`),
   CONSTRAINT `fk_schedules_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE RESTRICT,
   CONSTRAINT `fk_schedules_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 일정 참여자(다대다): 한 일정에 여러 직원 배정
+DROP TABLE IF EXISTS `schedule_participants`;
+CREATE TABLE `schedule_participants` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `schedule_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_sched_part` (`schedule_id`, `user_id`),
+  KEY `idx_sp_user` (`user_id`),
+  CONSTRAINT `fk_sp_schedule` FOREIGN KEY (`schedule_id`) REFERENCES `schedules` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_sp_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS `work_logs`;
@@ -607,6 +625,8 @@ CREATE TABLE `targets` (
   `month` TINYINT UNSIGNED NOT NULL,
   `target_revenue` DECIMAL(14,0) NOT NULL DEFAULT 0,
   `target_profit` DECIMAL(14,0) NOT NULL DEFAULT 0,
+  `target_contracts` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '목표 계약 건수',
+  `target_projects` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '목표 프로젝트 수',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -614,6 +634,21 @@ CREATE TABLE `targets` (
   KEY `idx_targets_user` (`user_id`),
   KEY `idx_targets_year_month` (`year`, `month`),
   CONSTRAINT `fk_targets_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 회사 목표(월/분기/연간) — 대시보드 달성률 산정 기준
+DROP TABLE IF EXISTS `company_targets`;
+CREATE TABLE `company_targets` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `period_type` VARCHAR(10) NOT NULL COMMENT 'month/quarter/year',
+  `year` SMALLINT UNSIGNED NOT NULL,
+  `period_no` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'month 1-12 / quarter 1-4 / year 0',
+  `target_revenue` DECIMAL(14,0) NOT NULL DEFAULT 0,
+  `target_profit` DECIMAL(14,0) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_company_target` (`period_type`, `year`, `period_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------------------------------------------------------

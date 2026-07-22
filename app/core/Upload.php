@@ -121,6 +121,10 @@ class Upload
         }
         $full = UPLOAD_PATH . '/' . $f['path'];
         if (!is_file($full)) {
+            // 물리 파일 누락(예: 더미 데이터) — 이미지면 엑박 대신 기본 이미지(200)를 스트리밍한다.
+            if (str_starts_with((string) ($f['mime'] ?? ''), 'image/')) {
+                self::sendPlaceholderImage();
+            }
             http_response_code(404);
             exit('파일이 존재하지 않습니다.');
         }
@@ -130,6 +134,21 @@ class Upload
         header('Content-Disposition: attachment; filename="' . rawurlencode($f['original_name']) . '"');
         header('X-Content-Type-Options: nosniff');
         readfile($full);
+        exit;
+    }
+
+    /** 이미지 파일 누락 시 기본 이미지(SVG, 200)를 스트리밍한다 — 엑박·콘솔 404 방지. */
+    private static function sendPlaceholderImage(): never
+    {
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180" viewBox="0 0 240 180">'
+            . '<rect width="240" height="180" fill="#eef1f4"/>'
+            . '<g fill="none" stroke="#b6bfc9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">'
+            . '<rect x="78" y="58" width="84" height="64" rx="6"/><circle cx="102" cy="82" r="8"/>'
+            . '<path d="M82 116l24-22 16 14 16-16 20 20"/></g>'
+            . '<text x="120" y="150" font-family="-apple-system,sans-serif" font-size="14" fill="#9aa5b1" text-anchor="middle">이미지 없음</text></svg>';
+        header('Content-Type: image/svg+xml');
+        header('Cache-Control: no-store');
+        echo $svg;
         exit;
     }
 }

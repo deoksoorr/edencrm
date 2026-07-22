@@ -56,7 +56,7 @@ $projStatusLabels = ['preparing' => '준비중', 'in_progress' => '진행중', '
               <td><?= e($p['project_no']) ?></td>
               <td><?= e($p['name']) ?></td>
               <td><span class="badge badge-info"><?= e($projStatusLabels[$p['status']] ?? $p['status']) ?></span></td>
-              <td class="num"><?= money((float) $p['contract_amount']) ?></td>
+              <td class="num mono"><?= money((float) $p['contract_amount']) ?></td>
               <td>
                 <div class="progress"><div class="progress-bar <?= $p['progress'] >= 100 ? 'ok' : '' ?>" style="width:<?= (int) $p['progress'] ?>%"></div></div>
                 <div class="progress-label"><?= (int) $p['progress'] ?>%</div>

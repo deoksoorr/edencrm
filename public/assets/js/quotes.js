@@ -43,9 +43,11 @@
   }
 
   function recalcRow(tr) {
+    const area = numVal(tr.querySelector('.f-area')?.value);
     const qty = numVal(tr.querySelector('.f-qty')?.value);
     const price = numVal(tr.querySelector('.f-price')?.value);
-    const amount = Math.round(qty * price);
+    // 금액 = 단가(원/㎡) × 면적 × 수량. 면적 미입력(개수 기준)이면 단가 × 수량.
+    const amount = Math.round((area > 0 ? area : 1) * qty * price);
     tr.querySelector('.row-amount').textContent = fmt(amount);
     return amount;
   }
@@ -91,7 +93,7 @@
   });
 
   body.addEventListener('input', (e) => {
-    if (e.target.matches('.f-qty, .f-price')) recalcAll();
+    if (e.target.matches('.f-area, .f-qty, .f-price')) recalcAll();
   });
   document.getElementById('inputDiscount')?.addEventListener('input', recalcAll);
 })();

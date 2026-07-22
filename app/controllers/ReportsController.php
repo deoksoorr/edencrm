@@ -343,7 +343,7 @@ class ReportsController
         return $rows;
     }
 
-    /** 목표대비 달성률(기간에 포함된 연/월의 targets 합계 vs projects 실적 합계). */
+    /** 목표대비 달성률(기간에 포함된 월들의 회사 월목표 합계 vs projects 실적 합계). 대시보드와 동일 기준(company_targets). */
     private function targetAchievement(string $from, string $to): array
     {
         $months = [];
@@ -358,8 +358,8 @@ class ReportsController
         $targetProfit = 0.0;
         foreach ($months as $mm) {
             $t = Db::one(
-                'SELECT COALESCE(SUM(target_revenue),0) AS tr, COALESCE(SUM(target_profit),0) AS tp
-                 FROM targets WHERE year=:y AND month=:m',
+                "SELECT COALESCE(target_revenue,0) AS tr, COALESCE(target_profit,0) AS tp
+                 FROM company_targets WHERE period_type='month' AND year=:y AND period_no=:m",
                 [':y' => $mm['y'], ':m' => $mm['m']]
             );
             $targetRevenue += (float) ($t['tr'] ?? 0);

@@ -46,11 +46,23 @@ class ProcessController
             $byStage[(int) $p['process_stage_id']][] = $p;
         }
 
+        // 18단계 → 5그룹 매핑(단일 출처 Stages)
+        $s2g = Stages::processStageToGroup();
+        $groupDefs = Stages::processGroups();
+        foreach ($stages as &$st) {
+            $gkey = $s2g[$st['stage_key']] ?? 'prep';
+            $st['group'] = $gkey;
+            $st['group_color'] = $groupDefs[$gkey]['color'] ?? '#9ca3af';
+        }
+        unset($st);
+
         View::render('process/board', [
             'title'   => '공정 보드',
             'stages'  => $stages,
             'byStage' => $byStage,
             'photos'  => $photos,
+            'groups'  => $groupDefs,
+            'tabs'    => Stages::processTabs(),
             'canMove' => Rbac::can('process.move'),
             'scripts' => ['vendor/Sortable.min.js', 'js/process-board.js'],
         ]);
@@ -94,8 +106,12 @@ class ProcessController
             }
         }
 
-        Db::transaction(function () use ($projectId, $toStageId, $fromStageId, $reason) {
-            Db::update('projects', ['process_stage_id' => $toStageId], 'id = :id', [':id' => $projectId]);
+        // 공정 단계 이동 시 진행률 자동 산정(단계 순서 비율). 완료/취소가 아니면 갱신.
+        $maxSort = (int) (Db::val("SELECT MAX(sort_order) FROM process_stages") ?: 18);
+        $progress = max(0, min(100, (int) round((int) $toStage['sort_order'] / $maxSort * 100)));
+
+        Db::transaction(function () use ($projectId, $toStageId, $fromStageId, $reason, $progress) {
+            Db::update('projects', ['process_stage_id' => $toStageId, 'progress' => $progress], 'id = :id', [':id' => $projectId]);
             Db::insert('project_process_history', [
                 'project_id'   => $projectId,
                 'from_stage_id'=> $fromStageId,
@@ -108,12 +124,13 @@ class ProcessController
 
         Audit::log('process_move', 'project', $projectId,
             ['from_stage_id' => $fromStageId],
-            ['to_stage_id' => $toStageId, 'reason' => $reason]);
+            ['to_stage_id' => $toStageId, 'reason' => $reason, 'progress' => $progress]);
 
         Response::json([
             'project_id'       => $projectId,
             'from_stage_id'    => $fromStageId,
             'to_stage_id'      => $toStageId,
+            'progress'         => $progress,
             'requires_confirm' => (bool) $toStage['requires_confirm'],
             'skip_warn'        => $skipWarn,
         ]);
@@ -139,5 +156,22 @@ class ProcessController
         );
 
         Response::json(['rows' => $rows]);
+    }
+
+    /** 공정 이력의 사유(reason) 수정. */
+    public function historyUpdate(): void
+    {
+        $historyId = Util::postInt('history_id', 0);
+        $reason = Util::nullIfEmpty(Util::postStr('reason'));
+        $row = Db::one("SELECT * FROM project_process_history WHERE id = :id", [':id' => $historyId]);
+        if (!$row) {
+            Response::error('이력을 찾을 수 없습니다.', 404);
+        }
+        if (!Scope::canAccessProject((int) $row['project_id'])) {
+            Response::error('이 프로젝트에 접근할 권한이 없습니다.', 403);
+        }
+        Db::update('project_process_history', ['reason' => $reason], 'id = :id', [':id' => $historyId]);
+        Audit::log('process_history_edit', 'project_process_history', $historyId, ['reason' => $row['reason']], ['reason' => $reason]);
+        Response::json(['id' => $historyId, 'reason' => $reason]);
     }
 }

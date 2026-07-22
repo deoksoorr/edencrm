@@ -1,11 +1,11 @@
 <?php
-/** @var array $users @var array $projects @var bool $canManage @var bool $canManageAll */
+/** @var array $users @var array $projects @var array $slots @var bool $canManage @var bool $canManageAll */
 ?>
 <div class="page">
   <div class="page-head">
     <div>
       <div class="page-title">일정</div>
-      <div class="page-sub">월 캘린더 · 직원별 주간 타임라인</div>
+      <div class="page-sub">월 캘린더 · 직원별 슬롯 타임라인(오전·오후·야간)</div>
     </div>
     <div class="page-actions">
       <?php if ($canManage): ?>
@@ -48,17 +48,13 @@
   </div>
 </div>
 
-<style>
-/* 월 캘린더 충돌 표시(모듈 전용 — app.css 에는 타임라인 .sched-bar.conflict 만 정의돼 있음) */
-.cal-ev.conflict{outline:2px solid var(--danger);outline-offset:-1px}
-</style>
-
 <?php
 $initData = [
     'canManage'    => $canManage,
     'canManageAll' => $canManageAll,
     'meId'         => (int) Auth::id(),
     'users'        => $users,
+    'slots'        => $slots,
 ];
 ?>
 <script>window.SCHED_INIT = <?= json_encode($initData, JSON_UNESCAPED_UNICODE) ?>;</script>

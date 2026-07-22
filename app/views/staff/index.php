@@ -40,7 +40,6 @@ $baseParams = ['q' => $q, 'department_id' => $departmentId ?: '', 'role_id' => $
 
   <?php if (!$rows): ?>
     <div class="empty">
-      <div class="empty-icon">👤</div>
       <div class="empty-title">조건에 맞는 직원이 없습니다.</div>
     </div>
   <?php else: ?>

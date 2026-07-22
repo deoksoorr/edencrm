@@ -28,65 +28,61 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-head"><div class="card-title">계약 요약</div></div>
-    <div class="card-body">
-      <div class="kv-row">
-        <div class="kv"><div class="kv-label">계약금액</div><div class="kv-value"><?= money($contract['contract_amount']) ?></div></div>
-        <div class="kv"><div class="kv-label">입금완료</div><div class="kv-value" style="color:var(--ok)"><?= money($paidSum) ?></div></div>
-        <div class="kv"><div class="kv-label">미수금</div><div class="kv-value" style="color:<?= $receivable > 0 ? 'var(--danger)' : 'var(--ink)' ?>"><?= money($receivable) ?></div></div>
-      </div>
-      <div class="dl" style="margin-top:18px">
-        <dt>계약일</dt><dd><?= fmtdate($contract['contract_date']) ?></dd>
-        <dt>계약금/중도금/잔금</dt><dd><?= money($contract['down_payment']) ?> / <?= money($contract['middle_payment']) ?> / <?= money($contract['balance_payment']) ?></dd>
-        <dt>착공예정</dt><dd><?= fmtdate($contract['start_date']) ?></dd>
-        <dt>준공예정</dt><dd><?= fmtdate($contract['end_date']) ?></dd>
-        <dt>하자보증기간</dt><dd><?= e($contract['warranty_period'] ?: '-') ?></dd>
-        <?php if (!empty($contract['special_terms'])): ?>
-          <dt>특약사항</dt><dd style="white-space:pre-wrap"><?= e($contract['special_terms']) ?></dd>
-        <?php endif; ?>
-      </div>
+  <div class="card pad">
+    <div class="section-head"><div class="st"><h2>계약 요약</h2></div></div>
+    <div class="kv-row">
+      <div class="kv"><div class="kv-label">계약금액</div><div class="kv-value"><?= moneyCell($contract['contract_amount']) ?></div></div>
+      <div class="kv"><div class="kv-label">입금완료</div><div class="kv-value" style="color:var(--ok)"><?= moneyCell($paidSum) ?></div></div>
+      <div class="kv"><div class="kv-label">미수금</div><div class="kv-value" style="color:<?= $receivable > 0 ? 'var(--danger)' : 'var(--ink)' ?>"><?= moneyCell($receivable) ?></div></div>
+    </div>
+    <div class="dl mt-16">
+      <dt>계약일</dt><dd><?= fmtdate($contract['contract_date']) ?></dd>
+      <dt>계약금/중도금/잔금</dt><dd><?= moneyCell($contract['down_payment']) ?> / <?= moneyCell($contract['middle_payment']) ?> / <?= moneyCell($contract['balance_payment']) ?></dd>
+      <dt>착공예정</dt><dd><?= fmtdate($contract['start_date']) ?></dd>
+      <dt>준공예정</dt><dd><?= fmtdate($contract['end_date']) ?></dd>
+      <dt>하자보증기간</dt><dd><?= e($contract['warranty_period'] ?: '-') ?></dd>
+      <?php if (!empty($contract['special_terms'])): ?>
+        <dt>특약사항</dt><dd style="white-space:pre-wrap"><?= e($contract['special_terms']) ?></dd>
+      <?php endif; ?>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">입금 관리</div>
+  <div class="card pad">
+    <div class="section-head">
+      <div class="st"><h2>입금 관리</h2></div>
       <?php if (can('payment.manage')): ?>
         <button type="button" class="btn btn-sm btn-primary" id="btnAddPayment">+ 입금 등록</button>
       <?php endif; ?>
     </div>
-    <div class="card-body">
-      <?php if (!$payments): ?>
-        <div class="empty"><div class="empty-title">등록된 입금 내역이 없습니다.</div></div>
-      <?php else: ?>
-        <div class="table-wrap">
-          <table class="data">
-            <thead><tr><th>구분</th><th class="num">금액</th><th>예정일</th><th>입금일</th><th>상태</th><?php if (can('payment.manage')): ?><th>관리</th><?php endif; ?></tr></thead>
-            <tbody>
-              <?php foreach ($payments as $pm): ?>
-                <tr>
-                  <td><?= e($payTypeLabels[$pm['pay_type']] ?? $pm['pay_type']) ?></td>
-                  <td class="num"><?= money($pm['amount']) ?></td>
-                  <td><?= fmtdate($pm['due_date']) ?></td>
-                  <td><?= fmtdate($pm['paid_date']) ?></td>
-                  <td><span class="badge <?= $pm['status'] === 'paid' ? 'badge-ok' : 'badge-warn' ?>"><?= e($payRowLabels[$pm['status']] ?? $pm['status']) ?></span></td>
-                  <?php if (can('payment.manage')): ?>
-                    <td>
-                      <button type="button" class="btn btn-sm btn-outline btn-edit-pm"
-                        data-id="<?= (int) $pm['id'] ?>" data-type="<?= e($pm['pay_type']) ?>" data-amount="<?= (int) $pm['amount'] ?>"
-                        data-due="<?= e($pm['due_date'] ?? '') ?>" data-paid="<?= e($pm['paid_date'] ?? '') ?>"
-                        data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">수정</button>
-                      <button type="button" class="btn btn-sm btn-ghost btn-del-pm" data-id="<?= (int) $pm['id'] ?>">삭제</button>
-                    </td>
-                  <?php endif; ?>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      <?php endif; ?>
-    </div>
+    <?php if (!$payments): ?>
+      <div class="empty"><div class="empty-title">등록된 입금 내역이 없습니다.</div></div>
+    <?php else: ?>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>구분</th><th class="num">금액</th><th>예정일</th><th>입금일</th><th>상태</th><?php if (can('payment.manage')): ?><th>관리</th><?php endif; ?></tr></thead>
+          <tbody>
+            <?php foreach ($payments as $pm): ?>
+              <tr>
+                <td><?= e($payTypeLabels[$pm['pay_type']] ?? $pm['pay_type']) ?></td>
+                <td class="num mono"><?= money($pm['amount']) ?></td>
+                <td class="nowrap"><?= fmtdate($pm['due_date']) ?></td>
+                <td class="nowrap"><?= fmtdate($pm['paid_date']) ?></td>
+                <td><span class="badge <?= $pm['status'] === 'paid' ? 'badge-ok' : 'badge-warn' ?>"><?= e($payRowLabels[$pm['status']] ?? $pm['status']) ?></span></td>
+                <?php if (can('payment.manage')): ?>
+                  <td>
+                    <button type="button" class="btn btn-sm btn-outline btn-edit-pm"
+                      data-id="<?= (int) $pm['id'] ?>" data-type="<?= e($pm['pay_type']) ?>" data-amount="<?= (int) $pm['amount'] ?>"
+                      data-due="<?= e($pm['due_date'] ?? '') ?>" data-paid="<?= e($pm['paid_date'] ?? '') ?>"
+                      data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">수정</button>
+                    <button type="button" class="btn btn-sm btn-ghost btn-del-pm" data-id="<?= (int) $pm['id'] ?>">삭제</button>
+                  </td>
+                <?php endif; ?>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
   </div>
 </div>
 

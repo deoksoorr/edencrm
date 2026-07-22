@@ -38,6 +38,7 @@ return [
     'pipeline.index'    => ['PipelineController', 'index',  'perm' => 'pipeline.view'],
     'pipeline.board'    => ['PipelineController', 'board',  'perm' => 'pipeline.view'],
     'pipeline.move'     => ['PipelineController', 'move',   'perm' => 'pipeline.manage', 'method' => 'POST'],
+    'pipeline.patch'    => ['PipelineController', 'patch',  'perm' => 'pipeline.manage', 'method' => 'POST'],
     'pipeline.form'     => ['PipelineController', 'form',   'perm' => 'pipeline.manage'],
     'pipeline.save'     => ['PipelineController', 'save',   'perm' => 'pipeline.manage', 'method' => 'POST'],
     'pipeline.show'     => ['PipelineController', 'show',   'perm' => 'pipeline.view'],
@@ -73,6 +74,7 @@ return [
     'process.board'     => ['ProcessController', 'board'],
     'process.move'      => ['ProcessController', 'move',   'perm' => 'process.move', 'method' => 'POST'],
     'process.history'   => ['ProcessController', 'history'],
+    'process.history.update' => ['ProcessController', 'historyUpdate', 'perm' => 'process.move', 'method' => 'POST'],
 
     // ── 일정/배정 (T7) ──
     'schedule.index'    => ['ScheduleController', 'index'],
@@ -94,6 +96,10 @@ return [
     // ── 비용 (T8) ──
     'costs.save'        => ['CostsController', 'save',   'perm' => 'cost.manage', 'method' => 'POST'],
     'costs.delete'      => ['CostsController', 'delete', 'perm' => 'cost.manage', 'method' => 'POST'],
+
+    // ── 목표(KPI) 관리 ──
+    'targets.index'     => ['TargetsController', 'index',    'perm' => 'settings.manage'],
+    'targets.save'      => ['TargetsController', 'save',     'perm' => 'settings.manage', 'method' => 'POST'],
 
     // ── 성과/리포트 (T8) ──
     'performance.index' => ['PerformanceController', 'index'],
