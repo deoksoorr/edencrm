@@ -20,18 +20,22 @@ check(){ # $1=desc $2=expected $3=actual
   else FAIL=$((FAIL+1)); RESULTS+="  ❌ $1 기대=$2 실제=$3\n"; fi
 }
 
-echo "== 로그인 =="
-JADMIN=$(mktemp); login admin 'password123!' "$JADMIN"
-JSTAFF=$(mktemp); login staff1 'password123!' "$JSTAFF"
-JSALES=$(mktemp); login sales1 'password123!' "$JSALES"
-JACCT=$(mktemp);  login acct1 'password123!' "$JACCT"
+echo "== 로그인 (현 시드 계정) =="
+JADMIN=$(mktemp); login admin 'password123!' "$JADMIN"  # 김대표(super_admin)
+JSTAFF=$(mktemp); login maeng 'password123!' "$JSTAFF"  # 맹기현(staff, id 3)
 
 echo "== admin GET 라우트(200 기대) =="
 for r in home customers.index pipeline.index quotes.index contracts.index projects.index \
-         process.board schedule.index worklogs.index performance.index reports.index \
-         notifications.index staff.index settings.index settings.stages audit.index; do
+         process.board schedule.index performance.index reports.index \
+         notifications.index staff.index settings.index settings.stages audit.index targets.index; do
   check "admin GET $r" 200 "$(code -b "$JADMIN" "$B?r=$r")"
 done
+
+echo "== 작업일지 기능 기본 OFF(404 '비활성화된 기능' 기대) =="
+check "admin worklogs.index (OFF)" 404 "$(code -b "$JADMIN" "$B?r=worklogs.index")"
+check "staff worklogs.index (OFF)" 404 "$(code -b "$JSTAFF" "$B?r=worklogs.index")"
+# worklogs.save 는 POST 전용 → GET 은 메서드검사(405)가 feature 게이트보다 먼저. POST 경로 OFF 차단은 worklog_flag_smoke.sh 가 검증.
+check "worklogs.save GET→405(POST전용)" 405 "$(code -b "$JADMIN" "$B?r=worklogs.save")"
 
 echo "== staff 권한 차단(403 기대) =="
 check "staff staff.index"    403 "$(code -b "$JSTAFF" "$B?r=staff.index")"
@@ -42,8 +46,11 @@ check "staff reports.export"  403 "$(code -b "$JSTAFF" "$B?r=reports.export")"
 
 echo "== staff 허용(200 기대) =="
 check "staff home"          200 "$(code -b "$JSTAFF" "$B?r=home")"
-check "staff worklogs.index" 200 "$(code -b "$JSTAFF" "$B?r=worklogs.index")"
 check "staff schedule.index" 200 "$(code -b "$JSTAFF" "$B?r=schedule.index")"
+
+echo "== 성과 IDOR 차단 (§15: 본인만 열람) =="
+check "staff perf.user 본인(200)" 200 "$(code -b "$JSTAFF" "$B?r=performance.user&id=3")"
+check "staff perf.user 타인(403)" 403 "$(code -b "$JSTAFF" "$B?r=performance.user&id=2")"
 
 echo "== 비로그인 차단(302 기대) =="
 JNONE=$(mktemp)
@@ -61,5 +68,5 @@ echo
 echo -e "$RESULTS"
 echo "=================================="
 echo "PASS=$PASS  FAIL=$FAIL"
-rm -f "$JADMIN" "$JSTAFF" "$JSALES" "$JACCT" "$JNONE" /tmp/eden_lp.html
+rm -f "$JADMIN" "$JSTAFF" "$JNONE" /tmp/eden_lp.html
 [ "$FAIL" -eq 0 ]
