@@ -32,13 +32,13 @@ $proRemain = max(0.0, (float) $s['target_profit'] - (float) $s['month_profit']);
       <div class="kpi-value" style="font-size:19px"><?= (int) $s['total_projects'] ?> / <?= (int) $s['completed_projects'] ?> / <?= (int) $s['in_progress_projects'] ?> / <span class="<?= $s['delayed_projects'] > 0 ? 'text-danger' : '' ?>"><?= (int) $s['delayed_projects'] ?></span></div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">총매출 (완료 기준)</div>
+      <div class="kpi-label">확정매출 (완료·공급가 기준)</div>
       <div class="kpi-value"><?= moneyCell($s['total_revenue']) ?></div>
     </div>
     <div class="kpi <?= $s['total_profit'] < 0 ? 'accent-danger' : '' ?>">
-      <div class="kpi-label">총순이익 (완료 기준)</div>
+      <div class="kpi-label">확정순이익 (완료·공급가 기준)</div>
       <div class="kpi-value"><?= moneyCell($s['total_profit']) ?></div>
-      <div class="kpi-note">평균순이익률 <?= pct($s['avg_profit_rate']) ?></div>
+      <div class="kpi-note">순이익률(가중) <?= pct($s['avg_profit_rate']) ?></div>
     </div>
     <div class="kpi">
       <div class="kpi-label">계약전환율</div>
@@ -84,31 +84,35 @@ $proRemain = max(0.0, (float) $s['target_profit'] - (float) $s['month_profit']);
     <div class="section-head">
       <div class="st"><h2>수익 기여도</h2><span class="section-desc">회사 전체 순이익 대비 <b class="<?= $companyContributionRate !== null && $companyContributionRate < 0 ? 'text-danger' : '' ?>"><?= pct($companyContributionRate) ?></b></span></div>
     </div>
-    <p class="muted mb-14" style="font-size:12px">기여액 = 프로젝트 실제순이익 × 본인 배정 비율(contribution_pct). 동일 프로젝트의 순이익은 담당자별 배정 비율만큼만 나눠 반영되어 중복 합산되지 않습니다.</p>
+    <p class="muted mb-14" style="font-size:12px">기여액 = 프로젝트 순이익(공급가−실제원가) × 본인 배정 비율(contribution_pct). 완료된 프로젝트만 <b>확정</b>으로 합산되고, 진행 중 프로젝트는 <b>예상</b>으로만 표시되어 본인 총 기여액(확정)에 포함되지 않습니다. 동일 프로젝트의 순이익은 담당자별 배정 비율만큼만 나눠 반영되어 중복 합산되지 않습니다.</p>
     <?php if (!$contributionRows): ?>
       <div class="empty"><div class="empty-title">배정된 프로젝트가 없습니다.</div></div>
     <?php else: ?>
     <div class="table-wrap border-0">
       <table class="data">
         <thead>
-          <tr><th>프로젝트</th><th>역할</th><th>상태</th><th class="num">배정비율</th><th class="num">프로젝트 실제순이익</th><th class="num">내 기여액</th></tr>
+          <tr><th>프로젝트</th><th>역할</th><th>상태</th><th class="num">배정비율</th><th class="num">프로젝트 순이익</th><th class="num">확정 기여액</th><th class="num">예상 기여액</th></tr>
         </thead>
         <tbody>
           <?php foreach ($contributionRows as $c): ?>
             <tr>
               <td><a href="<?= e(url('projects.show', ['id' => $c['project_id']])) ?>"><?= e($c['project_no']) ?> <?= e($c['name']) ?></a></td>
               <td><?= e($c['assign_role']) ?></td>
-              <td><span class="badge badge-info"><?= e($projStatusLabels[$c['status']] ?? $c['status']) ?></span></td>
+              <td>
+                <span class="badge badge-info"><?= e($projStatusLabels[$c['status']] ?? $c['status']) ?></span>
+                <span class="badge <?= $c['confirmed'] ? 'badge-ok' : 'badge-muted' ?>"><?= $c['confirmed'] ? '확정' : '예상' ?></span>
+              </td>
               <td class="num mono"><?= pct($c['contribution_pct']) ?></td>
-              <td class="num mono<?= $c['project_profit'] < 0 ? ' text-danger' : '' ?>"><?= money($c['project_profit']) ?></td>
-              <td class="num mono<?= $c['my_contribution'] < 0 ? ' text-danger' : '' ?>"><?= money($c['my_contribution']) ?></td>
+              <td class="num mono<?= $c['project_profit'] < 0 ? ' text-danger' : '' ?>"><?= moneyCell($c['project_profit']) ?></td>
+              <td class="num mono<?= $c['my_contribution'] < 0 ? ' text-danger' : '' ?>"><?= $c['confirmed'] ? moneyCell($c['my_contribution']) : '<span class="mono muted">-</span>' ?></td>
+              <td class="num mono<?= $c['my_expected'] < 0 ? ' text-danger' : '' ?>"><?= !$c['confirmed'] ? moneyCell($c['my_expected']) : '<span class="mono muted">-</span>' ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="5" class="num"><b>본인 총 기여액</b></td>
-            <td class="num mono<?= $totalContribution < 0 ? ' text-danger' : '' ?>"><b><?= money($totalContribution) ?></b></td>
+            <td colspan="5" class="num"><b>본인 총 기여액(확정)</b></td>
+            <td class="num mono<?= $totalContribution < 0 ? ' text-danger' : '' ?>" colspan="2"><b><?= moneyCell($totalContribution) ?></b></td>
           </tr>
         </tfoot>
       </table>

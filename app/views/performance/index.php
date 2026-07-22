@@ -20,7 +20,7 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
         <tr>
           <th>이름</th><th>부서</th><th>역할</th>
           <th class="num">담당</th><th class="num">완료</th><th class="num">진행</th><th class="num">지연</th>
-          <th class="num">총계약</th><th class="num">총매출</th><th class="num">총원가</th><th class="num">총순이익</th><th class="num">평균순이익률</th>
+          <th class="num">총계약</th><th class="num">확정매출</th><th class="num">확정원가</th><th class="num">확정순이익</th><th class="num">순이익률(가중)</th>
           <th class="num">목표매출</th><th class="num">매출달성률</th>
           <th class="num">목표순이익</th><th class="num">순이익달성률</th>
           <th class="num">계약전환율</th><th class="num">일지작성률</th>
@@ -37,14 +37,14 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
             <td class="num mono"><?= number_format($r['completed_projects']) ?></td>
             <td class="num mono"><?= number_format($r['in_progress_projects']) ?></td>
             <td class="num mono<?= $r['delayed_projects'] > 0 ? ' text-danger' : '' ?>"><?= number_format($r['delayed_projects']) ?></td>
-            <td class="num mono"><?= money($r['total_contract_amount']) ?></td>
-            <td class="num mono"><?= money($r['total_revenue']) ?></td>
-            <td class="num mono"><?= money($r['total_cost']) ?></td>
-            <td class="num mono<?= $r['total_profit'] < 0 ? ' text-danger' : '' ?>"><?= money($r['total_profit']) ?></td>
+            <td class="num mono"><?= moneyCell($r['total_contract_amount']) ?></td>
+            <td class="num mono"><?= moneyCell($r['total_revenue']) ?></td>
+            <td class="num mono"><?= moneyCell($r['total_cost']) ?></td>
+            <td class="num mono<?= $r['total_profit'] < 0 ? ' text-danger' : '' ?>"><?= moneyCell($r['total_profit']) ?></td>
             <td class="num mono"><?= pct($r['avg_profit_rate']) ?></td>
-            <td class="num mono"><?= money($r['target_revenue']) ?></td>
+            <td class="num mono"><?= moneyCell($r['target_revenue']) ?></td>
             <td class="num mono"><?= pct($r['revenue_achieve_rate']) ?></td>
-            <td class="num mono"><?= money($r['target_profit']) ?></td>
+            <td class="num mono"><?= moneyCell($r['target_profit']) ?></td>
             <td class="num mono"><?= pct($r['profit_achieve_rate']) ?></td>
             <td class="num mono"><?= pct($r['conversion_rate']) ?></td>
             <td class="num mono"><?= pct($r['worklog_rate']) ?></td>

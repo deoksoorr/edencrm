@@ -6,12 +6,14 @@
  *
  * 집계 기준(가정 — 스펙 14-1/14-2 를 스키마에 맞춰 구체화):
  * - 담당 프로젝트 = sales_user_id/site_manager_id/project_assignments 중 하나로 연결된 프로젝트(전체 기간 누적).
- * - 총계약금액 = 담당 프로젝트 전체(status 무관) contract_amount 합. 총매출/총원가/총순이익/평균순이익률은 완료(completed) 프로젝트 기준(실현 매출).
- * - 목표매출/목표순이익 및 달성률은 targets 테이블(연/월)과 해당 월 계약(contract_date 기준) 실적으로 계산.
+ * - 총계약금액 = 담당 프로젝트 전체(status 무관) contract_amount 합.
+ * - 총매출/총순이익/평균순이익률은 대시보드 staffPerformance 와 동일하게 AccountingService 를 통해
+ *   완료(completed)·공급가(supply_amount) 기준, contribution_pct 로 귀속시켜 산출한다(가중 평균 = Σ순이익÷Σ매출).
+ * - 목표매출/목표순이익 및 달성률은 targets 테이블(연/월)과 해당 월 수주(contract_date 기준, sales_user 담당) 공급가로 계산.
  * - 계약전환율 = 본인이 영업담당인 리드 중 WON 비율.
  * - 작업일지작성률 = 이번달 영업일(일요일·공휴일 제외) 대비 작업일지 작성일수 비율.
- * - 수익 기여액은 프로젝트별 실제순이익(진행 중 포함, 현재까지의 actual_cost 기준) × 본인 contribution_pct 로 계산해
- *   동일 프로젝트 순이익을 여러 담당자가 중복 합산하지 않는다.
+ * - 수익 기여액(user() 의 프로젝트별 기여 표)은 완료 프로젝트만 확정(confirmed)으로 합산하고,
+ *   진행 중 프로젝트는 참고용 예상(my_expected)으로만 표시해 대시보드 확정 합계(employeeConfirmedContribution)와 총계가 일치한다.
  */
 class PerformanceController
 {
@@ -88,7 +90,7 @@ class PerformanceController
 
         $assignments = Db::all(
             "SELECT pa.project_id, pa.role AS assign_role, pa.contribution_pct,
-                    p.project_no, p.name, p.status, p.contract_amount, p.actual_cost
+                    p.project_no, p.name, p.status, p.contract_amount, p.actual_cost, p.supply_amount, p.actual_end_date
              FROM project_assignments pa
              JOIN projects p ON p.id = pa.project_id
              WHERE pa.user_id = :u AND p.deleted_at IS NULL
@@ -99,9 +101,11 @@ class PerformanceController
         $contributionRows = [];
         $totalContribution = 0.0;
         foreach ($assignments as $a) {
-            $projectProfit  = Calc::profit((float) $a['contract_amount'], (float) $a['actual_cost']);
-            $myContribution = Calc::contribution($projectProfit, (float) $a['contribution_pct']);
-            $totalContribution += $myContribution;
+            $profit      = AccountingService::projectActualProfit($a);
+            $confirmed   = ($a['status'] === 'completed');
+            $myConfirmed = $confirmed ? AccountingService::contribution($profit, (float) $a['contribution_pct']) : 0;
+            $myExpected  = $confirmed ? 0 : AccountingService::contribution($profit, (float) $a['contribution_pct']);
+            $totalContribution += $myConfirmed;
             $contributionRows[] = [
                 'project_id'       => (int) $a['project_id'],
                 'project_no'       => $a['project_no'],
@@ -109,15 +113,15 @@ class PerformanceController
                 'status'           => $a['status'],
                 'assign_role'      => $a['assign_role'],
                 'contribution_pct' => (float) $a['contribution_pct'],
-                'project_profit'   => $projectProfit,
-                'my_contribution'  => $myContribution,
+                'confirmed'        => $confirmed,
+                'project_profit'   => $profit,
+                'my_contribution'  => $myConfirmed,
+                'my_expected'      => $myExpected,
             ];
         }
 
-        // 회사 전체 순이익(전체 프로젝트 누적, contributionRows 와 동일 기준 — 상태 무관 actual_cost 반영분)
-        $companyProfit = (float) Db::val(
-            "SELECT COALESCE(SUM(contract_amount - actual_cost), 0) FROM projects WHERE deleted_at IS NULL"
-        );
+        // 회사 전체 확정순이익(완료·공급가 기준) — 대시보드 staffPerformance 와 동일 서비스.
+        $companyProfit = AccountingService::companyConfirmedProfit();
         $companyContributionRate = Calc::rate($totalContribution, $companyProfit);
 
         View::render('performance/user', [
@@ -134,11 +138,15 @@ class PerformanceController
         ]);
     }
 
-    /** 직원 1인의 14-1 지표 집계. */
+    /**
+     * 직원 1인의 14-1 지표 집계.
+     * 총매출/총순이익/평균순이익률은 대시보드 staffPerformance 와 동일하게
+     * AccountingService(공급가·완료·귀속) 기준으로 산출한다(가중 순이익률).
+     */
     private function computePerformance(int $uid, int $year, int $month): array
     {
         $projects = Db::all(
-            "SELECT DISTINCT p.id, p.status, p.contract_amount, p.actual_cost, p.end_date, p.actual_end_date, p.contract_date
+            "SELECT DISTINCT p.id, p.status, p.contract_amount, p.end_date, p.actual_end_date
              FROM projects p
              LEFT JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = :pa_u
              WHERE p.deleted_at IS NULL AND (p.sales_user_id = :sales_u OR p.site_manager_id = :site_u OR pa.user_id = :assign_u)",
@@ -149,24 +157,13 @@ class PerformanceController
         $completed = 0;
         $inProgress = 0;
         $delayed = 0;
-        $completedRevenue = 0.0;
-        $completedCost = 0.0;
         $totalContractAmount = 0.0;
-        $profitRates = [];
-        $monthRevenue = 0.0;
-        $monthCost = 0.0;
         $today = date('Y-m-d');
 
         foreach ($projects as $p) {
             $totalContractAmount += (float) $p['contract_amount'];
             if ($p['status'] === 'completed') {
                 $completed++;
-                $completedRevenue += (float) $p['contract_amount'];
-                $completedCost += (float) $p['actual_cost'];
-                $rate = Calc::profitRate((float) $p['contract_amount'], (float) $p['actual_cost']);
-                if ($rate !== null) {
-                    $profitRates[] = $rate;
-                }
             } elseif ($p['status'] === 'in_progress') {
                 $inProgress++;
             }
@@ -174,17 +171,13 @@ class PerformanceController
                 && $p['end_date'] !== null && $p['end_date'] < $today) {
                 $delayed++;
             }
-            if ($p['contract_date'] !== null
-                && (int) substr((string) $p['contract_date'], 0, 4) === $year
-                && (int) substr((string) $p['contract_date'], 5, 2) === $month) {
-                $monthRevenue += (float) $p['contract_amount'];
-                $monthCost += (float) $p['actual_cost'];
-            }
         }
 
-        $totalProfit = Calc::profit($completedRevenue, $completedCost);
-        $avgProfitRate = $profitRates ? round(array_sum($profitRates) / count($profitRates), 2) : null;
-        $monthProfit = Calc::profit($monthRevenue, $monthCost);
+        // 귀속 확정매출/확정순이익(완료·공급가 기준) — 대시보드 staffPerformance 와 동일 서비스.
+        $attrRev = AccountingService::employeeConfirmedRevenue($uid);
+        $contrib = AccountingService::employeeConfirmedContribution($uid);
+        $totalCost = $attrRev - $contrib;
+        $avgProfitRate = Calc::rate($contrib, $attrRev);
 
         $target = Db::one(
             'SELECT target_revenue, target_profit FROM targets WHERE user_id=:u AND year=:y AND month=:m',
@@ -192,6 +185,17 @@ class PerformanceController
         );
         $targetRevenue = $target ? (float) $target['target_revenue'] : 0.0;
         $targetProfit  = $target ? (float) $target['target_profit'] : 0.0;
+
+        // 이번달 담당(sales_user) 수주 공급가.
+        $monthRevenue = (int) Db::val(
+            "SELECT COALESCE(SUM(supply_amount),0) FROM projects
+             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id=:u
+               AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m",
+            [':u' => $uid, ':y' => $year, ':m' => $month]
+        );
+        $mFrom = sprintf('%04d-%02d-01', $year, $month);
+        $mTo   = date('Y-m-t', strtotime($mFrom));
+        $monthProfit = AccountingService::employeeConfirmedContribution($uid, $mFrom, $mTo);
 
         $leadTotal = (int) Db::val('SELECT COUNT(*) FROM leads WHERE sales_user_id=:u AND deleted_at IS NULL', [':u' => $uid]);
         $leadWon = (int) Db::val(
@@ -206,16 +210,16 @@ class PerformanceController
             'in_progress_projects' => $inProgress,
             'delayed_projects'     => $delayed,
             'total_contract_amount'=> $totalContractAmount,
-            'total_revenue'        => $completedRevenue,
-            'total_cost'           => $completedCost,
-            'total_profit'         => $totalProfit,
+            'total_revenue'        => $attrRev,
+            'total_cost'           => $totalCost,
+            'total_profit'         => $contrib,
             'avg_profit_rate'      => $avgProfitRate,
             'target_revenue'       => $targetRevenue,
             'month_revenue'        => $monthRevenue,
-            'revenue_achieve_rate' => Calc::achievement($monthRevenue, $targetRevenue),
+            'revenue_achieve_rate' => AccountingService::achievement((float) $monthRevenue, $targetRevenue),
             'target_profit'        => $targetProfit,
             'month_profit'         => $monthProfit,
-            'profit_achieve_rate'  => Calc::achievement($monthProfit, $targetProfit),
+            'profit_achieve_rate'  => AccountingService::achievement((float) $monthProfit, $targetProfit),
             'conversion_rate'      => Calc::rate($leadWon, $leadTotal),
             'worklog_rate'         => $this->worklogRate($uid, $year, $month),
         ];
