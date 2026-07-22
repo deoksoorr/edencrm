@@ -38,4 +38,29 @@ class AccountingService
     {
         return (int) ($row['contract_amount'] ?? 0) - self::supplyOf($row);
     }
+
+    /** 확정 순이익 = 공급가액 − 실제원가 (음수=적자 그대로). */
+    public static function projectActualProfit(array $p): int
+    {
+        return (int) Calc::profit(self::supplyOf($p), (float) ($p['actual_cost'] ?? 0));
+    }
+
+    /** 확정 순이익률(%) = (공급가액 − 실제원가) ÷ 공급가액 × 100. 공급 ≤0 → null. */
+    public static function projectActualProfitRate(array $p): ?float
+    {
+        return Calc::profitRate((float) self::supplyOf($p), (float) ($p['actual_cost'] ?? 0));
+    }
+
+    /** 직원 기여액 = 프로젝트 순이익 × 기여도(%). */
+    public static function contribution(int $profit, float $pct): int
+    {
+        return (int) Calc::contribution((float) $profit, $pct);
+    }
+
+    /** 달성률(%) = 실제 ÷ 목표 × 100. 목표 null/≤0 → null('목표 미설정'). */
+    public static function achievement(?float $actual, ?float $target): ?float
+    {
+        if ($target === null || $target <= 0 || $actual === null) { return null; }
+        return Calc::achievement($actual, $target);
+    }
 }
