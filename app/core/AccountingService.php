@@ -105,13 +105,15 @@ class AccountingService
             WHERE deleted_at IS NULL AND status IN ('preparing','in_progress')");
     }
 
-    /** 수주액 = 취소 아닌 프로젝트 공급가액 합(계약일 기준). */
-    public static function contractedAmount(?string $from = null, ?string $to = null): int
+    /** 수주액 = 취소 아닌 프로젝트 공급가액 합(계약일 기준). $uid 지정 시 담당 영업(sales_user_id) 범위로 축소. */
+    public static function contractedAmount(?string $from = null, ?string $to = null, ?int $uid = null): int
     {
         $p = [];
         $r = self::range('contract_date', $from, $to, $p);
+        $u = '';
+        if ($uid !== null) { $u = ' AND sales_user_id = :u'; $p[':u'] = $uid; }
         return (int) Db::val("SELECT COALESCE(SUM(supply_amount),0) FROM projects
-            WHERE deleted_at IS NULL AND status<>'cancelled' AND contract_date IS NOT NULL $r", $p);
+            WHERE deleted_at IS NULL AND status<>'cancelled' AND contract_date IS NOT NULL $r $u", $p);
     }
 
     /** 미수금(현금 축) = Σ 계약별 max(0, 계약총액 − 입금). terminated·삭제 제외. */

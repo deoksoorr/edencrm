@@ -30,8 +30,6 @@ $pick = ['contact_overdue', 'contact_none', 'contract_stale'];
       <div class="card pad">
         <div class="section-head"><div class="st"><h2>이번 달 목표</h2></div></div>
         <?php View::partial('partials/goal', ['g' => $g, 'title' => '매출 목표 달성률']); ?>
-        <div class="chart-box mt-16" data-chart="trend"><canvas id="chartTrend"></canvas></div>
-        <div class="section-desc tc mt-8">최근 6개월 내 계약 매출(막대)·순이익(선)</div>
       </div>
 
       <div class="card pad">

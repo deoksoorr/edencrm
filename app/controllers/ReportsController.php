@@ -250,7 +250,7 @@ class ReportsController
         return $rows;
     }
 
-    /** 직원별 성과 요약(기간 내 계약일 기준 매출(공급가)/원가/순이익). */
+    /** 직원별 성과 요약(기간 내 계약일 기준 매출(공급가)/원가/순이익, 취소 제외). */
     private function staffPerformance(string $from, string $to, string $projWhere, array $projParams): array
     {
         $rows = Db::all(
@@ -258,7 +258,8 @@ class ReportsController
                     COUNT(DISTINCT p.id) AS cnt,
                     COALESCE(SUM(p.supply_amount),0) AS revenue, COALESCE(SUM(p.actual_cost),0) AS cost
              FROM users u
-             JOIN projects p ON p.sales_user_id = u.id AND $projWhere AND p.deleted_at IS NULL AND p.contract_date BETWEEN :f AND :t
+             JOIN projects p ON p.sales_user_id = u.id AND $projWhere AND p.deleted_at IS NULL
+               AND p.status<>'cancelled' AND p.contract_date BETWEEN :f AND :t
              WHERE u.deleted_at IS NULL
              GROUP BY u.id, u.name
              ORDER BY revenue DESC",

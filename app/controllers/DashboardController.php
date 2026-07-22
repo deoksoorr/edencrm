@@ -170,13 +170,9 @@ class DashboardController
     {
         // 내 담당 리드 기준(가중) — AccountingService 단일 출처
         $pipeline = (float) AccountingService::weightedPipeline($uid);
-        // 내 담당 이번달 수주(공급가 기준, 취소 제외)
-        $rev = (int) Db::val(
-            "SELECT COALESCE(SUM(supply_amount),0) FROM projects
-             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id=:u
-               AND YEAR(contract_date)=YEAR(CURDATE()) AND MONTH(contract_date)=MONTH(CURDATE())",
-            [':u' => $uid]
-        );
+        // 내 담당 이번달 수주(공급가 기준, 취소 제외) — AccountingService 단일 출처
+        $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
+        $rev = AccountingService::contractedAmount($mFrom, $mTo, $uid);
         $goal = $this->goal($uid);
         $today = date('Y-m-d');
         $contactToday = (int) Db::val(
@@ -348,9 +344,11 @@ class DashboardController
     {
         $y = (int) date('Y'); $m = (int) date('n');
         if ($uid !== null) {
-            // 개인 목표: 실제(actual) = 담당 이번달 수주 공급가 합(공급가 기준 통일)
+            // 개인 목표: 실제(actual) = 담당 이번달 수주 공급가 합(공급가 기준 통일, 취소 제외) — AccountingService 단일 출처
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM targets WHERE user_id=:u AND year=:y AND month=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
-            $actual = (float) Db::val("SELECT COALESCE(SUM(supply_amount),0) FROM projects WHERE deleted_at IS NULL AND sales_user_id=:u AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
+            $mFrom = sprintf('%04d-%02d-01', $y, $m);
+            $mTo   = date('Y-m-t', strtotime($mFrom));
+            $actual = (float) AccountingService::contractedAmount($mFrom, $mTo, $uid);
         } else {
             // 회사 월 목표(목표 관리 화면의 company_targets 기준), actual = 확정매출
             $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM company_targets WHERE period_type='month' AND year=:y AND period_no=:m", [':y' => $y, ':m' => $m]);
@@ -441,14 +439,6 @@ class DashboardController
              ) t GROUP BY uid"
         );
         $cntBy = array_column($cntRows, 'c', 'uid');
-        // 이번달 담당 수주액(공급가, 영업담당 기준)
-        $ctrRows = Db::all(
-            "SELECT sales_user_id uid, COALESCE(SUM(supply_amount),0) c FROM projects
-             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id IS NOT NULL
-               AND contract_date BETWEEN :f AND :t GROUP BY sales_user_id",
-            [':f' => $mFrom, ':t' => $mTo]
-        );
-        $ctrBy = array_column($ctrRows, 'c', 'uid');
         // 일정 준수율(완료 프로젝트 중 기한 내 완료 비율)
         $onRows = Db::all(
             "SELECT pa.user_id uid,
@@ -475,7 +465,7 @@ class DashboardController
                 'name'         => $usr['name'],
                 'role'         => $roleLabel[$usr['role_key']] ?? '직원',
                 'assigned'     => (int) ($cntBy[$id] ?? 0),
-                'contracted'   => (float) ($ctrBy[$id] ?? 0),
+                'contracted'   => (float) AccountingService::contractedAmount($mFrom, $mTo, $id),
                 'contrib'      => $contrib,
                 'attr_rev'     => $attrRev,
                 'margin'       => Calc::rate($contrib, $attrRev),        // 귀속순이익÷귀속매출×100
@@ -493,26 +483,25 @@ class DashboardController
     private function bossCharts(): array
     {
         return [
-            'monthly_trend' => $this->monthlyTrend(null),
+            'monthly_trend' => $this->monthlyTrend(),
             'stage_groups'  => $this->stageGroupDist(null),
         ];
     }
 
+    /** 영업(sales) 대시보드 차트 — 회사 재무(월별추이)는 제외(권한: 영업은 회사 재무를 볼 수 없음). */
     private function salesCharts(int $uid): array
     {
         return [
-            'monthly_trend' => $this->monthlyTrend($uid),
-            'stage_groups'  => $this->stageGroupDist($uid),
+            'stage_groups' => $this->stageGroupDist($uid),
         ];
     }
 
     /**
-     * 최근 6개월 확정매출·확정순이익(완료·준공월(actual_end_date)·공급가 기준 — AccountingService,
+     * 최근 6개월 회사 전체 확정매출·확정순이익(완료·준공월(actual_end_date)·공급가 기준 — AccountingService,
      * 리포트 월별추이(ReportsController::monthlyTrend)와 동일 산식으로 대시보드/리포트 차트를 일치시킨다).
-     * $uid 는 salesCharts 호출 시그니처 호환용으로만 남기며 사용하지 않는다 — 담당자별 확정(준공) 매출을
-     * 산출하는 서비스 메서드가 없어, 영업 대시보드도 회사 전체 확정 추이를 표시해 리포트와 정확히 맞춘다.
+     * boss 전용(회사 재무) — sales 는 권한상 표시하지 않는다.
      */
-    private function monthlyTrend(?int $uid): array
+    private function monthlyTrend(): array
     {
         $months = [];
         for ($i = 5; $i >= 0; $i--) { $months[] = date('Y-m', strtotime("first day of -$i month")); }

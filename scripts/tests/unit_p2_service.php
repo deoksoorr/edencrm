@@ -25,5 +25,8 @@ $mf = date('Y-m-01'); $mt = date('Y-m-t');
 t_int('이번달 확정매출(seed)=0', 0, AccountingService::confirmedRevenue($mf, $mt));
 t_int('이번달 수주액(seed)=34,000,000', 34000000, AccountingService::contractedAmount($mf, $mt));
 t_int('미수금(seed)=26,223,575', 26223575, AccountingService::receivable());
+// contractedAmount uid 스코프: seed 프로젝트 sales_user_id=1(계약1 이번달) → 직원1=34,000,000, 직원2=0
+t_int('이번달 수주액(직원1)=34,000,000', 34000000, AccountingService::contractedAmount($mf, $mt, 1));
+t_int('이번달 수주액(직원2)=0', 0, AccountingService::contractedAmount($mf, $mt, 2));
 
 exit(t_summary());

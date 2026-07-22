@@ -186,15 +186,10 @@ class PerformanceController
         $targetRevenue = $target ? (float) $target['target_revenue'] : 0.0;
         $targetProfit  = $target ? (float) $target['target_profit'] : 0.0;
 
-        // 이번달 담당(sales_user) 수주 공급가.
-        $monthRevenue = (int) Db::val(
-            "SELECT COALESCE(SUM(supply_amount),0) FROM projects
-             WHERE deleted_at IS NULL AND status<>'cancelled' AND sales_user_id=:u
-               AND YEAR(contract_date)=:y AND MONTH(contract_date)=:m",
-            [':u' => $uid, ':y' => $year, ':m' => $month]
-        );
+        // 이번달 담당(sales_user) 수주 공급가 — AccountingService 단일 출처(취소 제외).
         $mFrom = sprintf('%04d-%02d-01', $year, $month);
         $mTo   = date('Y-m-t', strtotime($mFrom));
+        $monthRevenue = AccountingService::contractedAmount($mFrom, $mTo, $uid);
         $monthProfit = AccountingService::employeeConfirmedContribution($uid, $mFrom, $mTo);
 
         $leadTotal = (int) Db::val('SELECT COUNT(*) FROM leads WHERE sales_user_id=:u AND deleted_at IS NULL', [':u' => $uid]);
