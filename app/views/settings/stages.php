@@ -1,261 +1,155 @@
 <?php
-/** @var array $pipelineStages @var array $processStages
- *  @var string $processType @var array $processTypeTabs @var array $processGroups @var array $groupMeta @var int $processNextSort
- *  R10: 도장/인테리어/공통이 독립 관리 페이지(상호 이동 버튼) + 페이지 내부 6그룹(대기/착공준비/시공/마무리/하자보수/종결) 필터 탭.
- *  공통 3단계는 유형 페이지에 잠금 표시로만 노출(편집은 공통 페이지 전용 — 유형 간 교차 영향 차단).
+/** @var array $processStages @var string $processType @var array $processTypeTabs
+ *  @var array $processGroups @var array $groupMeta
+ *  R12: 영업 단계 편집 제거(자동 산정이라 무의미) · 공정 단계만 관리 · 순서는 드래그 자동 저장 · 가독성 개편.
  */
 $isCommonTab = $processType === 'common';
 ?>
-<?php /* 화면 전용 <style> 은 app.css 의 r3-formscss 블록(.stage-*)으로 승격됨 */ ?>
+<style>
+/* R12 공정 단계 관리 — 표형 그리드(가독성) */
+.stage-grid { display:flex; flex-direction:column; gap:6px; }
+.stage-thead, .stage-r2 { display:grid; align-items:center; gap:10px;
+  grid-template-columns:26px minmax(160px,1fr) 130px 96px 60px 150px; }
+.stage-thead.common, .stage-r2.common { grid-template-columns:26px minmax(160px,1fr) 120px 220px; }
+.stage-thead { padding:6px 12px; font-size:12px; color:var(--muted,#6b7280); font-weight:600;
+  border-bottom:1px solid var(--line,#e5e7eb); }
+.stage-r2 { padding:8px 12px; border:1px solid var(--line,#e5e7eb); border-radius:8px; background:#fff; }
+.stage-r2.inactive { opacity:.55; background:#fafafa; }
+.stage-r2.locked { background:#f8fafc; border-style:dashed; }
+.stage-r2.dragging { box-shadow:0 4px 14px rgba(0,0,0,.12); }
+.stage-r2 form.s2-inline { display:contents; }
+.s2-drag { cursor:grab; color:#9ca3af; text-align:center; user-select:none; font-size:15px; }
+.s2-drag.static { cursor:default; }
+.s2-name input { width:100%; }
+.s2-act { display:flex; gap:6px; justify-content:flex-end; align-items:center; }
+.stage-color-chip { display:inline-block; width:16px; height:16px; border-radius:4px; border:1px solid rgba(0,0,0,.12); vertical-align:middle; }
+.stage-newrow { border-style:dashed; background:#fbfdff; }
+/* 사용 토글 */
+.sw { position:relative; display:inline-block; width:40px; height:22px; }
+.sw input { display:none; }
+.sw .sw-t { position:absolute; inset:0; background:#cbd5e1; border-radius:22px; transition:.15s; }
+.sw .sw-t::before { content:""; position:absolute; width:16px; height:16px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+.sw input:checked + .sw-t { background:#16a34a; }
+.sw input:checked + .sw-t::before { transform:translateX(18px); }
+.stage-sort-locked .s2-drag { cursor:not-allowed; opacity:.4; }
+</style>
+
 <div class="page">
   <div class="page-head">
     <div>
       <h1 class="page-title"><?= e($title) ?></h1>
       <div class="page-sub"><?= $isCommonTab
-          ? '대기중·하자보수·전체완료 — 양쪽 보드가 공유하는 단계입니다. 이름 변경은 도장·인테리어 모두에 적용됩니다.'
-          : '이 페이지의 수정은 ' . e($processTypeTabs[$processType]) . ' 공정에만 적용됩니다. (인접 유형에 영향 없음)' ?></div>
+          ? '대기중·하자보수·전체완료 — 도장·인테리어 보드가 함께 쓰는 공통 단계입니다. 이름 변경은 양쪽에 적용됩니다.'
+          : '드래그(⠿)로 순서를 바꾸면 자동 저장됩니다. 이름을 바꿔도 공정 ID는 유지되어 이력이 보존됩니다.' ?></div>
     </div>
     <div class="page-actions">
       <?php foreach ($processTypeTabs as $tk => $tl): if ($tk === $processType) { continue; } ?>
-        <a href="<?= e(url('settings.stages', ['type' => $tk])) ?>#process" class="btn btn-outline"><?= e($tl) ?><?= $tk === 'common' ? ' 단계' : ' 공정' ?> 관리</a>
+        <a href="<?= e(url('settings.stages', ['type' => $tk])) ?>" class="btn btn-outline"><?= e($tl) ?><?= $tk === 'common' ? ' 단계' : ' 공정' ?></a>
       <?php endforeach; ?>
       <a href="<?= e(url('settings.index')) ?>" class="btn btn-ghost">시스템 설정으로</a>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><div class="card-title">영업 단계 (pipeline_stages)</div></div>
-    <div class="card-body">
-      <?php foreach ($pipelineStages as $i => $s):
-        $prev = $pipelineStages[$i - 1] ?? null;
-        $next = $pipelineStages[$i + 1] ?? null;
-      ?>
-        <div class="stage-row">
-          <div class="stage-order">
-            <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-              <?= csrf_field() ?>
-              <input type="hidden" name="kind" value="pipeline">
-              <input type="hidden" name="sort_only" value="1">
-              <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-              <input type="hidden" name="sort_order" value="<?= $prev ? (int) $prev['sort_order'] : (int) $s['sort_order'] ?>">
-              <?php if ($prev): ?>
-                <input type="hidden" name="swap_id" value="<?= (int) $prev['id'] ?>">
-                <input type="hidden" name="swap_sort_order" value="<?= (int) $s['sort_order'] ?>">
-              <?php endif; ?>
-              <button type="submit" class="btn btn-ghost btn-sm" <?= $prev ? '' : 'disabled' ?>>▲</button>
-            </form>
-            <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-              <?= csrf_field() ?>
-              <input type="hidden" name="kind" value="pipeline">
-              <input type="hidden" name="sort_only" value="1">
-              <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-              <input type="hidden" name="sort_order" value="<?= $next ? (int) $next['sort_order'] : (int) $s['sort_order'] ?>">
-              <?php if ($next): ?>
-                <input type="hidden" name="swap_id" value="<?= (int) $next['id'] ?>">
-                <input type="hidden" name="swap_sort_order" value="<?= (int) $s['sort_order'] ?>">
-              <?php endif; ?>
-              <button type="submit" class="btn btn-ghost btn-sm" <?= $next ? '' : 'disabled' ?>>▼</button>
-            </form>
-          </div>
-          <span class="muted nowrap">#<?= (int) $s['sort_order'] ?></span>
-
-          <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-            <?= csrf_field() ?>
-            <input type="hidden" name="kind" value="pipeline">
-            <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-            <input type="hidden" name="sort_order" value="<?= (int) $s['sort_order'] ?>">
-            <input type="text" name="name" class="input stage-name-input" value="<?= e($s['name']) ?>">
-            <label class="check"><input type="checkbox" name="is_won" value="1" <?= $s['is_won'] ? 'checked' : '' ?>> 성공[WON]</label>
-            <label class="check"><input type="checkbox" name="is_lost" value="1" <?= $s['is_lost'] ? 'checked' : '' ?>> 실주[LOST]</label>
-            <input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>">
-            <button type="submit" class="btn btn-outline btn-sm">저장</button>
-          </form>
-
-          <form method="post" action="<?= e(url('settings.stage.delete')) ?>" onsubmit="return confirm('이 단계를 삭제하시겠습니까? 참조하는 영업기회가 있으면 삭제할 수 없습니다.');">
-            <?= csrf_field() ?>
-            <input type="hidden" name="kind" value="pipeline">
-            <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-            <button type="submit" class="btn btn-ghost-danger btn-sm">삭제</button>
-          </form>
-        </div>
-      <?php endforeach; ?>
-
-      <div class="stage-row stage-new">
-        <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-          <?= csrf_field() ?>
-          <input type="hidden" name="kind" value="pipeline">
-          <input type="text" name="name" class="input stage-name-input" placeholder="새 영업 단계 이름" required>
-          <input type="number" name="sort_order" class="input stage-sort-input" value="<?= count($pipelineStages) + 1 ?>" title="순서">
-          <label class="check"><input type="checkbox" name="is_won" value="1"> 성공[WON]</label>
-          <label class="check"><input type="checkbox" name="is_lost" value="1"> 실주[LOST]</label>
-          <input type="text" name="color" class="input stage-color-input" placeholder="#색상">
-          <button type="submit" class="btn btn-primary btn-sm">+ 추가</button>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <div class="card" id="process">
     <div class="card-head">
-      <div class="card-title">공정 단계 (process_stages)</div>
-      <?php if (!$isCommonTab): ?>
-        <button type="button" class="btn btn-outline btn-sm" id="procOrderSave" title="드래그로 바꾼 순서를 sort_order 1..N 으로 저장합니다">순서 저장</button>
-      <?php endif; ?>
+      <div class="card-title">공정 단계</div>
+      <span class="muted fs-12"><?= $isCommonTab
+        ? '공통 예약 단계 — 순서·유형·그룹·사용 여부는 변경할 수 없습니다(이름·색만).'
+        : '순서는 드래그(⠿)로 변경 → 자동 저장 · 그룹 탭에서는 조회만 가능' ?></span>
     </div>
     <div class="card-body">
       <?php if (!$isCommonTab): ?>
-      <?php /* R10: 6그룹 필터 탭 — 관리자 사용자단(보드) 단계 구분과 동일(대기/착공준비/시공/마무리/하자보수/종결) */ ?>
       <div class="stage-type-tabs" id="procGroupTabs">
-        <a class="stage-type-tab active" href="#process" data-group="all">전체</a>
+        <a class="stage-type-tab active" href="#" data-group="all">전체</a>
         <?php foreach ($groupMeta as $gk => $g): ?>
-          <a class="stage-type-tab" href="#process" data-group="<?= e($gk) ?>" style="border-bottom-color:<?= e($g['color']) ?>"><?= e($g['label']) ?><span class="tcnt" data-group-cnt="<?= e($gk) ?>"></span></a>
+          <a class="stage-type-tab" href="#" data-group="<?= e($gk) ?>" style="border-bottom-color:<?= e($g['color']) ?>"><?= e($g['label']) ?><span class="tcnt" data-group-cnt="<?= e($gk) ?>"></span></a>
         <?php endforeach; ?>
-        <span class="muted stage-type-hint">드래그(⠿) 순서 변경은 \'전체\' 탭에서만 가능합니다(전체 흐름 순서 유지). 단계 이름을 바꿔도 공정 ID(stage_key)는 유지됩니다.</span>
-      </div>
-      <?php else: ?>
-      <div class="stage-type-tabs">
-        <span class="muted stage-type-hint">공통 예약 단계(대기중·하자보수·전체완료)는 양쪽 보드에서 공유되며 삭제·비활성·순서 변경이 불가합니다.</span>
       </div>
       <?php endif; ?>
 
-      <div id="procStageList" data-type="<?= e($processType) ?>" data-sortable="<?= $isCommonTab ? '0' : '1' ?>">
-      <?php
-      // R10: ▲▼ 스왑은 같은 유형 행끼리만(공통 행이 목록에 섞여도 공통 sort 는 불변)
-      $typeRows = array_values(array_filter($processStages, static fn ($x) => ($x['process_type'] ?? '') !== 'common'));
-      $typeIndexById = [];
-      foreach ($typeRows as $ti => $tr) { $typeIndexById[(int) $tr['id']] = $ti; }
-      ?>
-      <?php foreach ($processStages as $i => $s):
+      <div class="stage-thead<?= $isCommonTab ? ' common' : '' ?>">
+        <span></span><span>단계명</span>
+        <?php if (!$isCommonTab): ?><span>그룹</span><?php endif; ?>
+        <span>색상</span>
+        <?php if (!$isCommonTab): ?><span class="ta-c">사용</span><?php endif; ?>
+        <span></span>
+      </div>
+
+      <div class="stage-grid" id="procStageList" data-type="<?= e($processType) ?>" data-sortable="<?= $isCommonTab ? '0' : '1' ?>">
+      <?php foreach ($processStages as $s):
         $rowCommon = ($s['process_type'] ?? '') === 'common';
-        $ti   = $rowCommon ? null : ($typeIndexById[(int) $s['id']] ?? null);
-        $prev = $ti !== null ? ($typeRows[$ti - 1] ?? null) : null;
-        $next = $ti !== null ? ($typeRows[$ti + 1] ?? null) : null;
-        // R10: 유형 페이지의 공통 행은 표시 전용(잠금) — 편집은 공통 페이지에서만
-        $rowLocked = $rowCommon && !$isCommonTab;
+        $rowLocked = $rowCommon && !$isCommonTab;   // 유형 페이지의 공통 행은 표시 전용
+        $inactive  = !$rowCommon && empty($s['is_active']);
       ?>
-        <div class="stage-row<?= $rowLocked ? ' stage-row-locked' : '' ?>" data-id="<?= (int) $s['id'] ?>" data-group="<?= e($s['stage_group'] ?? '') ?>" data-common="<?= $rowCommon ? '1' : '0' ?>">
-          <?php if (!$rowCommon): ?>
-            <span class="stage-drag" title="드래그로 순서 변경">⠿</span>
-            <div class="stage-order">
-              <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-                <?= csrf_field() ?>
-                <input type="hidden" name="kind" value="process">
-                <input type="hidden" name="rtype" value="<?= e($processType) ?>">
-                <input type="hidden" name="sort_only" value="1">
-                <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-                <input type="hidden" name="sort_order" value="<?= $prev ? (int) $prev['sort_order'] : (int) $s['sort_order'] ?>">
-                <?php if ($prev): ?>
-                  <input type="hidden" name="swap_id" value="<?= (int) $prev['id'] ?>">
-                  <input type="hidden" name="swap_sort_order" value="<?= (int) $s['sort_order'] ?>">
-                <?php endif; ?>
-                <button type="submit" class="btn btn-ghost btn-sm" <?= $prev ? '' : 'disabled' ?>>▲</button>
-              </form>
-              <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-                <?= csrf_field() ?>
-                <input type="hidden" name="kind" value="process">
-                <input type="hidden" name="rtype" value="<?= e($processType) ?>">
-                <input type="hidden" name="sort_only" value="1">
-                <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-                <input type="hidden" name="sort_order" value="<?= $next ? (int) $next['sort_order'] : (int) $s['sort_order'] ?>">
-                <?php if ($next): ?>
-                  <input type="hidden" name="swap_id" value="<?= (int) $next['id'] ?>">
-                  <input type="hidden" name="swap_sort_order" value="<?= (int) $s['sort_order'] ?>">
-                <?php endif; ?>
-                <button type="submit" class="btn btn-ghost btn-sm" <?= $next ? '' : 'disabled' ?>>▼</button>
-              </form>
-            </div>
-          <?php else: ?>
-            <span class="stage-badge-common" title="공통 예약 단계 — 순서(0/18/19)·유형·그룹·사용 여부 변경 불가">공통</span>
-          <?php endif; ?>
-          <span class="muted nowrap">#<?= (int) $s['sort_order'] ?></span>
-
+        <div class="stage-r2<?= $isCommonTab ? ' common' : '' ?><?= $rowLocked ? ' locked' : '' ?><?= $inactive ? ' inactive' : '' ?>"
+             data-id="<?= (int) $s['id'] ?>" data-group="<?= e($s['stage_group'] ?? '') ?>" data-common="<?= $rowCommon ? '1' : '0' ?>">
           <?php if ($rowLocked): ?>
-            <span class="stage-name-input"><b><?= e($s['name']) ?></b></span>
-            <span class="muted nowrap stage-fixed-meta">공통 · <?= e($groupMeta[$s['stage_group'] ?? '']['label'] ?? '-') ?> · 양 유형 공유</span>
-            <a href="<?= e(url('settings.stages', ['type' => 'common'])) ?>#process" class="btn btn-ghost btn-sm">공통 단계 관리에서 편집</a>
-          <?php else: ?>
-          <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-            <?= csrf_field() ?>
-            <input type="hidden" name="kind" value="process">
-            <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-            <input type="hidden" name="sort_order" value="<?= (int) $s['sort_order'] ?>">
-            <input type="text" name="name" class="input stage-name-input" value="<?= e($s['name']) ?>">
-            <?php if (!$rowCommon): ?>
-              <select name="process_type" class="select stage-type-select" title="공사 유형">
-                <option value="painting" <?= $s['process_type'] === 'painting' ? 'selected' : '' ?>>도장</option>
-                <option value="interior" <?= $s['process_type'] === 'interior' ? 'selected' : '' ?>>인테리어</option>
-              </select>
-              <select name="stage_group" class="select stage-group-select" title="공정 그룹(보드 섹션)">
-                <?php foreach ($processGroups as $gk => $gl): ?>
-                  <option value="<?= e($gk) ?>" <?= ($s['stage_group'] ?? '') === $gk ? 'selected' : '' ?>><?= e($gl) ?></option>
-                <?php endforeach; ?>
-              </select>
-              <label class="check" title="해제하면 보드·이동 대상에서 제외됩니다(이력·데이터는 보존)"><input type="checkbox" name="is_active" value="1" <?= !empty($s['is_active']) ? 'checked' : '' ?>> 사용</label>
-            <?php else: ?>
-              <span class="muted nowrap stage-fixed-meta" title="공통 예약 — 유형·그룹 변경 불가">공통 · <?= e(['waiting' => '대기중', 'defect' => '하자보수', 'complete' => '종결'][$s['stage_group'] ?? ''] ?? ($s['stage_group'] ?? '-')) ?></span>
-            <?php endif; ?>
-            <input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>">
-            <input type="text" name="description" class="input stage-desc-input" placeholder="설명(선택)" maxlength="255" value="<?= e($s['description'] ?? '') ?>">
-            <button type="submit" class="btn btn-outline btn-sm">저장</button>
-          </form>
-
-          <?php if (!$rowCommon): ?>
-            <form method="post" action="<?= e(url('settings.stage.delete')) ?>" onsubmit="return confirm('이 단계를 삭제하시겠습니까? 참조하는 프로젝트·공정 이력이 있으면 삭제할 수 없습니다(비활성화 사용).');">
-              <?= csrf_field() ?>
-              <input type="hidden" name="kind" value="process">
-              <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-              <button type="submit" class="btn btn-ghost-danger btn-sm">삭제</button>
+            <span class="s2-drag static">·</span>
+            <span class="s2-name"><b><?= e($s['name']) ?></b> <span class="badge badge-muted fs-11">공통</span></span>
+            <span><?= e($groupMeta[$s['stage_group'] ?? '']['label'] ?? '-') ?></span>
+            <span><span class="stage-color-chip" style="background:<?= e($s['color'] ?: '#cbd5e1') ?>"></span></span>
+            <span class="ta-c muted">-</span>
+            <span class="s2-act"><a href="<?= e(url('settings.stages', ['type' => 'common'])) ?>" class="btn btn-ghost btn-sm">공통에서 편집</a></span>
+          <?php elseif ($rowCommon): /* 공통 페이지: 이름·색만 편집 */ ?>
+            <form class="s2-inline" method="post" action="<?= e(url('settings.stage.save')) ?>">
+              <?= csrf_field() ?><input type="hidden" name="kind" value="process"><input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
+              <span class="s2-drag static">·</span>
+              <span class="s2-name"><input type="text" name="name" class="input" value="<?= e($s['name']) ?>"></span>
+              <span><span class="badge badge-muted fs-11"><?= e(['waiting' => '대기중', 'defect' => '하자보수', 'complete' => '종결'][$s['stage_group'] ?? ''] ?? '-') ?></span></span>
+              <span class="s2-act"><input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>" style="width:90px"> <button class="btn btn-outline btn-sm">저장</button></span>
             </form>
-          <?php else: ?>
-            <span class="muted nowrap stage-fixed-meta">삭제·비활성 불가</span>
+          <?php else: /* 유형 전용 편집 행 */ ?>
+            <form class="s2-inline" method="post" action="<?= e(url('settings.stage.save')) ?>">
+              <?= csrf_field() ?><input type="hidden" name="kind" value="process"><input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
+              <span class="s2-drag" title="드래그로 순서 변경">⠿</span>
+              <span class="s2-name"><input type="text" name="name" class="input" value="<?= e($s['name']) ?>"></span>
+              <span><select name="stage_group" class="select">
+                <?php foreach ($processGroups as $gk => $gl): ?><option value="<?= e($gk) ?>" <?= ($s['stage_group'] ?? '') === $gk ? 'selected' : '' ?>><?= e($gl) ?></option><?php endforeach; ?>
+              </select></span>
+              <span><input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>"></span>
+              <span class="ta-c"><label class="sw" title="해제하면 보드에서 숨겨집니다(이력 보존)"><input type="checkbox" name="is_active" value="1" <?= !empty($s['is_active']) ? 'checked' : '' ?>><span class="sw-t"></span></label></span>
+              <span class="s2-act">
+                <button class="btn btn-outline btn-sm">저장</button>
+                <button type="submit" class="btn btn-ghost-danger btn-sm" formaction="<?= e(url('settings.stage.delete')) ?>"
+                        onclick="return confirm('이 단계를 삭제하시겠습니까? 참조하는 프로젝트·이력이 있으면 삭제할 수 없습니다(비활성화 권장).');">삭제</button>
+              </span>
+            </form>
           <?php endif; ?>
-          <?php endif; // rowLocked — 유형 페이지의 공통 행은 표시 전용 ?>
         </div>
       <?php endforeach; ?>
       </div>
 
       <?php if (!$isCommonTab): ?>
-      <div class="stage-row stage-new">
-        <form method="post" action="<?= e(url('settings.stage.save')) ?>">
-          <?= csrf_field() ?>
-          <input type="hidden" name="kind" value="process">
-          <input type="hidden" name="process_type" value="<?= e($processType) ?>">
-          <input type="text" name="name" class="input stage-name-input" placeholder="새 <?= e($processTypeTabs[$processType]) ?> 공정 단계 이름" required>
-          <input type="number" name="sort_order" class="input stage-sort-input" value="<?= (int) $processNextSort ?>" title="순서(해당 유형 내 최대+1 기본)">
-          <select name="stage_group" class="select stage-group-select" title="공정 그룹(보드 섹션)">
-            <?php foreach ($processGroups as $gk => $gl): ?>
-              <option value="<?= e($gk) ?>" <?= $gk === 'build' ? 'selected' : '' ?>><?= e($gl) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <label class="check"><input type="checkbox" name="is_active" value="1" checked> 사용</label>
-          <input type="text" name="color" class="input stage-color-input" placeholder="#색상">
-          <input type="text" name="description" class="input stage-desc-input" placeholder="설명(선택)" maxlength="255">
-          <button type="submit" class="btn btn-primary btn-sm">+ 추가</button>
-        </form>
-      </div>
+      <form class="stage-r2 stage-newrow mt-8" method="post" action="<?= e(url('settings.stage.save')) ?>">
+        <?= csrf_field() ?><input type="hidden" name="kind" value="process"><input type="hidden" name="process_type" value="<?= e($processType) ?>">
+        <span class="s2-drag static">＋</span>
+        <span class="s2-name"><input type="text" name="name" class="input" placeholder="새 <?= e($processTypeTabs[$processType]) ?> 공정 단계 이름 (맨 끝에 추가됩니다)" required></span>
+        <span><select name="stage_group" class="select">
+          <?php foreach ($processGroups as $gk => $gl): ?><option value="<?= e($gk) ?>" <?= $gk === 'build' ? 'selected' : '' ?>><?= e($gl) ?></option><?php endforeach; ?>
+        </select></span>
+        <span><input type="text" name="color" class="input stage-color-input" placeholder="#색상"></span>
+        <span></span>
+        <span class="s2-act"><button class="btn btn-primary btn-sm">+ 추가</button></span>
+      </form>
       <?php endif; ?>
     </div>
   </div>
 </div>
 
 <script>
-// R8-A: 공정 단계 드래그앤드롭 정렬 — Sortable(vendor)로 행 순서 변경 후 '순서 저장' 시
-// settings.stage.save 에 sort_bulk=1 로 일괄 POST(같은 process_type 만 허용, 서버 재검증).
-// app.js(body 끝)의 api()/toast 사용을 위해 DOMContentLoaded 로 지연(contracts/form.php 와 동일 패턴).
+// R12: 공정 단계 드래그 정렬 — 드롭 시 자동 저장(sort_bulk, 같은 유형만). 그룹 탭에서는 조회만(정렬 잠금).
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
   var list = document.getElementById('procStageList');
   if (!list) return;
-  var saveBtn = document.getElementById('procOrderSave');
-  var dirty = false;
 
-  // R10: 6그룹 필터 탭 — 행 data-group 기준 표시 필터. 그룹 필터 중에는 순서 변경 잠금(전체 흐름 순서 보호).
+  // 그룹 필터 탭 — 행 data-group 기준 표시. 그룹 필터 중에는 드래그 잠금(전체 흐름 순서 보호).
   var tabs = document.getElementById('procGroupTabs');
+  var rows = Array.prototype.slice.call(list.querySelectorAll('.stage-r2[data-id]'));
   if (tabs) {
-    var rows = Array.prototype.slice.call(list.querySelectorAll('.stage-row[data-id]'));
     tabs.querySelectorAll('[data-group-cnt]').forEach(function (el) {
       var g = el.dataset.groupCnt;
-      el.textContent = rows.filter(function (r) { return r.dataset.group === g; }).length;
+      el.textContent = ' ' + rows.filter(function (r) { return r.dataset.group === g; }).length;
     });
     tabs.addEventListener('click', function (e) {
       var a = e.target.closest('.stage-type-tab'); if (!a) return;
@@ -263,9 +157,9 @@ document.addEventListener('DOMContentLoaded', function () {
       var g = a.dataset.group;
       tabs.querySelectorAll('.stage-type-tab').forEach(function (t) { t.classList.toggle('active', t === a); });
       rows.forEach(function (r) { r.style.display = (g === 'all' || r.dataset.group === g) ? '' : 'none'; });
-      var lockSort = g !== 'all';
-      list.classList.toggle('stage-sort-locked', lockSort);
-      if (saveBtn) { saveBtn.disabled = lockSort; saveBtn.title = lockSort ? "순서 변경은 '전체' 탭에서만 가능합니다" : ''; }
+      var lock = g !== 'all';
+      list.classList.toggle('stage-sort-locked', lock);
+      if (sortable) sortable.option('disabled', lock);
     });
   }
 
@@ -273,38 +167,25 @@ document.addEventListener('DOMContentLoaded', function () {
   if (list.dataset.sortable === '1' && window.Sortable) {
     sortable = new Sortable(list, {
       animation: 150,
-      handle: '.stage-drag',
+      handle: '.s2-drag',
+      draggable: '.stage-r2[data-common="0"]', // 공통 행은 드래그 대상 제외(유형 페이지엔 없음)
       ghostClass: 'sortable-ghost',
-      onEnd: function () {
-        dirty = true;
-        if (saveBtn) saveBtn.classList.add('btn-primary');
-      },
-    });
-  }
-  // 그룹 필터 중에는 드래그 자체를 비활성(부분 정렬 방지)
-  if (tabs && sortable) {
-    tabs.addEventListener('click', function () {
-      sortable.option('disabled', list.classList.contains('stage-sort-locked'));
+      dragClass: 'dragging',
+      onEnd: saveOrder,
     });
   }
 
-  if (saveBtn) saveBtn.addEventListener('click', function () {
-    // R10: 공통 행(고정 sort)은 재부여 대상에서 제외 — 유형 행 순서만 전송
-    var ids = Array.prototype.slice.call(list.querySelectorAll('.stage-row[data-id]'))
+  function saveOrder() {
+    var ids = Array.prototype.slice.call(list.querySelectorAll('.stage-r2[data-id]'))
       .filter(function (r) { return r.dataset.common !== '1'; })
       .map(function (r) { return parseInt(r.dataset.id, 10); });
-    if (!ids.length) { toast('저장할 단계가 없습니다.', 'warn'); return; }
-    if (!dirty && !confirm('순서를 바꾸지 않았습니다. 현재 표시 순서대로 1..N 재부여할까요?')) return;
-    saveBtn.disabled = true;
+    if (!ids.length) return;
     api('settings.stage.save', { sort_bulk: 1, kind: 'process', order_json: JSON.stringify(ids) })
-      .then(function (d) {
-        toast('공정 순서가 저장되었습니다 (' + ((d && d.count) || ids.length) + '개 단계).', 'success');
-        location.reload();
-      })
+      .then(function (d) { toast('순서가 저장되었습니다 (' + ((d && d.count) || ids.length) + '개 단계).', 'success'); })
       .catch(function (err) {
         toast((err && err.message) || '순서 저장에 실패했습니다.', 'error');
-        saveBtn.disabled = false;
+        setTimeout(function () { location.reload(); }, 800); // 실패 시 서버 순서로 복원
       });
-  });
+  }
 });
 </script>

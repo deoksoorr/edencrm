@@ -72,7 +72,8 @@ class SettingsController
             $processType = 'painting';
         }
 
-        $pipelineStages = Db::all("SELECT * FROM pipeline_stages ORDER BY sort_order");
+        // R12: 영업 단계(pipeline_stages) 편집 UI 제거 — 파이프라인은 자동 산정(조회 전용)이라 수동 편집이 무의미.
+        //      데이터·라우트는 보존(대시보드·리포트가 사용). 이 화면은 공정 단계 관리 전용.
         // 유형 페이지 = 유형 전용 + 공통(잠금 표시), 공통 페이지 = 공통 3행만
         $processStages = $processType === 'common'
             ? Db::all("SELECT * FROM process_stages WHERE process_type = 'common' ORDER BY sort_order, id")
@@ -81,22 +82,15 @@ class SettingsController
                  ORDER BY sort_order, id",
                 [':t' => $processType]
             );
-        // 신규 추가 기본 sort_order = 해당 유형 내 최대+1 (공통 페이지는 신규 추가 없음)
-        $processNextSort = 1 + (int) Db::val(
-            "SELECT COALESCE(MAX(sort_order), 0) FROM process_stages WHERE process_type = :t",
-            [':t' => $processType]
-        );
 
         View::render('settings/stages', [
             'title'           => $processType === 'common'
                 ? '공통 단계 관리' : self::PROCESS_TYPE_TABS[$processType] . ' 공정 단계 관리',
-            'pipelineStages'  => $pipelineStages,
             'processStages'   => $processStages,
             'processType'     => $processType,
             'processTypeTabs' => self::PROCESS_TYPE_TABS,
             'processGroups'   => self::PROCESS_GROUP_OPTIONS,
             'groupMeta'       => Stages::processGroupMeta(),
-            'processNextSort' => $processNextSort,
             'scripts'         => ['vendor/Sortable.min.js'],
         ]);
     }
@@ -173,27 +167,34 @@ class SettingsController
         if ($name === '') {
             Response::redirect('settings.stages', [], '단계 이름을 입력하세요.', 'error');
         }
-        $sortOrder = (int) Util::postInt('sort_order', 0);
 
         $before = $id ? Db::one("SELECT * FROM `$table` WHERE id = :id", [':id' => $id]) : null;
         if ($id && !$before) {
             Response::redirect('settings.stages', [], '대상 단계를 찾을 수 없습니다.', 'error');
         }
 
-        $data = ['name' => $name, 'sort_order' => $sortOrder];
+        // R12: 순서(sort_order)는 드래그 정렬(sort_bulk)만 담당 — 이름·그룹·색 저장 시 순서를 건드리지 않는다.
+        //      신규 단계만 맨 끝(최대+1)에 자동 배치한다.
+        $data = ['name' => $name];
         $redirectParams = [];   // 공정 저장 후 원래 유형 탭으로 복귀
         $extraMsg = '';         // 비활성 전환 시 안내 문구
         if ($kind === 'pipeline') {
             $data['is_won']  = Util::postInt('is_won', 0) ? 1 : 0;
             $data['is_lost'] = Util::postInt('is_lost', 0) ? 1 : 0;
             $data['color']   = Util::nullIfEmpty(Util::postStr('color', ''));
+            if (!$id) {
+                $data['sort_order'] = 1 + (int) Db::val("SELECT COALESCE(MAX(sort_order), 0) FROM pipeline_stages");
+            }
         } else {
             // R11: 공정 이동 잠금(requires_confirm) 기능 제거 — 저장하지 않음(컬럼은 이력 보존용으로만 잔존)
             $data['color']            = Util::nullIfEmpty(Util::postStr('color', ''));
-            $data['description']      = Util::nullIfEmpty(mb_substr(Util::postStr('description', ''), 0, 255));
+            // 설명은 전송된 경우에만 갱신(설정 화면에서 미노출 — 기존 값 보존)
+            if (array_key_exists('description', $_POST)) {
+                $data['description'] = Util::nullIfEmpty(mb_substr(Util::postStr('description', ''), 0, 255));
+            }
 
             // R8-A: 공통 예약 3행(waiting/warranty_repair/full_complete)은 유형·그룹·사용 여부 변경 불가
-            //       (이름·색·설명·확인 여부만 수정). 그 외 행은 painting/interior + prep/build/finish 화이트리스트.
+            //       (이름·색만 수정). 그 외 행은 painting/interior + 6그룹.
             $isCommon = $before !== null && ($before['process_type'] ?? '') === 'common';
             if ($isCommon) {
                 $redirectParams = ['type' => 'common'];
@@ -215,8 +216,8 @@ class SettingsController
                 $data['stage_group'] = $sgroup;
                 $data['is_active']   = Util::postInt('is_active', 0) ? 1 : 0;
 
-                // 신규 추가 시 sort_order 미지정(0 이하)이면 해당 유형 내 최대+1
-                if (!$id && $sortOrder <= 0) {
+                // 신규 추가는 해당 유형 맨 끝(최대+1)에 자동 배치
+                if (!$id) {
                     $data['sort_order'] = 1 + (int) Db::val(
                         "SELECT COALESCE(MAX(sort_order), 0) FROM process_stages WHERE process_type = :t",
                         [':t' => $ptype]
