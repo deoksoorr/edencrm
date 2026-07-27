@@ -4,17 +4,13 @@
  */
 class ProjectsController
 {
-    private const STATUSES = [
-        'preparing'   => '준비중',
-        'in_progress' => '진행중',
-        'paused'      => '중단',
-        'completed'   => '완료',
-    ];
-    private const IMPORTANCE = ['low' => '낮음', 'mid' => '보통', 'high' => '높음'];
+    /** 프로젝트 상태 8종 — StatusService 단일 출처(브리프 §2 확정 enum). */
+    private const STATUSES = StatusService::PROJECT_LABELS;
+    /** 폼(등록/수정)에서 직접 선택 가능한 상태 — 취소/파기/완료/정산 등은 상태 전환 플로우(projects.transition)로만. */
+    private const FORM_STATUSES = ['preparing', 'in_progress', 'paused'];
     private const CONTRIB_MODE = ['main' => '주담당 100%', 'ratio' => '비율 직접입력', 'role' => '역할별 기본배분'];
 
     public static function statuses(): array { return self::STATUSES; }
-    public static function importanceOptions(): array { return self::IMPORTANCE; }
     public static function contribModes(): array { return self::CONTRIB_MODE; }
 
     /** 목록: 검색·필터·정렬·페이지네이션 + 데이터 범위 강제. */
@@ -64,7 +60,8 @@ class ProjectsController
             $params[':wt'] = $workType;
         }
         if ($delayed) {
-            $where[] = "p.end_date IS NOT NULL AND p.end_date < CURDATE() AND p.status <> 'completed'";
+            // 대시보드 delayedCond 와 동일 기준(완료·정산·취소·파기 제외, 준공 처리 전) — KPI 건수와 목록 일치
+            $where[] = "p.end_date IS NOT NULL AND p.end_date < CURDATE() AND p.actual_end_date IS NULL AND p.status NOT IN ('completed','settled','cancelled','terminated')";
         }
         $whereSql = implode(' AND ', $where);
 
@@ -125,7 +122,7 @@ class ProjectsController
         $project = Db::one(
             "SELECT p.*, c.name AS customer_name, c.phone AS customer_phone, c.site_address AS customer_site_address,
                     sales.name AS sales_user_name, sm.name AS site_manager_name,
-                    ps.name AS process_stage_name
+                    ps.name AS process_stage_name, ps.color AS process_stage_color, ps.sort_order AS process_stage_sort
              FROM projects p
              JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users sales ON sales.id = p.sales_user_id
@@ -142,10 +139,9 @@ class ProjectsController
 
         $contractAmount = (float) $project['contract_amount'];
         $estimatedCost  = (float) $project['estimated_cost'];
-        $actualCost     = (float) Db::val(
-            "SELECT COALESCE(SUM(amount),0) FROM costs WHERE project_id = :id AND type = 'actual'",
-            [':id' => $id]
-        );
+        // 원가 총액 = 확정(confirmed) actual 비용 합 — projects.actual_cost 캐시와 동일 기준(CostService 단일 출처)
+        $costSub    = CostService::subtotals($id);
+        $actualCost = (float) $costSub['total'];
 
         $supply = AccountingService::supplyOf($project);
         $calc = [
@@ -177,13 +173,116 @@ class ProjectsController
             [':id' => $id]
         );
 
-        $costs = Db::all(
-            "SELECT * FROM costs WHERE project_id = :id ORDER BY spent_date DESC, created_at DESC",
+        // 상태 이력(취소·파기·중단·복구·완료·정산 전환 기록)
+        $statusHistory = Db::all(
+            "SELECT h.*, u.name AS changed_by_name FROM project_status_history h
+             LEFT JOIN users u ON u.id = h.changed_by
+             WHERE h.project_id = :id ORDER BY h.changed_at DESC, h.id DESC",
             [':id' => $id]
         );
 
+        // ── R3 탭 재설계 데이터 ──
+        // 연결 계약(개요 탭 — contracts.show 왕복 링크 + 견적 전환 정보, contractflow 요청사항)
+        $contract = null;
+        if (!empty($project['contract_id'])) {
+            $contract = Db::one(
+                "SELECT c.id, c.contract_no, c.status, c.contract_amount, c.supply_amount, c.contract_date,
+                        c.quote_id, c.quote_version_id, c.original_quote_amount, c.adjust_amount, c.converted_at,
+                        q.quote_no, cb.name AS converted_by_name
+                 FROM contracts c
+                 LEFT JOIN quotes q ON q.id = c.quote_id
+                 LEFT JOIN users cb ON cb.id = c.converted_by
+                 WHERE c.id = :cid AND c.deleted_at IS NULL",
+                [':cid' => (int) $project['contract_id']]
+            );
+        }
+        // 다음 일정(개요 탭)
+        $nextSchedule = Db::one(
+            "SELECT id, title, start_datetime, end_datetime FROM schedules
+             WHERE project_id = :id AND start_datetime >= NOW()
+             ORDER BY start_datetime ASC LIMIT 1",
+            [':id' => $id]
+        );
+        // 공정 탭: 단계 목록(진행 현황 + 공정 이동 select). 이동 자체는 process.move(ProcessService 경유) 재사용.
+        // R8-A: 프로젝트 공사 유형(미지정→painting) + 공통의 활성 단계만 — move() 서버 검증과 동일 집합.
+        $projConstructionType = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $processStages = Db::all(
+            "SELECT id, stage_key, name, sort_order, color FROM process_stages
+             WHERE (process_type = :t OR process_type = 'common') AND is_active = 1
+             ORDER BY sort_order, id",
+            [':t' => $projConstructionType]
+        );
+        // 공정 탭: 하자보수 목록(R4 T3 — warranty_repairs, 사진은 project_files entity_type='warranty_repair')
+        $warrantyRepairs = Db::all(
+            "SELECT w.*, ru.name AS requested_by_name, au.name AS assignee_name
+             FROM warranty_repairs w
+             LEFT JOIN users ru ON ru.id = w.requested_by
+             LEFT JOIN users au ON au.id = w.assignee_id
+             WHERE w.project_id = :id
+             ORDER BY FIELD(w.status,'open','in_progress','done'), w.requested_at DESC, w.id DESC",
+            [':id' => $id]
+        );
+        $warrantyPhotos = [];
+        if ($warrantyRepairs) {
+            $in = implode(',', array_fill(0, count($warrantyRepairs), '?'));
+            $rows = Db::all(
+                "SELECT id, entity_id, original_name FROM project_files
+                 WHERE entity_type = 'warranty_repair' AND entity_id IN ($in) ORDER BY id",
+                array_map(static fn($w) => (int) $w['id'], $warrantyRepairs)
+            );
+            foreach ($rows as $r) {
+                $warrantyPhotos[(int) $r['entity_id']][] = $r;
+            }
+        }
+        // 이력 탭: 감사 로그 발췌(audit.view 권한자만, 최근 20건 — 전체는 감사 로그 화면)
+        $auditRows = Rbac::can('audit.view') ? Db::all(
+            "SELECT a.id, a.action, a.created_at, u.name AS user_name
+             FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+             WHERE a.entity = 'project' AND a.entity_id = :id
+             ORDER BY a.created_at DESC, a.id DESC LIMIT 20",
+            [':id' => $id]
+        ) : null;
+
+        // ── 원가 관리 목록: 비용 유형·작업자·기간 필터 + 서버 사이드 페이지네이션 ──
+        $costFilters = CostService::listFilters();
+        [$costWhere, $costParams] = CostService::filterWhere($id, $costFilters);
+        $costTotalRows = (int) Db::val("SELECT COUNT(*) FROM costs c WHERE $costWhere", $costParams);
+        $costPg = Util::paginate($costTotalRows, max(1, (int) Util::int('cost_page', 1)), 20);
+        $costs = Db::all(
+            "SELECT c.*, u.name AS worker_user_name FROM costs c
+             LEFT JOIN users u ON u.id = c.worker_id
+             WHERE $costWhere
+             ORDER BY c.spent_date DESC, c.id DESC
+             LIMIT {$costPg['per']} OFFSET {$costPg['offset']}",
+            $costParams
+        );
+        // 작업자 필터 옵션(이 프로젝트 비용에 등장한 작업자: 직원=id, 외부=이름)
+        $costWorkers = Db::all(
+            "SELECT DISTINCT COALESCE(CAST(c.worker_id AS CHAR), c.worker_name) AS wkey,
+                    COALESCE(u.name, c.worker_name) AS wname
+             FROM costs c LEFT JOIN users u ON u.id = c.worker_id
+             WHERE c.project_id = :id AND (c.worker_id IS NOT NULL OR c.worker_name IS NOT NULL)
+             ORDER BY wname",
+            [':id' => $id]
+        );
+        // 인건비 입력 폼 + 일정 인라인 폼(참여 직원, 개인색 dot)의 직원 선택 목록 (R4 T8: color 추가)
+        $staffOptions = Db::all(
+            "SELECT id, name, position, color FROM users WHERE deleted_at IS NULL AND status='active' ORDER BY name"
+        );
+
+        // 직원·일정 탭 초기 렌더용(R4 T8) — 슬롯(schedule_time_slots)·참여자명 포함.
+        // 이후 갱신은 schedule.data(project_id 필터) AJAX 가 동일 테이블에서 다시 로드한다(캘린더와 동일 원천).
         $schedules = Db::all(
-            "SELECT * FROM schedules WHERE project_id = :id ORDER BY start_datetime DESC LIMIT 20",
+            "SELECT s.id, s.title, s.event_date, COALESCE(s.end_date, s.event_date) AS end_date, s.slot, s.type, s.status, s.memo,
+                    GROUP_CONCAT(DISTINCT st.slot ORDER BY FIELD(st.slot,'morning','afternoon','night')) AS slot_keys,
+                    GROUP_CONCAT(DISTINCT u.name ORDER BY u.name SEPARATOR ', ') AS participant_names
+             FROM schedules s
+             LEFT JOIN schedule_time_slots st ON st.schedule_id = s.id
+             LEFT JOIN schedule_participants sp ON sp.schedule_id = s.id
+             LEFT JOIN users u ON u.id = sp.user_id
+             WHERE s.project_id = :id
+             GROUP BY s.id
+             ORDER BY s.event_date DESC, s.id DESC LIMIT 20",
             [':id' => $id]
         );
 
@@ -211,16 +310,123 @@ class ProjectsController
             'assignments' => $assignments,
             'history'     => $history,
             'costs'       => $costs,
+            'costSub'     => $costSub,
+            'costPg'      => $costPg,
+            'costFilters' => $costFilters,
+            'costWorkers' => $costWorkers,
+            'staffOptions' => $staffOptions,
             'schedules'   => $schedules,
             'workLogs'    => $workLogs,
             'photos'      => $photos,
             'docs'        => $docs,
             'statuses'    => self::STATUSES,
+            'statusBadge' => StatusService::PROJECT_BADGE,
+            'statusHistory' => $statusHistory,
+            'allowedTransitions' => StatusService::PROJECT_TRANSITIONS[$project['status']] ?? [],
             'wl'          => $wl,
+            'contract'    => $contract,
+            'nextSchedule' => $nextSchedule,
+            'processStages' => $processStages,
+            'warrantyRepairs' => $warrantyRepairs,
+            'warrantyPhotos'  => $warrantyPhotos,
+            'auditRows'   => $auditRows,
+            'canProcessMove' => Rbac::can('process.move'),
         ]);
     }
 
-    /** 등록/수정 폼 (perm project.manage 은 라우터가 강제). */
+    /**
+     * 상태 전환(취소/파기/중단/재개·복구/완료/정산 완료) — 전이 규칙(StatusService)을 서버측에서 강제.
+     * 파기·취소 시 부가정보(청구·환불 금액/정산 여부/후속 조치)를 이력 detail_json 에 보존,
+     * 환불은 연결 계약의 payments(kind='refund') 행으로 기록한다. 물리 삭제 없음.
+     */
+    public function transition(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        if (!$id || !Scope::canAccessProject($id)) {
+            Response::error('이 프로젝트에 접근할 권한이 없습니다.', 403);
+        }
+        $project = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $id]);
+        if (!$project) {
+            Response::error('프로젝트를 찾을 수 없습니다.', 404);
+        }
+
+        $to = Util::postStr('to_status');
+        if (!isset(self::STATUSES[$to])) {
+            Response::error('알 수 없는 상태입니다.', 422);
+        }
+        $from = (string) $project['status'];
+        if ($from === $to) {
+            Response::error('이미 해당 상태입니다.', 422);
+        }
+        if (!StatusService::projectTransitionAllowed($from, $to)) {
+            Response::error('허용되지 않는 상태 전환입니다: ' . self::STATUSES[$from] . ' → ' . self::STATUSES[$to], 422);
+        }
+
+        $date   = Util::dateOrNull(Util::postStr('effective_date')) ?? date('Y-m-d');
+        $reason = Util::postStr('reason');
+        if ($reason === '' && StatusService::reasonRequired($from, $to)) {
+            Response::error('이 전환은 처리 사유가 필요합니다.', 422);
+        }
+
+        // 파기·취소 부가정보(브리프: 처리일/사유/처리자/진행 공정·발생 원가(표시)/청구·환불/정산 여부/후속 조치/메모)
+        $detail = null;
+        $refund = 0;
+        if (in_array($to, ['cancelled', 'terminated'], true)) {
+            $refund = max(0, (int) round((float) Util::postFloat('refund_amount', 0)));
+            $detail = array_filter([
+                'effective_date' => $date,
+                'billed_amount'  => max(0, (int) round((float) Util::postFloat('billed_amount', 0))),
+                'refund_amount'  => $refund,
+                'is_settled'     => Util::postStr('is_settled') === '1' ? 1 : 0,
+                'followup'       => Util::nullIfEmpty(Util::postStr('followup')),
+                'memo'           => Util::nullIfEmpty(Util::postStr('memo')),
+                'process_stage'  => $project['process_stage_id'],
+                'actual_cost'    => (int) $project['actual_cost'],
+            ], static fn($v) => $v !== null);
+
+            if ($refund > 0 && $project['contract_id']) {
+                // 환불 상한 = 계약 순입금 — AccountingService 단일 출처
+                $netPaid = AccountingService::contractNetPaid((int) $project['contract_id']);
+                if ($refund > $netPaid) {
+                    Response::error('환불 금액이 계약 순입금(' . number_format($netPaid) . '원)을 초과할 수 없습니다.', 422);
+                }
+            }
+        }
+
+        Db::transaction(function () use ($project, $to, $date, $reason, $detail, $refund) {
+            StatusService::applyProjectStatus($project, $to, [
+                'effective_date' => $date,
+                'reason'         => $reason,
+                'detail'         => $detail,
+            ]);
+            if ($refund > 0 && $project['contract_id']) {
+                Db::insert('payments', [
+                    'contract_id' => (int) $project['contract_id'],
+                    'pay_type'    => 'etc',
+                    'kind'        => 'refund',
+                    'amount'      => $refund,
+                    'due_date'    => null,
+                    'paid_date'   => $date,
+                    'status'      => 'paid',
+                    'memo'        => '프로젝트 ' . ($to === 'cancelled' ? '취소' : '파기') . ' 환불(' . $project['project_no'] . ')',
+                ]);
+            }
+        });
+        if ($refund > 0 && $project['contract_id']) {
+            StatusService::recalcContractPaymentStatus((int) $project['contract_id']);
+        }
+
+        if (Response::wantsJson()) {
+            Response::json(['id' => $id, 'status' => $to]);
+        }
+        Response::redirect('projects.show', ['id' => $id], '상태가 \'' . self::STATUSES[$to] . '\'(으)로 변경되었습니다.');
+    }
+
+    /**
+     * 등록/수정 폼 (perm project.manage 은 라우터가 강제).
+     * R3: 프로젝트는 계약 '진행(active)' 전환 시 자동 생성된다 — 신규 등록은 최고 관리자(super_admin)의
+     * '예외 프로젝트 생성'(계약 연결 없는 하자보수·내부 작업용, 생성 사유 필수)만 허용. CSS 숨김이 아닌 서버측 차단.
+     */
     public function form(): void
     {
         $id = (int) Util::int('id', 0);
@@ -230,64 +436,94 @@ class ProjectsController
             if (!$project) {
                 Response::redirect('projects.index', [], '프로젝트를 찾을 수 없습니다.', 'error');
             }
+        } elseif (!Rbac::isRole('super_admin')) {
+            Audit::log('access_denied', 'project', null, null, ['action' => 'project_exception_create_form']);
+            http_response_code(403);
+            View::renderError(403, '접근 권한 없음',
+                '프로젝트는 계약 \'진행\' 전환 시 자동 생성됩니다. 예외 프로젝트 생성(하자보수·내부 작업)은 최고 관리자만 가능합니다.');
+            return;
         }
 
         $customers = Db::all(
             "SELECT id, name, company_name, type FROM customers WHERE deleted_at IS NULL ORDER BY name LIMIT 500"
         );
-        $processStages = Db::all("SELECT id, name, sort_order FROM process_stages ORDER BY sort_order");
         $users = Db::all(
             "SELECT id, name, role_key FROM users WHERE status = 'active' AND deleted_at IS NULL ORDER BY name"
         );
 
+        // 폼에서는 기본 상태(진행 예정/진행 중/일시 중단)만 선택 — 취소/파기/완료/정산은 상세의 상태 전환으로만
+        $formStatuses = array_intersect_key(self::STATUSES, array_flip(self::FORM_STATUSES));
+        if ($project && !isset($formStatuses[$project['status']])) {
+            $formStatuses = [$project['status'] => (self::STATUSES[$project['status']] ?? $project['status']) . ' — 상세 화면 상태 전환으로만 변경'];
+        }
+
         View::render('projects/form', [
-            'title'         => $id ? '프로젝트 수정' : '프로젝트 등록',
+            'title'         => $id ? '프로젝트 수정' : '예외 프로젝트 생성',
             'project'       => $project,
             'customers'     => $customers,
-            'processStages' => $processStages,
             'users'         => $users,
-            'statuses'      => self::STATUSES,
-            'importance'    => self::IMPORTANCE,
+            'statuses'      => $formStatuses,
             'contribModes'  => self::CONTRIB_MODE,
         ]);
     }
 
-    /** 등록/수정 저장 (perm project.manage). */
+    /**
+     * 등록/수정 저장 (perm project.manage).
+     * 신규 등록 = 예외 프로젝트 생성(최고 관리자 전용, 생성 사유 필수, 계약 연결 없음 — Audit 기록).
+     * 공정 단계(process_stage_id)는 폼에서 직접 세팅하지 않는다 — ProcessService 경유만 허용(R3 커널).
+     */
     public function save(): void
     {
         $id   = (int) Util::postInt('id', 0);
         $name = Util::postStr('name');
         $customerId = (int) Util::postInt('customer_id', 0);
 
+        // 예외 프로젝트 생성: 최고 관리자 전용 + 생성 사유 필수
+        $createReason = Util::postStr('create_reason');
+        if (!$id) {
+            if (!Rbac::isRole('super_admin')) {
+                Audit::log('access_denied', 'project', null, null, ['action' => 'project_exception_create']);
+                if (Response::wantsJson()) {
+                    Response::error('예외 프로젝트 생성은 최고 관리자만 가능합니다. (프로젝트는 계약 \'진행\' 전환 시 자동 생성)', 403);
+                }
+                http_response_code(403);
+                View::renderError(403, '접근 권한 없음',
+                    '프로젝트는 계약 \'진행\' 전환 시 자동 생성됩니다. 예외 프로젝트 생성은 최고 관리자만 가능합니다.');
+                return;
+            }
+            if ($createReason === '') {
+                Response::redirect('projects.form', [], '예외 프로젝트 생성 사유를 입력하세요.', 'error');
+            }
+        }
+
         if ($name === '' || $customerId <= 0) {
             Response::redirect('projects.form', $id ? ['id' => $id] : [], '프로젝트명과 고객을 입력하세요.', 'error');
         }
 
         $status = Util::postStr('status', 'preparing');
-        if (!isset(self::STATUSES[$status])) {
+        if (!in_array($status, self::FORM_STATUSES, true)) {
             $status = 'preparing';
         }
         $contribMode = Util::postStr('contribution_mode', 'main');
         if (!isset(self::CONTRIB_MODE[$contribMode])) {
             $contribMode = 'main';
         }
-        $importance = Util::postStr('importance', 'mid');
-        if (!isset(self::IMPORTANCE[$importance])) {
-            $importance = 'mid';
-        }
-        $processStageId = Util::postInt('process_stage_id', 0);
         $salesUserId    = Util::postInt('sales_user_id', 0);
         $siteManagerId  = Util::postInt('site_manager_id', 0);
         $progress       = max(0, min(100, (int) Util::postInt('progress', 0)));
+        // R8-A: 공사유형(구분) — 화이트리스트 밖(빈값 포함)은 null(수정 시 기존 값 유지, 신규는 미지정)
+        $constructionType = Util::postStr('construction_type', '');
+        $constructionType = array_key_exists($constructionType, Stages::constructionTypes()) ? $constructionType : null;
 
         $data = [
             'name'               => $name,
             'customer_id'        => $customerId,
             'site_address'       => Util::nullIfEmpty(Util::postStr('site_address')),
             'work_type'          => Util::nullIfEmpty(Util::postStr('work_type')),
+            'construction_type'  => $constructionType, // R8-A: 도장/인테리어(미지정 NULL 은 양쪽 보드 노출)
             'contract_amount'    => (int) round((float) Util::postFloat('contract_amount', 0)),
             'estimated_cost'     => (float) Util::postFloat('estimated_cost', 0),
-            'process_stage_id'   => $processStageId > 0 ? $processStageId : null,
+            // process_stage_id 직접 세팅 금지(R3 커널) — 공정 이동은 공정 보드/ProcessService 로만
             'status'             => $status,
             'contract_date'      => Util::nullIfEmpty(Util::postStr('contract_date')),
             'start_date'         => Util::nullIfEmpty(Util::postStr('start_date')),
@@ -297,7 +533,6 @@ class ProjectsController
             'sales_user_id'      => $salesUserId > 0 ? $salesUserId : null,
             'site_manager_id'    => $siteManagerId > 0 ? $siteManagerId : null,
             'progress'           => $progress,
-            'importance'         => $importance,
             'contribution_mode'  => $contribMode,
             'memo'               => Util::nullIfEmpty(Util::postStr('memo')),
         ];
@@ -311,13 +546,51 @@ class ProjectsController
             if (!$before) {
                 Response::redirect('projects.index', [], '프로젝트를 찾을 수 없습니다.', 'error');
             }
+            // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
+            if ($constructionType === null) {
+                $data['construction_type'] = $before['construction_type'];
+            }
+            $from = (string) $before['status'];
+            if (!in_array($from, self::FORM_STATUSES, true)) {
+                // 종결·전환 전용 상태(완료/취소/파기/정산 등)는 폼에서 변경 불가 — 상태 전환 플로우로만
+                $data['status'] = $status = $from;
+            } elseif ($from !== $status && !StatusService::projectTransitionAllowed($from, $status)) {
+                // 허용되지 않는 전환은 무시(기존 상태 유지)
+                $data['status'] = $status = $from;
+            }
+            // 담당 영업 잠금(R7 T2 확장): 관리자(super_admin) 외 변경 불가 — 성과·수주 귀속
+            // (projects.sales_user_id) 조작 경로 차단. 계약 화면(contracts.save)과 동일 기준·감사로그.
+            $beforeSales = $before['sales_user_id'] !== null ? (int) $before['sales_user_id'] : null;
+            if (!Rbac::isRole('super_admin')) {
+                $data['sales_user_id'] = $beforeSales;
+            } elseif ($beforeSales !== $data['sales_user_id']) {
+                Audit::log('project_sales_user_change', 'project', $id,
+                    ['sales_user_id' => $beforeSales], ['sales_user_id' => $data['sales_user_id']]);
+            }
             Db::update('projects', $data, 'id = :id', [':id' => $id]);
+            if ($from !== $status) {
+                StatusService::logProjectStatus($id, $from, $status, '프로젝트 수정 화면에서 변경');
+            }
             Audit::log('project_update', 'project', $id, $before, $data);
+            // R8-A: 공사 유형 변경 시 스테이지 정합 — 현재 공정이 다른 유형 전용 단계면 '대기중' 재배치
+            //       (process.settype 과 동일한 ProcessService 공통 헬퍼, 이력 is_auto=1 기록)
+            if (($before['construction_type'] ?? null) !== $data['construction_type']) {
+                ProcessService::ensureStageMatchesType($id, Auth::id() ?: null);
+            }
         } else {
             $data['project_no']  = $this->generateProjectNo();
             $data['actual_cost'] = 0;
             $id = Db::insert('projects', $data);
-            Audit::log('project_create', 'project', $id, null, $data);
+            // 예외 생성 프로젝트가 '진행 중'이면 공정 '대기중' 배치(ProcessService 경유 — 이력·entered_at 일관)
+            if ($status === 'in_progress') {
+                ProcessService::initWaiting($id, Auth::id() ?: null, false, '예외 프로젝트 생성');
+            }
+            StatusService::logProjectStatus($id, null, $status, '예외 프로젝트 생성: ' . $createReason);
+            Audit::log('project_exception_create', 'project', $id, null, $data + [
+                'create_reason' => mb_substr($createReason, 0, 500),
+                'created_by'    => Auth::id(),
+                'at'            => date('Y-m-d H:i:s'),
+            ]);
         }
 
         Response::redirect('projects.show', ['id' => $id], '저장되었습니다.');
@@ -390,6 +663,11 @@ class ProjectsController
             exit('파일을 찾을 수 없습니다.');
         }
         Upload::send($fileId, function (array $f): bool {
+            // r4-refactor(T10): 사업자등록증은 전용 라우트(customers.license.download)만 허용 — 명시 게이트.
+            // project_id NULL + project.view_all 경로로 우회 열람되던 것을 차단(실권한 우회는 없었음, 경로 단일화 목적).
+            if (($f['entity_type'] ?? '') === 'customer_license') {
+                return false;
+            }
             if (empty($f['project_id'])) {
                 return Rbac::can('project.view_all');
             }

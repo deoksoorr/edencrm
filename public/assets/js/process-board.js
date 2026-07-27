@@ -13,9 +13,12 @@
 
     function updateTabCounts() {
       var byGroup = {};
-      boardEl.querySelectorAll('.kanban-col').forEach(function (col) {
-        var g = col.dataset.group;
-        byGroup[g] = (byGroup[g] || 0) + col.querySelectorAll('.kanban-card').length;
+      boardEl.querySelectorAll('.pb-group').forEach(function (sec) {
+        var g = sec.dataset.group;
+        var n = sec.querySelectorAll('.kanban-card').length;
+        byGroup[g] = (byGroup[g] || 0) + n;
+        var gc = sec.querySelector('[data-group-count]');
+        if (gc) gc.textContent = n;
       });
       document.querySelectorAll('#pcTabs .pl-tab').forEach(function (b) {
         var n = b.dataset.groups.split(',').reduce(function (s, g) { return s + (byGroup[g] || 0); }, 0);
@@ -26,8 +29,8 @@
       var btn = document.querySelector('#pcTabs .pl-tab[data-tab="' + activeTab + '"]');
       var groups = btn ? btn.dataset.groups.split(',') : [];
       var showAll = activeTab === 'all';
-      boardEl.querySelectorAll('.kanban-col').forEach(function (col) {
-        col.style.display = (showAll || groups.indexOf(col.dataset.group) >= 0) ? '' : 'none';
+      boardEl.querySelectorAll('.pb-group').forEach(function (sec) {
+        sec.style.display = (showAll || groups.indexOf(sec.dataset.group) >= 0) ? '' : 'none';
       });
       document.querySelectorAll('#pcTabs .pl-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === activeTab); });
       updateTabCounts();
@@ -52,7 +55,8 @@
       updateTabCounts();
     }
 
-    // 그룹 탭 전환 + 컬럼 접기
+    // 그룹 탭 전환 + 컬럼 접기 + 카드 클릭 시 프로젝트 상세 이동(드래그 직후 클릭은 무시)
+    var lastDragAt = 0;
     var pcTabs = document.getElementById('pcTabs');
     if (pcTabs) pcTabs.addEventListener('click', function (e) {
       var b = e.target.closest('.pl-tab'); if (!b) return;
@@ -60,7 +64,12 @@
     });
     boardEl.addEventListener('click', function (e) {
       var caret = e.target.closest('.kanban-caret');
-      if (caret) { caret.closest('.kanban-col').classList.toggle('collapsed'); }
+      if (caret) { caret.closest('.kanban-col').classList.toggle('collapsed'); return; }
+      if (e.target.closest('a, button')) return;
+      var card = e.target.closest('.kanban-card');
+      if (card && card.dataset.href && Date.now() - lastDragAt > 300) {
+        window.location.href = card.dataset.href;
+      }
     });
 
     // 단계 이동 시 카드 진행률 자동 갱신(새로고침 없이)
@@ -89,6 +98,7 @@
       var fromStageId = fromList.dataset.stageId;
       var toStageId = toList.dataset.stageId;
       var projectId = item.dataset.projectId;
+      lastDragAt = Date.now();
 
       // 같은 컬럼 안에서의 재정렬은 서버 상태에 영향 없음 — 그대로 둔다.
       if (fromStageId === toStageId) {
@@ -108,10 +118,34 @@
             }
           }
           var data = await api('process.move', { project_id: projectId, to_stage_id: toStageId });
+          // 전체완료 게이트(R4): 미충족 항목 경고 → 확인+사유 입력 시에만 예외 진행(차단 아님)
+          if (data && data.gate && data.gate.warnings) {
+            var goOn = await EDEN.confirm(
+              '전체완료 조건 미충족:<br> · ' + data.gate.warnings.map(escapeHtml).join('<br> · ')
+              + '<br><br>그래도 전체완료로 이동하시겠습니까? (예외 진행 사유 입력 필요)',
+              { okLabel: '예외 진행' });
+            var gateReason = goOn ? window.prompt('전체완료 예외 진행 사유를 입력하세요. (이력에 기록됩니다)', '') : null;
+            if (!goOn || gateReason === null || !gateReason.trim()) {
+              toast('전체완료 이동을 취소했습니다.', 'warn');
+              revertCard(item, fromList, oldIndex);
+              return;
+            }
+            data = await api('process.move', {
+              project_id: projectId, to_stage_id: toStageId,
+              gate_confirm: 1, gate_reason: gateReason.trim()
+            });
+          }
           if (data && data.skip_warn) {
             toast('공정 단계를 건너뛰었습니다. 필요 시 확인하세요.', 'warn');
           } else {
             toast('공정 단계가 변경되었습니다.', 'success');
+          }
+          // 진입일(process_entered_at) 갱신 — 재진입 카드는 대상 컬럼 최상단으로(서버 정렬과 일치)
+          toList.insertBefore(item, toList.firstElementChild);
+          var enteredEl = item.querySelector('[data-entered-at]');
+          if (enteredEl && data && data.entered_at) {
+            var d = new Date(data.entered_at.replace(' ', 'T'));
+            enteredEl.textContent = ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2);
           }
           if (data && typeof data.progress !== 'undefined') updateCardProgress(item, data.progress);
           updateColumnCounts();
@@ -131,6 +165,7 @@
           chosenClass: 'sortable-chosen',
           filter: '.locked',
           preventOnFilter: true,
+          onStart: function () { lastDragAt = Date.now(); },
           onEnd: handleDrop,
         });
       });
@@ -149,7 +184,7 @@
           var html = rows.length
             ? '<div class="hist-list">' + rows.map(function (r) {
                 return '<div class="hist-item" data-hid="' + r.id + '">' +
-                  '<div class="hist-meta">' + escapeHtml(r.changed_at || '') + ' · ' + escapeHtml(r.changed_by_name || '-') + '</div>' +
+                  '<div class="hist-meta">' + escapeHtml(r.changed_at || '') + ' · ' + escapeHtml(r.changed_by_name || (Number(r.is_auto) === 1 ? '시스템' : '-')) + (Number(r.is_auto) === 1 ? ' · 자동' : '') + '</div>' +
                   '<div class="hist-move">' + escapeHtml(r.from_name || '(시작)') + ' → <b>' + escapeHtml(r.to_name) + '</b></div>' +
                   (canMove
                     ? '<div class="hist-edit"><input class="input hist-reason" value="' + escapeHtml(r.reason || '') + '" placeholder="변경 사유 입력"><button type="button" class="btn btn-sm btn-outline hist-save">저장</button></div>'
@@ -173,6 +208,42 @@
         .catch(function (err) {
           toast((err && err.message) || '이력을 불러오지 못했습니다.', 'error');
         });
+    });
+
+    // ── R8-A: '유형 미지정' 배지 → 공사 유형(도장/인테리어) 지정 모달 (perm project.manage — 서버도 강제) ──
+    document.addEventListener('click', function (e) {
+      var badge = e.target.closest('button[data-settype]');
+      if (!badge) return;
+      var projectId = badge.dataset.settype;
+      var name = badge.dataset.name || '';
+
+      function doSet(type, typeLabel, close, btn) {
+        btn.disabled = true;
+        api('process.settype', { project_id: projectId, construction_type: type })
+          .then(function (data) {
+            var msg = '공사 유형이 \'' + typeLabel + '\'(으)로 지정되었습니다.';
+            if (data && data.moved_to_waiting) msg += ' 공정이 \'대기중\'으로 재배치되었습니다.';
+            toast(msg, 'success');
+            close();
+            location.reload(); // 지정 후 해당 유형 탭에만 노출 — 서버 상태로 재렌더
+          })
+          .catch(function (err) {
+            toast((err && err.message) || '유형 지정에 실패했습니다.', 'error');
+            btn.disabled = false;
+          });
+      }
+
+      EDEN.modal({
+        title: '공사 유형 지정',
+        body: '<p style="margin:0;color:#4b5563">' + (name ? '<b>' + escapeHtml(name) + '</b><br>' : '')
+          + '이 프로젝트의 공사 유형을 지정합니다. 지정하면 해당 유형 보드에만 표시되며,<br>'
+          + '현재 공정이 다른 유형 전용 단계면 <b>\'대기중\'</b>으로 재배치됩니다(이력 기록).</p>',
+        buttons: [
+          { label: '취소', class: 'btn-outline', onClick: function (close) { close(); } },
+          { label: '도장', class: 'btn-primary', onClick: function (close, btn) { doSet('painting', '도장', close, btn); } },
+          { label: '인테리어', class: 'btn-primary', onClick: function (close, btn) { doSet('interior', '인테리어', close, btn); } },
+        ],
+      });
     });
 
     function escapeHtml(s) {

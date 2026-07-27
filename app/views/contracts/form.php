@@ -92,6 +92,18 @@ $pctVal = function ($k) use ($contract) {
           <label class="field-label">공사 유형</label>
           <input type="text" name="work_type" class="input" value="<?= e($contract['work_type'] ?? '') ?>" placeholder="예: 아파트외벽, 옥상방수" maxlength="50">
         </div>
+        <div class="field">
+          <?php // R8-A: 공사유형(구분) — 공정 보드 도장/인테리어 탭 분류. 레거시 미지정 계약만 '미지정' 옵션 노출.
+            $ctSel = $contract['construction_type'] ?? ($isEdit ? '' : 'painting');
+            $ctLegacyNull = $isEdit && ($ctSel === '' || $ctSel === null); ?>
+          <label class="field-label">공사유형(구분)<?= $ctLegacyNull ? '' : ' <span class="req">*</span>' ?></label>
+          <select name="construction_type" class="select" <?= $ctLegacyNull ? '' : 'required' ?>>
+            <?php if ($ctLegacyNull): ?><option value="" selected>미지정 (양쪽 보드 표시)</option><?php endif; ?>
+            <option value="painting" <?= $ctSel === 'painting' ? 'selected' : '' ?>>도장</option>
+            <option value="interior" <?= $ctSel === 'interior' ? 'selected' : '' ?>>인테리어</option>
+          </select>
+          <div class="field-hint">계약 '진행' 전환 시 자동 생성되는 프로젝트의 공정 보드 탭(도장/인테리어) 분류로 승계됩니다.</div>
+        </div>
         <div class="field col-span-2">
           <label class="field-label">현장 주소</label>
           <input type="text" name="site_address" class="input" value="<?= e($contract['site_address'] ?? '') ?>" maxlength="255">

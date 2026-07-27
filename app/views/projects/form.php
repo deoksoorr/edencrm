@@ -1,13 +1,13 @@
 <?php
-/** @var ?array $project @var array $customers @var array $processStages @var array $users
- *  @var array $statuses @var array $importance @var array $contribModes
+/** @var ?array $project @var array $customers @var array $users
+ *  @var array $statuses @var array $contribModes
  */
 $p = $project ?? [];
 $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
 ?>
-<div class="page">
+<div class="page page-narrow">
   <div class="page-head">
-    <h1 class="page-title"><?= $project ? '프로젝트 수정' : '프로젝트 등록' ?></h1>
+    <h1 class="page-title"><?= $project ? '프로젝트 수정' : '예외 프로젝트 생성' ?></h1>
     <div class="page-actions">
       <a href="<?= e(url($project ? 'projects.show' : 'projects.index', $project ? ['id' => $project['id']] : [])) ?>" class="btn btn-outline">취소</a>
     </div>
@@ -15,11 +15,24 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
 
   <div class="card">
     <div class="card-body">
+      <?php if (!$project): ?>
+        <div class="field-hint mb-14">
+          프로젝트는 계약 <b>'진행(계약 진행)'</b> 전환 시 자동 생성됩니다. 이 화면은 <b>계약 연결 없는 예외 프로젝트</b>
+          (하자보수·내부 작업 등) 전용이며, 생성 사유가 감사 로그에 기록됩니다.
+        </div>
+      <?php endif; ?>
       <form method="post" action="<?= e(url('projects.save')) ?>" class="form">
         <?= csrf_field() ?>
         <?php if ($project): ?><input type="hidden" name="id" value="<?= (int) $project['id'] ?>"><?php endif; ?>
 
         <div class="form-grid">
+          <?php if (!$project): ?>
+          <div class="field col-span-2">
+            <label class="field-label">생성 사유<span class="req">*</span></label>
+            <input type="text" name="create_reason" class="input" required maxlength="500"
+                   placeholder="예: 한빛아파트 하자보수 — 계약 없이 내부 작업으로 진행">
+          </div>
+          <?php endif; ?>
           <div class="field">
             <label class="field-label">프로젝트명<span class="req">*</span></label>
             <input type="text" name="name" class="input" required value="<?= $val('name') ?>">
@@ -44,6 +57,18 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
             <input type="text" name="work_type" class="input" value="<?= $val('work_type') ?>" placeholder="예: 아파트외벽, 옥상방수">
           </div>
           <div class="field">
+            <?php // R8-A: 공사유형(구분) — 공정 보드 도장/인테리어 탭 분류. 레거시 미지정 프로젝트만 '미지정' 옵션 노출.
+              $ctSel = $p['construction_type'] ?? ($project ? '' : 'painting');
+              $ctLegacyNull = $project && ($ctSel === '' || $ctSel === null); ?>
+            <label class="field-label">공사유형(구분)<?= $ctLegacyNull ? '' : '<span class="req">*</span>' ?></label>
+            <select name="construction_type" class="select" <?= $ctLegacyNull ? '' : 'required' ?>>
+              <?php if ($ctLegacyNull): ?><option value="" selected>미지정 (양쪽 보드 표시)</option><?php endif; ?>
+              <option value="painting" <?= $ctSel === 'painting' ? 'selected' : '' ?>>도장</option>
+              <option value="interior" <?= $ctSel === 'interior' ? 'selected' : '' ?>>인테리어</option>
+            </select>
+            <div class="field-hint">공정 보드 탭 분류 기준 — 변경 시 현재 공정이 다른 유형 전용 단계면 '대기중'으로 재배치됩니다.</div>
+          </div>
+          <div class="field">
             <label class="field-label">상태</label>
             <select name="status" class="select">
               <?php foreach ($statuses as $k => $label): ?>
@@ -52,31 +77,16 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
             </select>
           </div>
           <div class="field">
-            <label class="field-label">공정 단계</label>
-            <select name="process_stage_id" class="select">
-              <option value="">미지정</option>
-              <?php foreach ($processStages as $ps): ?>
-                <option value="<?= (int) $ps['id'] ?>" <?= (isset($p['process_stage_id']) && (int) $p['process_stage_id'] === (int) $ps['id']) ? 'selected' : '' ?>><?= e($ps['name']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="field">
-            <label class="field-label">중요도</label>
-            <select name="importance" class="select">
-              <?php foreach ($importance as $k => $label): ?>
-                <option value="<?= e($k) ?>" <?= ($p['importance'] ?? 'mid') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="field">
             <label class="field-label">영업담당</label>
-            <select name="sales_user_id" class="select">
+            <select name="sales_user_id" class="select" <?= Rbac::isRole('super_admin') ? '' : 'disabled' ?>>
               <option value="">미지정</option>
               <?php foreach ($users as $u): ?>
                 <option value="<?= (int) $u['id'] ?>" <?= (isset($p['sales_user_id']) && (int) $p['sales_user_id'] === (int) $u['id']) ? 'selected' : '' ?>><?= e($u['name']) ?></option>
               <?php endforeach; ?>
             </select>
+            <?php if (!Rbac::isRole('super_admin')): ?>
+              <div class="field-hint">영업담당은 계약에서 자동 승계되며 <b>관리자만 변경</b>할 수 있습니다.</div>
+            <?php endif; ?>
           </div>
           <div class="field">
             <label class="field-label">현장관리자</label>

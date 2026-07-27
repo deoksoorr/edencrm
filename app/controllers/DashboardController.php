@@ -1,9 +1,10 @@
 <?php
 /**
  * 대시보드 — 권한별 4변형(boss/sales/site/staff). 정보를 업무 목적별 섹션으로 그룹화한다.
- *  - boss  (super_admin·accountant): 핵심현황 / 주의항목 / 영업 / 재무 / 공정 / 직원성과
- *  - sales (sales_manager)         : 내 영업 핵심 / 파이프라인 / 목표 / 주의(연락·계약임박)
- *  - site  (site_manager)          : 공정 핵심 / 공정상태 / 주의(지연·미배정·일지·검수) / 일정
+ * R3: '주의가 필요한 항목' 레일 폐지 — 항목은 관련 섹션이 흡수(지연→공정, 미수금→재무, 계약대기→영업, 미배정→직원 업무).
+ *  - boss  (super_admin·accountant): ①핵심 KPI ②직원 일정·업무 ③영업·계약 ④프로젝트·공정 ⑤재무·추이 ⑥직원성과 ⑦최근활동
+ *  - sales (sales_manager)         : 내 영업 핵심 / 목표 / 파이프라인(연락·계약대기 흡수)
+ *  - site  (site_manager)          : 공정 핵심(지연·미배정·일지·검수 포함) / 공정상태 / 일정
  *  - staff (staff)                 : 오늘 일정 / 내 프로젝트 / 작업할 공정 / 알림
  *
  * 금액은 Util::moneyShort/moneyCell 로 축약, 모든 계산은 Calc 사용(0 나눗셈 → null → '-').
@@ -43,30 +44,36 @@ class DashboardController
 
     private function renderBoss(array $u): void
     {
+        // '주의가 필요한 항목' 레일은 R3 에서 제거 — 항목은 각 섹션이 흡수(지연→공정, 미수금→재무, 계약대기→영업, 미배정→직원)
+        $attn = $this->attention(null);
         View::render('dashboard/boss', [
             'title'      => '대시보드',
             'me'         => $u,
             'kpi'        => $this->bossKpi(),
-            'attn'       => $this->attention(null),
+            'attn'       => $attn,
             'funnel'     => $this->salesFunnel(null),
             'finance'    => $this->finance(null),
             'process'    => $this->processChips(null),
+            'board'      => $this->processBoardCounts(),
             'workstatus' => $this->employeeWork(),
+            'attend'     => $this->attendanceSummary(), // R4: 근태는 feature_worklog 아닌 feature_attendance 게이트
+            'cash'       => $this->cashflowLists(),     // R4 T6: 최근 입금·출금(원가 지출) 리스트
+            'workload'   => $this->employeeLoad(),
             'perf'       => $this->staffPerformance(),
+            'activity'   => $this->recentActivity(),
             'wl'         => Settings::enabled('feature_worklog'),
             'scripts'    => ['vendor/chart.umd.js', 'js/dashboard.js'],
         ]);
     }
 
     /**
-     * 오늘의 직원 업무 현황 + 이번 달 출근(작업일수).
-     *  today      : 오늘 일정이 있는 직원만 — 오늘 일정·현재 프로젝트·공정·상태
-     *  attendance : 현장 인력별 이번 달 작업일수(work_logs 고유 근무일)
+     * 오늘의 직원 업무 현황 — 오늘 일정이 있는 직원만(오늘 일정·현재 프로젝트·공정·상태).
+     * 이번 달 출근 요약은 attendanceSummary()(R4 분리 — feature_worklog 와 무관)가 담당.
      */
     private function employeeWork(): array
     {
         $emps = Db::all("SELECT id, name, color, role_key FROM users WHERE deleted_at IS NULL AND status='active' AND role_key IN ('sales_manager','site_manager','staff') ORDER BY name");
-        if (!$emps) { return ['today' => [], 'attendance' => []]; }
+        if (!$emps) { return ['today' => []]; }
         $ids = array_map('intval', array_column($emps, 'id'));
         $in = implode(',', $ids);
         $roleLabel = ['sales_manager' => '영업', 'site_manager' => '현장', 'staff' => '직원'];
@@ -77,10 +84,12 @@ class DashboardController
         $todayRows = Db::all(
             "SELECT sp.user_id uid, s.title, s.slot, p.name AS project_name, p.status AS pstatus, ps.name AS stage_name
              FROM schedule_participants sp
-             JOIN schedules s ON s.id=sp.schedule_id AND s.event_date=CURDATE()
+             JOIN schedules s ON s.id=sp.schedule_id
+                  AND s.event_date<=CURDATE() AND COALESCE(s.end_date, s.event_date)>=CURDATE()
              LEFT JOIN projects p ON p.id=s.project_id AND p.deleted_at IS NULL
              LEFT JOIN process_stages ps ON ps.id=p.process_stage_id
              WHERE sp.user_id IN ($in)
+               AND (p.id IS NULL OR p.status NOT IN ('cancelled','terminated'))
              ORDER BY FIELD(s.slot,'am','pm','night')"
         );
         $byUser = [];
@@ -106,53 +115,194 @@ class DashboardController
             ];
         }
 
-        if (!Settings::enabled('feature_worklog')) {
-            return ['today' => $today, 'attendance' => []];
-        }
-
-        // 이번 달 출근(작업일수) — work_logs 고유 근무일
-        $attRows = Db::all(
-            "SELECT user_id uid, COUNT(DISTINCT work_date) days FROM work_logs
-             WHERE user_id IN ($in) AND YEAR(work_date)=YEAR(CURDATE()) AND MONTH(work_date)=MONTH(CURDATE())
-             GROUP BY user_id"
-        );
-        $daysBy = array_column($attRows, 'days', 'uid');
-        $maxDays = max(1, $daysBy ? (int) max($daysBy) : 1);
-        $attendance = [];
-        foreach ($emps as $e) {
-            $id = (int) $e['id'];
-            $d = (int) ($daysBy[$id] ?? 0);
-            $attendance[] = [
-                'name'  => $e['name'],
-                'color' => $colorOf[$id],
-                'role'  => $roleLabel[$e['role_key']] ?? '직원',
-                'days'  => $d,
-                'pct'   => (int) round($d / $maxDays * 100),
-            ];
-        }
-        usort($attendance, fn($a, $b) => $b['days'] <=> $a['days']);
-        return ['today' => $today, 'attendance' => $attendance];
+        return ['today' => $today];
     }
 
-    /** 핵심 KPI 6종(전월 대비 델타 포함). 확정 = completed·actual_end_date·공급가 기준(AccountingService). */
+    /**
+     * 이번 달 직원 출근 요약(boss ② 섹션) — AttendanceService 공용 집계(분석 탭과 동일 산식).
+     * R4 복구: R2 에서 feature_worklog OFF 에 묶여 사라졌던 출근 현황을 feature_attendance(기본 ON)로 분리.
+     * R6 최종 구조: 통계 3종만 표시 — 출근 일수(user_id+work_date DISTINCT − 무단결근 마킹일 제외)
+     * · 지각(late 마크 수) · 무단결근(absent 마크 수). 휴가·출근율·전월 증감·자동 판정 표기는 제거.
+     * 반환 null=기능 OFF(섹션 미표시).
+     */
+    private function attendanceSummary(): ?array
+    {
+        if (!Settings::enabled('feature_attendance')) { return null; }
+        $emps = Db::all("SELECT id, name, color, role_key FROM users WHERE deleted_at IS NULL AND status='active' AND role_key IN ('sales_manager','site_manager','staff') ORDER BY name");
+        $ids = array_map('intval', array_column($emps, 'id'));
+        $ov = AttendanceService::monthOverview((int) date('Y'), (int) date('n'), $ids);
+        $roleLabel = ['sales_manager' => '영업', 'site_manager' => '현장', 'staff' => '직원'];
+        $rows = [];
+        foreach ($emps as $e) {
+            $id = (int) $e['id'];
+            $rows[] = [
+                'id'     => $id,
+                'name'   => $e['name'],
+                'color'  => $e['color'] ?: Stages::defaultColorFor($id),
+                'role'   => $roleLabel[$e['role_key']] ?? '직원',
+                'days'   => (int) ($ov['days'][$id] ?? 0),
+                'late'   => (int) ($ov['late'][$id] ?? 0),
+                'absent' => (int) ($ov['absent'][$id] ?? 0),
+            ];
+        }
+        usort($rows, fn($a, $b) => $b['days'] <=> $a['days']);
+        return ['rows' => $rows];
+    }
+
+    /**
+     * 최근 입금·출금 리스트(boss ⑤-1, R4 T6) — 데이터 정의·정렬은 서비스 단일 출처:
+     *  입금 = AccountingService::recentPaidPayments (paid 정상 입금, 환불·취소 제외 — 환불 발생 계약은 배지 병기)
+     *  출금 = CostService::recentConfirmed (확정 actual 원가, 지출일 순 — 라벨 '최근 출금(원가 지출)')
+     * pay_type 라벨은 ContractsController::PAY_TYPE_LABELS 재사용(중복 정의 금지).
+     */
+    private function cashflowLists(): array
+    {
+        load_controller('ContractsController');
+        $in = AccountingService::recentPaidPayments(8);
+        foreach ($in as &$r) {
+            $r['pay_type_label'] = ContractsController::PAY_TYPE_LABELS[$r['pay_type']] ?? $r['pay_type'];
+        }
+        unset($r);
+        return ['in' => $in, 'out' => CostService::recentConfirmed(8)];
+    }
+
+    /**
+     * 핵심 KPI (R3): 금액 4종(이번 달 확정 매출(공급가액)·입금 총액(VAT 포함)·원가 총액(발생일)·실제 순이익)
+     * + 건수 3종(계약 진행·진행 중 프로젝트·지연 프로젝트). 금액 집계는 전부 AccountingService 단일 출처.
+     * 원가 총액은 costs(확정·actual) 발생일(spent_date) 기준 — 준공월 귀속 confirmedCost 와 축이 다르다.
+     */
     private function bossKpi(): array
     {
         $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
         $pFrom = date('Y-m-01', strtotime('first day of last month'));
         $pTo   = date('Y-m-t', strtotime('last month'));
 
-        $rev     = (float) AccountingService::confirmedRevenue($mFrom, $mTo);
-        $prevRev = (float) AccountingService::confirmedRevenue($pFrom, $pTo);
-        $profit  = (float) AccountingService::confirmedProfit($mFrom, $mTo);
+        $rev      = (float) AccountingService::confirmedRevenue($mFrom, $mTo);
+        $prevRev  = (float) AccountingService::confirmedRevenue($pFrom, $pTo);
+        $paid     = (float) AccountingService::paidTotal($mFrom, $mTo);
+        $prevPaid = (float) AccountingService::paidTotal($pFrom, $pTo);
+        $cost     = (float) AccountingService::costTotal($mFrom, $mTo);
+        $prevCost = (float) AccountingService::costTotal($pFrom, $pTo);
+        $profit   = (float) AccountingService::confirmedProfit($mFrom, $mTo);
 
         return [
-            'revenue'  => ['value' => $rev, 'delta' => $this->delta($rev, $prevRev)],
-            'profit'   => ['value' => $profit],
-            'active'   => ['value' => $this->countProjects("status='in_progress'")],
-            'delayed'  => ['value' => $this->countProjects($this->delayedCond())],
-            'pending'  => ['value' => $this->stageCount(['contract_pending'])],
-            'recv'     => ['value' => (float) AccountingService::receivable()],
+            'revenue'   => ['value' => $rev,  'delta' => $this->delta($rev, $prevRev)],
+            'paid'      => ['value' => $paid, 'delta' => $this->delta($paid, $prevPaid)],
+            'cost'      => ['value' => $cost, 'delta' => $this->delta($cost, $prevCost)],
+            'profit'    => ['value' => $profit],
+            'contracts' => ['value' => AccountingService::activeContractCount()],
+            'active'    => ['value' => $this->countProjects("status='in_progress'")],
+            'delayed'   => ['value' => $this->countProjects($this->delayedCond())],
         ];
+    }
+
+    /**
+     * 공정 보드 요약(대기중/진행 공정/검수 대기) — projects.process_stage_id + process_stages 기준.
+     * 화면=보드 일치(acctverify): '대기중'은 공정 보드 대기중 컬럼과 동일 모집단
+     * (preparing/in_progress/paused/warranty — ProcessController::BOARD_STATUSES 와 동일, 진행 예정 포함).
+     * '공정 진행'·'검수 대기'는 진행 중(in_progress) 공사 기준 — 보드 상단 '검수 대기'와 동일 정의.
+     */
+    private function processBoardCounts(): array
+    {
+        $rows = Db::all(
+            "SELECT CASE WHEN ps.stage_key='waiting' THEN 'waiting'
+                         WHEN ps.stage_key='full_complete' THEN 'doing'
+                         WHEN ps.requires_confirm=1 THEN 'inspect'
+                         ELSE 'doing' END AS bucket, COUNT(*) cnt
+             FROM projects p JOIN process_stages ps ON ps.id=p.process_stage_id
+             WHERE p.deleted_at IS NULL
+               AND (p.status='in_progress'
+                    OR (ps.stage_key='waiting' AND p.status IN ('preparing','paused','warranty')))
+             GROUP BY 1"
+        );
+        $by = array_column($rows, 'cnt', 'bucket');
+        return [
+            'waiting' => (int) ($by['waiting'] ?? 0),
+            'doing'   => (int) ($by['doing'] ?? 0),
+            'inspect' => (int) ($by['inspect'] ?? 0),
+        ];
+    }
+
+    /**
+     * 직원별 업무 부하(boss ② 섹션) — 배정·담당 중인 진행/예정 프로젝트 수 + 오늘 일정 수.
+     * 취소·파기·완료 프로젝트는 업무량에서 제외(브리프 §2). 부하 큰 순 정렬.
+     */
+    private function employeeLoad(): array
+    {
+        $emps = Db::all("SELECT id, name, color, role_key FROM users WHERE deleted_at IS NULL AND status='active' AND role_key IN ('sales_manager','site_manager','staff') ORDER BY name");
+        if (!$emps) { return []; }
+        $ids = array_map('intval', array_column($emps, 'id'));
+        $in = implode(',', $ids);
+
+        $projRows = Db::all(
+            "SELECT uid, COUNT(DISTINCT pid) c FROM (
+                SELECT pa.user_id uid, pa.project_id pid FROM project_assignments pa
+                    JOIN projects p ON p.id=pa.project_id AND p.deleted_at IS NULL AND p.status IN ('preparing','in_progress')
+                UNION SELECT p.site_manager_id, p.id FROM projects p
+                    WHERE p.deleted_at IS NULL AND p.status IN ('preparing','in_progress') AND p.site_manager_id IS NOT NULL
+                UNION SELECT p.sales_user_id, p.id FROM projects p
+                    WHERE p.deleted_at IS NULL AND p.status IN ('preparing','in_progress') AND p.sales_user_id IS NOT NULL
+             ) t WHERE uid IN ($in) GROUP BY uid"
+        );
+        $projBy = array_column($projRows, 'c', 'uid');
+        $schedRows = Db::all(
+            "SELECT sp.user_id uid, COUNT(*) c FROM schedule_participants sp
+             JOIN schedules s ON s.id=sp.schedule_id
+                  AND s.event_date<=CURDATE() AND COALESCE(s.end_date, s.event_date)>=CURDATE()
+             WHERE sp.user_id IN ($in) GROUP BY sp.user_id"
+        );
+        $schedBy = array_column($schedRows, 'c', 'uid');
+
+        $roleLabel = ['sales_manager' => '영업', 'site_manager' => '현장', 'staff' => '직원'];
+        $out = [];
+        foreach ($emps as $e) {
+            $id = (int) $e['id'];
+            $out[] = [
+                'id'       => $id,
+                'name'     => $e['name'],
+                'color'    => $e['color'] ?: Stages::defaultColorFor($id),
+                'role'     => $roleLabel[$e['role_key']] ?? '직원',
+                'projects' => (int) ($projBy[$id] ?? 0),
+                'today'    => (int) ($schedBy[$id] ?? 0),
+            ];
+        }
+        usort($out, fn($a, $b) => [$b['projects'], $b['today']] <=> [$a['projects'], $a['today']]);
+        return $out;
+    }
+
+    /**
+     * 최근 활동(boss ⑦ 섹션) — 영업(신규 문의)·계약 상태 변경·프로젝트 상태 변경·공정 이동을 시간순 통합.
+     * 표시·링크 가공은 뷰가 담당(kind: lead|contract|project|process).
+     */
+    private function recentActivity(int $limit = 10): array
+    {
+        $limit = max(1, min(30, $limit));
+        return Db::all(
+            "(SELECT 'contract' AS kind, h.changed_at AS at, c.id AS ref_id, c.contract_no AS title,
+                     h.from_status AS f, h.to_status AS t, u.name AS actor
+                FROM contract_status_history h
+                JOIN contracts c ON c.id=h.contract_id AND c.deleted_at IS NULL
+                LEFT JOIN users u ON u.id=h.changed_by)
+             UNION ALL
+             (SELECT 'project', h.changed_at, p.id, p.name, h.from_status, h.to_status, u.name
+                FROM project_status_history h
+                JOIN projects p ON p.id=h.project_id AND p.deleted_at IS NULL
+                LEFT JOIN users u ON u.id=h.changed_by)
+             UNION ALL
+             (SELECT 'process', h.changed_at, p.id, p.name, fs.name, ts.name, u.name
+                FROM project_process_history h
+                JOIN projects p ON p.id=h.project_id AND p.deleted_at IS NULL
+                LEFT JOIN process_stages fs ON fs.id=h.from_stage_id
+                JOIN process_stages ts ON ts.id=h.to_stage_id
+                LEFT JOIN users u ON u.id=h.changed_by)
+             UNION ALL
+             (SELECT 'lead', l.created_at, l.id, cu.name, NULL, l.work_type, u.name
+                FROM leads l
+                JOIN customers cu ON cu.id=l.customer_id
+                LEFT JOIN users u ON u.id=l.sales_user_id
+                WHERE l.deleted_at IS NULL)
+             ORDER BY at DESC LIMIT $limit"
+        );
     }
 
     // ═══════════════════════ SALES (영업관리자) ═══════════════════════
@@ -207,8 +357,7 @@ class DashboardController
         View::render('dashboard/site', [
             'title'    => '현장 대시보드',
             'me'       => $u,
-            'kpi'      => $this->siteKpi($uid),
-            'attn'     => $this->attention($uid),
+            'kpi'      => $this->siteKpi($uid), // '주의' 레일 항목(지연·미배정·일지·검수)은 KPI 가 동일 표시 — attn 데이터 불필요(R3)
             'process'  => $this->processChips($uid),
             'pgroups'  => $this->processGroupCounts($uid),
             'schedule' => $this->scheduleSummary($uid),
@@ -255,8 +404,8 @@ class DashboardController
         $mine = "(p.sales_user_id=:a OR p.site_manager_id=:b OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:c))";
         $mp = [':a' => $uid, ':b' => $uid, ':c' => $uid];
         $out = [
-            'today'    => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date=CURDATE()", [':u' => $uid])],
-            'week'     => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date>=CURDATE() AND s.event_date<CURDATE()+INTERVAL 7 DAY", [':u' => $uid])],
+            'today'    => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date<=CURDATE() AND COALESCE(s.end_date, s.event_date)>=CURDATE()", [':u' => $uid])],
+            'week'     => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date<CURDATE()+INTERVAL 7 DAY AND COALESCE(s.end_date, s.event_date)>=CURDATE()", [':u' => $uid])],
             'projects' => ['value' => $this->countProjects("status IN ('preparing','in_progress')", $mine, $mp)],
             'unread'   => ['value' => (int) Db::val("SELECT COUNT(*) FROM notifications WHERE user_id=:u AND is_read=0", [':u' => $uid])],
         ];
@@ -342,14 +491,16 @@ class DashboardController
         $revenue = (float) AccountingService::confirmedRevenue($mFrom, $mTo);
         $cost    = (float) AccountingService::confirmedCost($mFrom, $mTo);
         return [
-            'revenue'          => $revenue,                                              // 확정매출
+            'revenue'          => $revenue,                                              // 확정 매출(공급가액)
             'contracted'       => (float) AccountingService::contractedAmount($mFrom, $mTo), // 이번달 수주액(신규)
             'pipeline'         => (float) AccountingService::weightedPipeline(),          // 가중 예상매출
             'expected_rev'     => (float) AccountingService::expectedRevenue(),           // 진행+미착공 공급가
             'actual_cost'      => $cost,
             'confirmed_profit' => (float) AccountingService::confirmedProfit($mFrom, $mTo),
             'profit_rate'      => Calc::profitRate($revenue, $cost),
+            'paid_total'       => (float) AccountingService::paidTotal($mFrom, $mTo),     // 이번달 입금 총액(VAT 포함)
             'receivable'       => (float) AccountingService::receivable(),
+            'receivable_count' => AccountingService::receivableCount(),                    // 미수금 발생 계약 수(재무 현황이 흡수)
             'goal'             => $this->goal(null),
         ];
     }
@@ -383,9 +534,12 @@ class DashboardController
     {
         [$scope, $p] = $this->siteScope($uid);
         $soon = date('Y-m-d', strtotime('+7 day'));
+        // T8: 3단 단순 상태(대기/공정/완료) — 공정보드·분석과 동일 그룹(StatusService 단일 출처)
+        $in = static fn(string $g): string => "status IN ('" . implode("','", StatusService::simpleStatuses($g)) . "')";
         return [
-            ['label' => '착공 예정', 'n' => $this->countProjects("status='preparing'", $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'preparing']],
-            ['label' => '진행 중',   'n' => $this->countProjects("status='in_progress'", $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'in_progress']],
+            ['label' => StatusService::SIMPLE_LABELS['waiting'], 'n' => $this->countProjects($in('waiting'), $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'preparing']],
+            ['label' => StatusService::SIMPLE_LABELS['working'], 'n' => $this->countProjects($in('working'), $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'in_progress']],
+            ['label' => StatusService::SIMPLE_LABELS['done'],    'n' => $this->countProjects($in('done'), $scope, $p),    'route' => 'projects.index', 'params' => ['status' => 'completed']],
             ['label' => '지연',      'n' => $this->countProjects($this->delayedCond(), $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'],
             ['label' => '검수 대기', 'n' => $this->inspectionPending($uid), 'route' => 'process.board', 'params' => [], 'sev' => 'warn'],
             ['label' => '준공 임박', 'n' => $this->countProjects("status='in_progress' AND end_date IS NOT NULL AND end_date BETWEEN CURDATE() AND '$soon'", $scope, $p), 'route' => 'projects.index', 'params' => []],
@@ -403,11 +557,16 @@ class DashboardController
              GROUP BY COALESCE(ps.stage_key,'')", $p
         );
         $by = array_column($rows, 'cnt', 'stage_key');
+        // R8: 도장·인테리어 양 유형의 단계→그룹 매핑을 합산(인테리어 단계 체류 프로젝트 누락 방지)
+        $mapAll = Stages::processStageToGroup('interior') + Stages::processStageToGroup('painting');
+        $groupN = [];
+        foreach ($by as $sk => $cnt) {
+            $gk = $mapAll[$sk] ?? 'prep';
+            $groupN[$gk] = ($groupN[$gk] ?? 0) + (int) $cnt;
+        }
         $out = [];
         foreach (Stages::processGroups() as $gkey => $g) {
-            $n = 0;
-            foreach ($g['stages'] as $sk) { $n += (int) ($by[$sk] ?? 0); }
-            $out[] = ['label' => $g['label'], 'color' => $g['color'], 'n' => $n];
+            $out[] = ['label' => $g['label'], 'color' => $g['color'], 'n' => (int) ($groupN[$gkey] ?? 0)];
         }
         return $out;
     }
@@ -419,6 +578,7 @@ class DashboardController
             "SELECT s.title, s.start_datetime, s.event_date, s.slot, s.type, p.name AS project_name
              FROM schedules s LEFT JOIN projects p ON p.id=s.project_id
              WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u)
+               AND (s.project_id IS NULL OR p.status NOT IN ('cancelled','terminated'))
                AND s.event_date>=CURDATE() AND s.event_date<CURDATE()+INTERVAL 7 DAY
              ORDER BY s.event_date, FIELD(s.slot,'am','pm','night') LIMIT 8", [':u' => $uid]
         );
@@ -436,8 +596,9 @@ class DashboardController
     }
 
     /**
-     * 직원 성과 표(boss). 담당 프로젝트수·이번달 수주액(담당)·순이익 기여(확정)·순이익률(가중)·회사기여율·일정준수율.
-     * 순이익 기여 = 완료 프로젝트만·공급가 기준(AccountingService::employeeConfirmedContribution).
+     * 직원 성과 표(boss) — T9 기여율(contribution_pct) 기반 7항목:
+     * 참여·완료 프로젝트수, 기여매출·기여원가·기여순이익(확정), 입금 기여, 이번 달 실적, 순이익률(가중), 회사기여율, 일정준수율.
+     * 전체금액 100% 중복 귀속 금지 — 기여율 없으면 성과 미반영(AccountingService 단일 산식).
      */
     private function staffPerformance(): array
     {
@@ -445,20 +606,15 @@ class DashboardController
         $users = Db::all("SELECT id, name, role_key FROM users WHERE deleted_at IS NULL AND status='active' AND role_key IN ('sales_manager','site_manager','staff') ORDER BY name");
         if (!$users) { return []; }
 
-        // 담당 프로젝트 수(배정+담당)
-        $cntRows = Db::all(
-            "SELECT uid, COUNT(DISTINCT pid) c FROM (
-                SELECT pa.user_id uid, pa.project_id pid FROM project_assignments pa JOIN projects p ON p.id=pa.project_id AND p.deleted_at IS NULL
-                UNION SELECT p.sales_user_id uid, p.id pid FROM projects p WHERE p.deleted_at IS NULL AND p.sales_user_id IS NOT NULL
-                UNION SELECT p.site_manager_id uid, p.id pid FROM projects p WHERE p.deleted_at IS NULL AND p.site_manager_id IS NOT NULL
-             ) t GROUP BY uid"
-        );
-        $cntBy = array_column($cntRows, 'c', 'uid');
-        // 일정 준수율(완료 프로젝트 중 기한 내 완료 비율)
+        // 참여 프로젝트 = 기여율>0 배정 기준(T9: 전체금액 100% 중복 귀속 금지 — 기여율 없으면 미반영)
+        $cntBy = AccountingService::employeeProjectCountByUser();
+        // 일정 준수율(완료 프로젝트 중 기한 내 완료 비율) — 분자·분모 모집단 동일(completed+settled).
+        // 분자에 상태 조건이 없으면 warranty(준공일 보존) 프로젝트가 분자에만 포함되어 100% 초과 가능(acctverify 수정).
         $onRows = Db::all(
             "SELECT pa.user_id uid,
-                    SUM(CASE WHEN p.actual_end_date IS NOT NULL AND (p.end_date IS NULL OR p.actual_end_date<=p.end_date) THEN 1 ELSE 0 END) ontime,
-                    SUM(CASE WHEN p.status='completed' THEN 1 ELSE 0 END) done
+                    SUM(CASE WHEN p.status IN ('completed','settled') AND p.actual_end_date IS NOT NULL
+                             AND (p.end_date IS NULL OR p.actual_end_date<=p.end_date) THEN 1 ELSE 0 END) ontime,
+                    SUM(CASE WHEN p.status IN ('completed','settled') THEN 1 ELSE 0 END) done
              FROM project_assignments pa JOIN projects p ON p.id=pa.project_id AND p.deleted_at IS NULL
              GROUP BY pa.user_id"
         );
@@ -467,20 +623,27 @@ class DashboardController
 
         // 회사 전체 확정순이익(회사기여율 분모) — 루프 밖 1회 조회(N+1 방지)
         $companyProfit = (float) AccountingService::companyConfirmedProfit();
+        // 직원별 기여매출·기여원가·기여순이익·완료수(누적) + 월별 실적(이번 달) + 입금 기여 — 전부 기여율 기반 일괄 조회(T9)
+        $confirmedBy = AccountingService::employeeConfirmedByUser();
+        $monthBy     = AccountingService::employeeConfirmedByUser($mFrom, $mTo);
+        $paidBy      = AccountingService::employeePaidByUser();
 
         $roleLabel = ['sales_manager' => '영업', 'site_manager' => '현장', 'staff' => '직원'];
         $out = [];
         foreach ($users as $usr) {
             $id = (int) $usr['id'];
-            $contrib = (float) AccountingService::employeeConfirmedContribution($id);
-            $attrRev = (float) AccountingService::employeeConfirmedRevenue($id);
+            $contrib = (float) ($confirmedBy[$id]['contrib'] ?? 0);
+            $attrRev = (float) ($confirmedBy[$id]['revenue'] ?? 0);
             $on = $onBy[$id] ?? ['ontime' => 0, 'done' => 0];
             $out[] = [
                 'user_id'      => $id,
                 'name'         => $usr['name'],
                 'role'         => $roleLabel[$usr['role_key']] ?? '직원',
                 'assigned'     => (int) ($cntBy[$id] ?? 0),
-                'contracted'   => (float) AccountingService::contractedAmount($mFrom, $mTo, $id),
+                'done'         => (int) ($confirmedBy[$id]['done'] ?? 0),
+                'attr_cost'    => (float) ($confirmedBy[$id]['cost'] ?? 0),
+                'paid_contrib' => (float) ($paidBy[$id] ?? 0),
+                'month_contrib'=> (float) ($monthBy[$id]['contrib'] ?? 0),
                 'contrib'      => $contrib,
                 'attr_rev'     => $attrRev,
                 'margin'       => Calc::rate($contrib, $attrRev),        // 귀속순이익÷귀속매출×100
@@ -495,11 +658,11 @@ class DashboardController
 
     // ═══════════════════════ 차트 JSON ═══════════════════════
 
+    /** boss 대시보드 차트 — 월별추이만(영업단계 도넛은 R3 에서 제거, stage_groups 는 sales 전용). */
     private function bossCharts(): array
     {
         return [
             'monthly_trend' => $this->monthlyTrend(),
-            'stage_groups'  => $this->stageGroupDist(null),
         ];
     }
 
@@ -531,15 +694,13 @@ class DashboardController
         return $out;
     }
 
-    /** 영업단계 6그룹 분포(도넛). */
-    private function stageGroupDist(?int $uid): array
+    /** 영업단계 6그룹 분포(도넛) — sales 대시보드 전용(본인 담당 리드). r4-refactor(T10): 미사용 전사(null) 분기 제거. */
+    private function stageGroupDist(int $uid): array
     {
-        $scope = $uid !== null ? ' AND l.sales_user_id=:u' : '';
-        $p = $uid !== null ? [':u' => $uid] : [];
         $rows = Db::all(
             "SELECT ps.stage_key, COUNT(l.id) cnt FROM pipeline_stages ps
-             LEFT JOIN leads l ON l.stage_id=ps.id AND l.deleted_at IS NULL $scope
-             GROUP BY ps.stage_key", $p
+             LEFT JOIN leads l ON l.stage_id=ps.id AND l.deleted_at IS NULL AND l.sales_user_id=:u
+             GROUP BY ps.stage_key", [':u' => $uid]
         );
         $by = array_column($rows, 'cnt', 'stage_key');
         $out = [];
@@ -555,7 +716,7 @@ class DashboardController
 
     private function delayedCond(): string
     {
-        return "status<>'completed' AND status<>'cancelled' AND end_date IS NOT NULL AND end_date<CURDATE() AND actual_end_date IS NULL";
+        return "status NOT IN ('completed','settled','cancelled','terminated') AND end_date IS NOT NULL AND end_date<CURDATE() AND actual_end_date IS NULL";
     }
 
     private function countProjects(string $cond, string $scope = '1=1', array $params = []): int
@@ -572,12 +733,10 @@ class DashboardController
         );
     }
 
+    /** 미수금 발생 계약 수 — AccountingService 단일 출처(receivable() 과 동일 모집단). */
     private function receivableCount(): int
     {
-        return (int) Db::val(
-            "SELECT COUNT(*) FROM contracts c WHERE c.deleted_at IS NULL
-              AND c.contract_amount > COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.contract_id=c.id AND p.status='paid'),0)"
-        );
+        return AccountingService::receivableCount();
     }
 
     private function conversionRate(?int $uid): ?float
@@ -625,7 +784,8 @@ class DashboardController
         [$scope, $p] = $this->siteScope($uid);
         return (int) Db::val(
             "SELECT COUNT(*) FROM projects p JOIN process_stages ps ON ps.id=p.process_stage_id
-             WHERE p.deleted_at IS NULL AND p.status='in_progress' AND ps.requires_confirm=1 AND ($scope)", $p
+             WHERE p.deleted_at IS NULL AND p.status='in_progress' AND ps.requires_confirm=1
+               AND ps.stage_key<>'full_complete' AND ($scope)", $p
         );
     }
 
