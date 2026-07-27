@@ -16,7 +16,7 @@ $canAmount = $halfPerf !== null; // 금액 열람 가능(performance.view_all) �
       <div class="page-sub">전체 <?= (int) $pg['total'] ?>명 · 실적 요약: <?= e(Util::halfLabel($vy, $vh)) ?></div>
     </div>
     <div class="page-actions">
-      <a href="<?= e(url('halfyear.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">반기 현황</a>
+      <a href="<?= e(url('halfyear.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">반기 보너스 지급 현황</a>
       <a href="<?= e(url('bonus.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">보너스 지급 현황</a>
     </div>
   </div>

@@ -224,7 +224,7 @@ class BonusController
         }
 
         View::render('halfyear/index', [
-            'title'        => '반기 현황',
+            'title'        => '반기 보너스 지급 현황',
             'f'            => $f,
             'years'        => self::yearOptions(),
             'users'        => $this->userOptions($f['canAll']),

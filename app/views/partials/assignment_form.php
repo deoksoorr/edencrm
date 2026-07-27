@@ -44,7 +44,6 @@ $afRoles = AssignmentsController::ROLES;
   <input type="hidden" name="status" value="active">
   <div class="field">
     <label class="field-label">직원 <span class="req">*</span></label>
-    <input type="text" class="input af-search" placeholder="이름·부서·직책 검색" autocomplete="off" aria-label="직원 검색">
     <select name="user_id" class="select af-user" required>
       <option value="">직원 선택</option>
       <?php foreach ($afUsers as $u):
@@ -77,24 +76,8 @@ $afRoles = AssignmentsController::ROLES;
   'use strict';
   var form = document.getElementById('afForm-<?= $projectId ?>');
   if (!form) return;
-  var search = form.querySelector('.af-search');
   var select = form.querySelector('.af-user');
   var errBox = form.querySelector('.af-error');
-  // 전체 옵션 사본(placeholder 제외) — 필터 시 재구성(사파리 option hidden 미지원 대응)
-  var master = Array.prototype.slice.call(select.options, 1);
-
-  search.addEventListener('input', function () {
-    var q = search.value.trim().toLowerCase();
-    var cur = select.value;
-    while (select.options.length > 1) select.remove(1);
-    master.forEach(function (opt) {
-      if (!q || (opt.getAttribute('data-search') || '').indexOf(q) !== -1) select.add(opt);
-    });
-    // 필터 후에도 기존 선택이 목록에 있으면 유지
-    if (cur && Array.prototype.some.call(select.options, function (o) { return o.value === cur && !o.disabled; })) {
-      select.value = cur;
-    }
-  });
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();

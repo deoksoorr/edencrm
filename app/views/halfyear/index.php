@@ -1,6 +1,6 @@
 <?php
 /**
- * 반기 현황(halfyear.index) — 매출/순이익/현장 보너스 3개 섹션 + 직원별 표(view_all).
+ * 반기 보너스 지급 현황(halfyear.index) — 매출/순이익/현장 보너스 3개 섹션 + 직원별 표(view_all).
  * @var array $f            필터 {year, half, userId, projectId, payStatus, canAll}
  * @var int[] $years        연도 선택지
  * @var array $users        직원 필터 옵션
@@ -23,7 +23,7 @@ foreach ($users as $u) {
 <div class="page">
   <div class="page-head">
     <div>
-      <h1 class="page-title">반기 현황
+      <h1 class="page-title">반기 보너스 지급 현황
         <?php if ($isClosed): ?><span class="badge badge-warn" title="반기 종료 — 보너스 수정·삭제 시 사유 필수">마감</span><?php endif; ?>
       </h1>
       <div class="page-sub"><?= e(Util::halfLabel($f['year'], $f['half'])) ?><?= $scoped ? ' · ' . e($selUserName) . ' 귀속 기준' : ' · 전사 기준' ?></div>

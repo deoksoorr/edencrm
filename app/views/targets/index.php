@@ -34,7 +34,7 @@ $isCount = static fn (string $m): bool => in_array($m, GoalService::COUNT_METRIC
   <div class="card mb-14">
     <div class="card-head">
       <div class="card-title">목표 원장</div>
-      <div class="muted fs-12">실적 기준: 매출=확정 매출(완납·공급가) · 순이익=완료 프로젝트(공급가−실제원가) · 계약=계약일 · 입금=입금일 — 대시보드·리포트·반기 현황과 동일 산식</div>
+      <div class="muted fs-12">실적 기준: 매출=확정 매출(완납·공급가) · 순이익=완료 프로젝트(공급가−실제원가) · 계약=계약일 · 입금=입금일 — 대시보드·리포트·반기 보너스 지급 현황과 동일 산식</div>
     </div>
     <div class="card-body">
       <form method="get" class="toolbar" action="<?= e($GLOBALS['config']['BASE_URL']) ?>/index.php">

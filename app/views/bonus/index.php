@@ -14,7 +14,7 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
       <div class="page-sub"><?= e(Util::halfLabel($f['year'], $f['half'])) ?> 현장 보너스 원장<?= $f['canAll'] ? '' : ' · 본인 내역만 표시' ?></div>
     </div>
     <div class="page-actions">
-      <a href="<?= e(url('halfyear.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">반기 현황</a>
+      <a href="<?= e(url('halfyear.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">반기 보너스 지급 현황</a>
       <a href="<?= e(url('bonus.history', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">변경 이력</a>
     </div>
   </div>
