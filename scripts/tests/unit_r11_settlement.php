@@ -85,19 +85,22 @@ try {
     //    현재 예외 입금 순액: X1 = 4+6-2+3 = 11,000,000 · X2 = 500,000
     $rev = AccountingService::confirmedRevenue();
     t_int('projectNetPaid(X1) = 11,000,000', 11000000, AccountingService::projectNetPaid($xp));
-    Db::insert('payments', ['project_id' => $xp2, 'pay_type' => 'etc', 'amount' => 700000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('예외 직접 입금 +700,000 → 확정 매출 증분 동일', 700000, AccountingService::confirmedRevenue() - $rev);
+    // 예외 프로젝트(계약 미연결) 직접 입금 770,000 → 공급가(÷1.1) = 700,000 (R12 VAT 제외)
+    Db::insert('payments', ['project_id' => $xp2, 'pay_type' => 'etc', 'amount' => 770000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    t_int('예외 직접 입금 770,000 → 확정 매출 증분 700,000(공급가·VAT 제외)', 700000, AccountingService::confirmedRevenue() - $rev);
     // 취소 전환 → 즉시 차감
-    $cancelId = (int) Db::val("SELECT id FROM payments WHERE project_id=:p AND amount=700000", [':p' => $xp2]);
+    $cancelId = (int) Db::val("SELECT id FROM payments WHERE project_id=:p AND amount=770000", [':p' => $xp2]);
     Db::update('payments', ['status' => 'cancelled'], 'id=:id', [':id' => $cancelId]);
     t_int('입금 취소 → 확정 매출 원복', 0, AccountingService::confirmedRevenue() - $rev);
 
-    // ── 4) 직원 귀속 — 예외 프로젝트 입금 × 기여도 ──
+    // ── 4) 직원 귀속 — 예외 프로젝트 입금 × 기여도 (현금·공급가 두 축) ──
     Db::insert('project_assignments', ['project_id' => $xp, 'user_id' => 2, 'role' => '현장책임자', 'contribution_pct' => 80]);
     Db::insert('project_assignments', ['project_id' => $xp, 'user_id' => 3, 'role' => '보조작업자', 'contribution_pct' => 20]);
-    $paidBy = AccountingService::employeePaidByUser(date('Y-m-d'), date('Y-m-d'));
-    t_true('user2 입금 기여 ≥ 8,800,000 (X1 11M×80%)', ($paidBy[2] ?? 0) >= 8800000);
-    t_int('단건==배치 등가(user2)', AccountingService::employeeConfirmedRevenue(2, date('Y-m-d'), date('Y-m-d')), (int) ($paidBy[2] ?? 0));
+    $paidBy = AccountingService::employeePaidByUser(date('Y-m-d'), date('Y-m-d')); // 현금(VAT 포함)
+    $confBy = AccountingService::employeeConfirmedByUser(date('Y-m-d'), date('Y-m-d')); // 공급가(VAT 제외)
+    t_int('user2 입금 기여(현금) = 8,800,000 (X1 11M×80%)', 8800000, (int) ($paidBy[2] ?? 0));
+    t_int('user2 귀속 매출(공급가) = 8,000,000 (X1 10M×80%)', 8000000, (int) ($confBy[2]['revenue'] ?? 0));
+    t_int('단건==배치 등가(user2 공급가)', AccountingService::employeeConfirmedRevenue(2, date('Y-m-d'), date('Y-m-d')), (int) ($confBy[2]['revenue'] ?? 0));
 
     // ── 5) 미수금 — 예외 프로젝트 포함 ──
     $recvBefore = AccountingService::receivable();

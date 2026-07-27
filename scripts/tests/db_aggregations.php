@@ -20,8 +20,8 @@ try {
     Db::insert('payments', ['contract_id' => $conId, 'pay_type' => 'middle', 'amount' => 60000000, 'status' => 'pending']);
     t_int('C 미수금 증분 60,000,000', 60000000, AccountingService::receivable() - $recvBefore);
 
-    // ── 대사 F: 확정매출(R11 입금 기준) — 프로젝트 완료 여부 무관, 입금(순액)만 인식(VAT 포함 현금 축).
-    //    취소 계약이라도 미환불 입금은 현금으로 남아 있으므로 확정 매출에 포함(환불 시 차감). ──
+    // ── 대사 F: 확정매출(R12 공급가액·VAT 제외) — 입금 시점 인식, 계약 supply/총액 비율 적용.
+    //    취소 계약이라도 미환불 입금은 현금으로 남아 확정 매출에 포함(환불 시 비례 차감). ──
     $revBefore = AccountingService::confirmedRevenue();
     $profitBefore = AccountingService::confirmedProfit();
     Db::insert('projects', ['project_no' => 'TP-DONE', 'customer_id' => $cid, 'name' => '완료', 'contract_amount' => 55000000,
@@ -35,9 +35,9 @@ try {
     $fCanCon = Db::insert('contracts', ['contract_no' => 'TC-FCANCEL', 'customer_id' => $cid, 'contract_amount' => 22000000,
         'supply_amount' => 20000000, 'vat_amount' => 2000000, 'status' => 'cancelled', 'payment_status' => 'paid']);
     Db::insert('payments', ['contract_id' => $fCanCon, 'pay_type' => 'down', 'amount' => 22000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('F 확정매출 증분=입금 합 77,000,000 (55M 유효 + 22M 취소계약 미환불 입금)', 77000000,
+    t_int('F 확정매출 증분=공급가 합 70,000,000 (50M 유효 + 20M 취소계약 미환불 입금)', 70000000,
         AccountingService::confirmedRevenue() - $revBefore);
-    t_int('F 확정순이익 = 확정매출(입금) − 원가 총액 = +77,000,000 (지출 0)', 77000000,
+    t_int('F 확정순이익 = 확정매출(공급가) − 원가 총액 = +70,000,000 (지출 0)', 70000000,
         AccountingService::confirmedProfit() - $profitBefore);
 
     // ── 대사 G: 계약1·입금3·비용5·직원2 → 계약액 중복 합산 안 됨 ──
@@ -54,21 +54,24 @@ try {
     t_int('G 미수금 +80,000,000 (3입금 중복없음)', 80000000, AccountingService::receivable() - $recvGBefore);
 
     for ($i = 0; $i < 5; $i++) { Db::insert('costs', ['project_id' => $gPid, 'type' => 'actual', 'category' => 'material', 'amount' => 14000000]); }
-    t_int('G 일부 입금(30/110M) → 확정매출 증분 30,000,000 (R11 입금 기준 즉시 인식)', 30000000,
-        AccountingService::confirmedRevenue() - $revG);
-    // 잔액 80,000,000 입금 → 입금 4건 합 110,000,000 그대로 1회 합산(원가5건·직원2 중복 없음)
+    // 계약 110M(공급 100M) 부분 입금 30M → 확정매출 = 30M × 100/110 = 27,272,727.27 (공급가 비례)
+    //   전역 합계 반올림 특성상 기존 데이터의 소수부와 합쳐져 ±1원 경계 오차 가능 — 비례배분의 고유 특성.
+    $gPartialDelta = AccountingService::confirmedRevenue() - $revG;
+    t_true('G 일부 입금(30/110M) → 확정매출 증분 ≈ 27,272,727 (공급가 비례·±1)',
+        abs($gPartialDelta - 27272727) <= 1);
+    // 잔액 80,000,000 입금 → 완납: 입금 4건 합 110M × 100/110 = 공급가 100,000,000
     Db::insert('payments', ['contract_id' => $gCon, 'pay_type' => 'etc', 'amount' => 80000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('G 완납 → 확정매출 증분=입금 총액 110,000,000(1회·중복 없음)', 110000000, AccountingService::confirmedRevenue() - $revG);
+    t_int('G 완납 → 확정매출 증분=공급가 100,000,000(1회·중복 없음)', 100000000, AccountingService::confirmedRevenue() - $revG);
 
-    // G 기여액(R11): 직원2 = 입금 110M×70% − 원가 70M×70% = 77M − 49M = 28,000,000
-    //               직원3 = 33M − 21M = 12,000,000 (정확 델타)
+    // G 기여액(R12): 직원2 = 공급가 100M×70% − 원가 70M×70% = 70M − 49M = 21,000,000
+    //               직원3 = 30M − 21M = 9,000,000 (정확 델타 · VAT 제외)
     $c2Before = AccountingService::employeeConfirmedContribution(2);
     $c3Before = AccountingService::employeeConfirmedContribution(3);
     Db::insert('project_assignments', ['project_id' => $gPid, 'user_id' => 2, 'role' => '현장책임자', 'contribution_pct' => 70]);
     Db::insert('project_assignments', ['project_id' => $gPid, 'user_id' => 3, 'role' => '도장작업자', 'contribution_pct' => 30]);
-    t_int('G 직원2 확정기여 정확히 +28,000,000 (입금 77M − 원가 49M)', 28000000,
+    t_int('G 직원2 확정기여 정확히 +21,000,000 (공급 70M − 원가 49M)', 21000000,
         AccountingService::employeeConfirmedContribution(2) - $c2Before);
-    t_int('G 직원3 확정기여 정확히 +12,000,000 (입금 33M − 원가 21M)', 12000000,
+    t_int('G 직원3 확정기여 정확히 +9,000,000 (공급 30M − 원가 21M)', 9000000,
         AccountingService::employeeConfirmedContribution(3) - $c3Before);
 
     // ── 예상매출: preparing/in_progress 프로젝트 공급가액 합 ──
@@ -155,7 +158,8 @@ try {
     t_int('C 순입금 = 11,000,000 − 3,300,000 = +7,700,000', 7700000, AccountingService::paidTotal() - $paidCBefore);
     t_int('C 환불 후 미수금 +3,300,000 (환불분 재미수)', 3300000, AccountingService::receivable() - $recvCBefore);
     t_int('C 환불 총액(별도 축) +3,300,000', 3300000, AccountingService::refundTotal() - $refCBefore);
-    t_int('C 확정 매출 증분 +7,700,000 (R11 입금 기준 — 환불 차감 후 순입금)', 7700000,
+    // 계약 11M(공급 10M) 전액 입금 후 3.3M 환불 → 순입금 7.7M × 10/11 = 공급가 7,000,000
+    t_int('C 확정 매출 증분 +7,000,000 (공급가·VAT 제외 — 환불 비례 차감)', 7000000,
         AccountingService::confirmedRevenue() - $revCBefore);
 
     // ══ 사용자 시나리오 D: 계약 파기(terminated) — 계약 22,000,000, 입금 6,600,000 후 파기 ══
@@ -172,7 +176,8 @@ try {
         'contract_date' => date('Y-m-d')]);
     t_int('D 파기 프로젝트 → 수주액 증분 0', 0, AccountingService::contractedAmount() - $ctrDBefore);
     t_int('D 파기 프로젝트 → 예상 매출 증분 0', 0, AccountingService::expectedRevenue() - $expDBefore);
-    t_int('D 파기 계약 미환불 입금 6,600,000 → 확정 매출 유지(R11 현금 기준 — 환불 시에만 차감)', 6600000,
+    // 파기 계약 22M(공급 20M) 미환불 입금 6.6M → 확정 매출 = 6.6M × 20/22 = 공급가 6,000,000
+    t_int('D 파기 계약 미환불 입금 6,600,000 → 확정 매출 공급가 6,000,000(환불 시에만 차감)', 6000000,
         AccountingService::confirmedRevenue() - $revDBefore);
     // 성과 제외: 파기 프로젝트 배정은 확정 기여에 포함되지 않는다
     $dC4Before = AccountingService::employeeConfirmedContribution(4);
@@ -181,7 +186,7 @@ try {
     // 위약금·정산은 별도 축(contract_terminations) — 기록해도 확정 매출 불변
     Db::insert('contract_terminations', ['contract_id' => $dCon, 'terminated_date' => date('Y-m-d'),
         'reason' => '테스트 파기', 'refund_amount' => 0, 'penalty_amount' => 1000000, 'settlement_amount' => 500000]);
-    t_int('D 위약금·정산 기록 후에도 확정 매출 불변(별도 축)', 6600000, AccountingService::confirmedRevenue() - $revDBefore);
+    t_int('D 위약금·정산 기록 후에도 확정 매출 불변(별도 축)', 6000000, AccountingService::confirmedRevenue() - $revDBefore);
 
 } finally {
     $pdo->rollBack();

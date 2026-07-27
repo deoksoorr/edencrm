@@ -75,16 +75,18 @@ chk "정산 완료 전환" "$(echo "$R" | jval "['data']['settlement_status_afte
 echo "== 13~15) 반기 매출·순이익·보너스 산정 반영 =="
 api "costs.save" -d "project_id=$PID&type=actual&cost_status=confirmed&category=material&amount=1000000" --data-urlencode "spent_date=$(date +%Y-%m-%d)" >/dev/null
 HY=$(curl -s -b "$J" "$B?r=halfyear.index")
-echo "$HY" | grep -q "확정매출(입금 기준)" && ok "반기 화면 R11 라벨" || ng "반기 라벨 미반영"
+echo "$HY" | grep -q "확정매출(공급가액)" && ok "반기 화면 R12 라벨(공급가액)" || ng "반기 라벨 미반영"
 BC=$(curl -s -b "$J" "$B?r=bonus.calc&project_id=$PID")
-chk "보너스 base=순입금 5,000,000" "$(echo "$BC" | jval "['data']['base']")" "5000000"
+# R12: 보너스 산정 대상 매출 = 확정 매출(공급가·VAT 제외) = 입금 5,000,000 ÷ 1.1 = 4,545,455
+chk "보너스 base=확정매출 공급가 4,545,455" "$(echo "$BC" | jval "['data']['base']")" "4545455"
 chk "보너스 배정 직원 2명 반환" "$(echo "$BC" | jval "['data']['assignees'].__len__()")" "2"
 
 echo "== 16) 환불 500,000 → 확정 매출 차감·정산 강등 =="
 R=$(api "projects.payment.save" -d "project_id=$PID&kind=refund&amount=500000")
 echo "$R" | grep -q '"ok":true' && ok "환불 등록" || ng "환불 실패: $R"
 BC=$(curl -s -b "$J" "$B?r=bonus.calc&project_id=$PID")
-chk "환불 차감 후 base=4,500,000" "$(echo "$BC" | jval "['data']['base']")" "4500000"
+# R12: 환불 500k 차감 후 순입금 4,500,000 ÷ 1.1 = 4,090,909 (공급가)
+chk "환불 차감 후 base=공급가 4,090,909" "$(echo "$BC" | jval "['data']['base']")" "4090909"
 SHOW=$(curl -s -b "$J" "$B?r=projects.show&id=$PID")
 echo "$SHOW" | grep -q "환불 발생" && ok "환불 발생 배지" || ng "환불 배지 없음"
 echo "$SHOW" | grep -q "일부 정산" && ok "정산 강등(일부 정산)" || ng "정산 강등 미동작"

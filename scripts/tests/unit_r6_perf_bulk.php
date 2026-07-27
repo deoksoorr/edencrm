@@ -33,22 +33,26 @@ try {
 
     $cid = Db::insert('customers', ['type' => 'company', 'name' => 'TEST성과대사', 'status' => 'active']);
 
-    // P1: 완료·당월 — R11 입금 기준: 입금 30,000,000(당월) / 확정 지출 18,000,000(순이익 12,000,000) · 영업 user2
-    //     (프로젝트 직접 입금 경로 사용 — 계약 경유와 동일 산식임은 배치==단건 등가가 증명)
-    $p1 = Db::insert('projects', ['project_no' => 'PB-1', 'customer_id' => $cid, 'name' => '당월완료',
+    // P1: 완료·당월 — 계약 33M(공급 30M) 완납(당월) / 확정 지출 18,000,000(순이익 12,000,000) · 영업 user2
+    //     R12: 확정 매출 = 공급가액(VAT 제외) = 33M × 30/33 = 30,000,000(완납 시 공급가와 일치)
+    $c1 = Db::insert('contracts', ['contract_no' => 'PBC-1', 'customer_id' => $cid, 'contract_amount' => 33000000,
+        'supply_amount' => 30000000, 'vat_amount' => 3000000, 'status' => 'active', 'payment_status' => 'paid']);
+    $p1 = Db::insert('projects', ['project_no' => 'PB-1', 'customer_id' => $cid, 'name' => '당월완료', 'contract_id' => $c1,
         'contract_amount' => 33000000, 'supply_amount' => 30000000, 'vat_amount' => 3000000, 'actual_cost' => 18000000,
         'status' => 'completed', 'actual_end_date' => $today, 'contract_date' => $today, 'sales_user_id' => 2]);
-    Db::insert('payments', ['project_id' => $p1, 'pay_type' => 'etc', 'amount' => 30000000, 'status' => 'paid', 'paid_date' => $today]);
+    Db::insert('payments', ['contract_id' => $c1, 'pay_type' => 'etc', 'amount' => 33000000, 'status' => 'paid', 'paid_date' => $today]);
     Db::insert('costs', ['project_id' => $p1, 'type' => 'actual', 'cost_status' => 'confirmed', 'category' => 'material',
         'amount' => 18000000, 'spent_date' => $today]);
     Db::insert('project_assignments', ['project_id' => $p1, 'user_id' => 2, 'role' => '현장책임자', 'contribution_pct' => 60]);
     Db::insert('project_assignments', ['project_id' => $p1, 'user_id' => 3, 'role' => '도장작업자', 'contribution_pct' => 40]);
 
-    // P2: 완료·전월 — 입금 10,000,000(전월) / 확정 지출 4,000,000(순이익 6,000,000) · 영업 user3 · 배정 user2 100%
-    $p2 = Db::insert('projects', ['project_no' => 'PB-2', 'customer_id' => $cid, 'name' => '전월완료',
+    // P2: 완료·전월 — 계약 11M(공급 10M) 완납(전월) / 확정 지출 4,000,000(순이익 6,000,000) · 영업 user3 · 배정 user2 100%
+    $c2 = Db::insert('contracts', ['contract_no' => 'PBC-2', 'customer_id' => $cid, 'contract_amount' => 11000000,
+        'supply_amount' => 10000000, 'vat_amount' => 1000000, 'status' => 'active', 'payment_status' => 'paid']);
+    $p2 = Db::insert('projects', ['project_no' => 'PB-2', 'customer_id' => $cid, 'name' => '전월완료', 'contract_id' => $c2,
         'contract_amount' => 11000000, 'supply_amount' => 10000000, 'vat_amount' => 1000000, 'actual_cost' => 4000000,
         'status' => 'completed', 'actual_end_date' => $lastM, 'contract_date' => $lastM, 'sales_user_id' => 3]);
-    Db::insert('payments', ['project_id' => $p2, 'pay_type' => 'etc', 'amount' => 10000000, 'status' => 'paid', 'paid_date' => $lastM]);
+    Db::insert('payments', ['contract_id' => $c2, 'pay_type' => 'etc', 'amount' => 11000000, 'status' => 'paid', 'paid_date' => $lastM]);
     Db::insert('costs', ['project_id' => $p2, 'type' => 'actual', 'cost_status' => 'confirmed', 'category' => 'material',
         'amount' => 4000000, 'spent_date' => $lastM]);
     Db::insert('project_assignments', ['project_id' => $p2, 'user_id' => 2, 'role' => '현장책임자', 'contribution_pct' => 100]);

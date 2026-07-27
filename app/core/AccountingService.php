@@ -89,11 +89,13 @@ class AccountingService
         return 1.0 / (1.0 + self::vatRate() / 100.0);
     }
 
-    /** 입금 1건의 공급가 비율 SQL 조각(R12) — 계약 연결분은 계약 supply/총액, 그 외(예외 등)는 폴백 :sr.
+    /** 입금 1건의 공급가액(VAT 제외) SQL 조각(R12) — 계약 연결분은 (순액 × supply/총액), 그 외(예외 등)는 순액 × :sr.
+     *  곱셈을 먼저 수행해 DECIMAL 나눗셈 정밀도 손실(공급비율 반올림)을 피한다.
      *  별칭 pm=payments, c=contracts(LEFT). :sr 파라미터(vatSupplyRatio) 바인딩 필요. */
-    private const SUPPLY_RATIO_CASE =
-        "CASE WHEN pm.contract_id IS NOT NULL AND c.contract_amount > 0 AND c.supply_amount IS NOT NULL
-              THEN c.supply_amount / c.contract_amount ELSE :sr END";
+    private const PAY_SUPPLY_SQL =
+        "(CASE WHEN pm.contract_id IS NOT NULL AND c.contract_amount > 0 AND c.supply_amount IS NOT NULL
+               THEN (CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END) * c.supply_amount / c.contract_amount
+               ELSE (CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END) * :sr END)";
 
     /** 확정 매출(공급가액·VAT 제외 — R12 사장 지시) = Σ순입금(paid, payment−refund)의 공급가 부분.
      *  입금 시점 인식(귀속 = paid_date), 계약 입금 + 예외 프로젝트 직접 입금 공통 산식.
@@ -105,9 +107,7 @@ class AccountingService
         $p = [':sr' => self::vatSupplyRatio()];
         $r = self::range('pm.paid_date', $from, $to, $p);
         return (int) round((float) Db::val(
-            "SELECT COALESCE(SUM(
-                (CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END) * " . self::SUPPLY_RATIO_CASE . "
-             ),0)
+            "SELECT COALESCE(SUM(" . self::PAY_SUPPLY_SQL . "),0)
              FROM payments pm " . self::PAY_SOURCE_JOIN . "
              WHERE pm.status='paid' AND " . self::PAY_SOURCE_COND . " $r", $p));
     }
@@ -424,8 +424,7 @@ class AccountingService
         $p = [':u' => $uid, ':sr' => self::vatSupplyRatio()];
         $r = self::range('pm.paid_date', $from, $to, $p);
         return (int) round((float) Db::val(
-            "SELECT COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
-                * " . self::SUPPLY_RATIO_CASE . " * pa.contribution_pct/100),0)
+            "SELECT COALESCE(SUM(" . self::PAY_SUPPLY_SQL . " * pa.contribution_pct/100),0)
             FROM payments pm " . self::PAY_PROJECT_JOIN . "
             JOIN project_assignments pa ON pa.project_id = pj2.id AND pa.user_id=:u AND pa.contribution_pct > 0
             WHERE pm.status='paid' AND (pm.contract_id IS NULL OR c.id IS NOT NULL) $r", $p));
@@ -446,8 +445,7 @@ class AccountingService
         $pr = [':sr' => self::vatSupplyRatio()];
         $rr = self::range('pm.paid_date', $from, $to, $pr);
         foreach (Db::all("SELECT pa.user_id AS uid,
-                COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
-                    * " . self::SUPPLY_RATIO_CASE . " * pa.contribution_pct/100),0) AS revenue
+                COALESCE(SUM(" . self::PAY_SUPPLY_SQL . " * pa.contribution_pct/100),0) AS revenue
             FROM payments pm " . self::PAY_PROJECT_JOIN . "
             JOIN project_assignments pa ON pa.project_id = pj2.id AND pa.contribution_pct > 0
             WHERE pm.status='paid' AND (pm.contract_id IS NULL OR c.id IS NOT NULL) $rr
