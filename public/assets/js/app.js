@@ -150,7 +150,7 @@
       const data = await api(route, new FormData(form));
       toast(form.dataset.success || '저장되었습니다.', 'success');
       if (form.dataset.redirect) location.href = routeUrl(form.dataset.redirect, data && data.id ? { id: data.id } : {});
-      else if (form.dataset.reload) location.reload();
+      else if (form.dataset.reload !== undefined) location.reload();
       document.dispatchEvent(new CustomEvent('eden:saved', { detail: { form, data } }));
     } catch (err) {
       toast(err.message, 'error');
@@ -158,6 +158,62 @@
       if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset._t; }
     }
   });
+
+  /**
+   * 저장 완료된 폼 페이지의 뒤로가기 복원 무효화 + 중복 제출 방지.
+   * 브라우저는 back/forward 시 세션 히스토리(크롬·파이어폭스) 또는 bfcache(iOS 사파리)로
+   * 제출했던 입력값을 그대로 되살린다 → "저장 후 이전 입력값 잔존"·재제출 중복 등록·
+   * stale 페이지의 IME 오동작(iOS)으로 이어진다. 저장이 "성공"(성공 플래시 페이지 도착)한
+   * 제출원 폼 URL 만 마킹해 두고, 그 URL 로 back/forward 복귀 시 서버 재렌더한다.
+   * 검증 실패(성공 플래시 없음) 후 뒤로가기는 마킹하지 않아 재작성 입력값을 보존한다.
+   */
+  const PEND_KEY = 'eden:formPending';
+  const DONE_KEY = 'eden:formDone:';
+  // 히스토리 엔트리별 고유 ID — 같은 URL 을 새로 열어도(새 엔트리) 이전 제출 엔트리와 구분된다.
+  // back/forward 재실행·bfcache 복원 시에는 history.state 가 보존되어 기존 ID 를 유지한다.
+  let entrySid = null;
+  try {
+    entrySid = history.state && history.state.edenSid;
+    if (!entrySid) {
+      entrySid = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      history.replaceState(Object.assign({}, history.state, { edenSid: entrySid }), '');
+    }
+  } catch (err) { /* 무시 */ }
+  document.addEventListener('submit', function (e) {
+    const form = e.target;
+    if (e.defaultPrevented || !form.matches || form.matches('form[data-ajax]')) return;
+    if ((form.method || '').toLowerCase() !== 'post') return;
+    try { if (entrySid) sessionStorage.setItem(PEND_KEY, entrySid); } catch (err) { /* 프라이빗 모드 등 */ }
+    // 중복 제출 방지 — 제출 확정(defaultPrevented 아님) 후 버튼 잠금. disable 은 폼 직렬화
+    // 이후에 적용되도록 지연하고, 뒤로가기로 문서가 되살아나면 pageshow 에서 해제한다.
+    const btn = form.querySelector('button[type="submit"], input[type="submit"]');
+    if (btn && !btn.dataset.busy) {
+      btn.dataset.busy = '1';
+      setTimeout(() => { btn.disabled = true; }, 0);
+    }
+  });
+  window.addEventListener('pageshow', function (e) {
+    document.querySelectorAll('[data-busy]').forEach((b) => { b.disabled = false; delete b.dataset.busy; });
+    const nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+    if (!e.persisted && (!nav || nav.type !== 'back_forward')) return;
+    try {
+      const sid = history.state && history.state.edenSid;
+      if (sid && sessionStorage.getItem(DONE_KEY + sid) === '1') {
+        sessionStorage.removeItem(DONE_KEY + sid);
+        location.reload();
+      }
+    } catch (err) { /* 무시 */ }
+  });
+  try {
+    const pending = sessionStorage.getItem(PEND_KEY);
+    if (pending) {
+      sessionStorage.removeItem(PEND_KEY);
+      // 저장 성공(성공 플래시 도착) 시에만 제출원 엔트리를 무효화 — 검증 실패 후 재작성 입력은 보존
+      if (sf && sf.classList.contains('flash-success') && pending !== entrySid) {
+        sessionStorage.setItem(DONE_KEY + pending, '1');
+      }
+    }
+  } catch (err) { /* 무시 */ }
 
   /** 사이드바(모바일) */
   const hamburger = document.getElementById('hamburger');
