@@ -61,8 +61,8 @@ class StaffController
             $halfPerf = AccountingService::employeeConfirmedByUser($range['from'], $range['to']); // GROUP BY user 배치(N+1 금지)
             $bonusPaid = [];
             foreach (Db::all(
-                "SELECT user_id, COALESCE(SUM(paid_amount),0) AS s FROM site_bonuses
-                 WHERE deleted_at IS NULL AND pay_status <> 'cancelled' AND year = :y AND half = :h
+                "SELECT user_id, COALESCE(SUM(confirmed_bonus),0) AS s FROM site_bonuses
+                 WHERE deleted_at IS NULL AND pay_status = 'paid' AND year = :y AND half = :h
                  GROUP BY user_id",
                 [':y' => $vy, ':h' => $vh]
             ) as $b) {

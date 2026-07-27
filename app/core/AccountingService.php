@@ -83,20 +83,54 @@ class AccountingService
         "((pm.contract_id IS NOT NULL AND c.deleted_at IS NULL)
           OR (pm.project_id IS NOT NULL AND pj.deleted_at IS NULL))";
 
-    /** 확정 매출(입금 기준, R11 통일 — R7 완납 기준 대체) = Σ순입금(paid, payment−refund).
-     *  계약 입금 + 예외 프로젝트 직접 입금 공통 산식, 귀속 = paid_date(VAT 포함 현금 축).
-     *  실제 입금된 금액만 반영·미입금 제외·환불/취소 차감 — 프로젝트 완료 여부와 무관.
+    /** 공급가 비율(VAT 제외 환산) = 1 ÷ (1 + 부가세율/100). 계약 supply/총액 비율이 없을 때의 폴백(예외 프로젝트 등). */
+    public static function vatSupplyRatio(): float
+    {
+        return 1.0 / (1.0 + self::vatRate() / 100.0);
+    }
+
+    /** 입금 1건의 공급가 비율 SQL 조각(R12) — 계약 연결분은 계약 supply/총액, 그 외(예외 등)는 폴백 :sr.
+     *  별칭 pm=payments, c=contracts(LEFT). :sr 파라미터(vatSupplyRatio) 바인딩 필요. */
+    private const SUPPLY_RATIO_CASE =
+        "CASE WHEN pm.contract_id IS NOT NULL AND c.contract_amount > 0 AND c.supply_amount IS NOT NULL
+              THEN c.supply_amount / c.contract_amount ELSE :sr END";
+
+    /** 확정 매출(공급가액·VAT 제외 — R12 사장 지시) = Σ순입금(paid, payment−refund)의 공급가 부분.
+     *  입금 시점 인식(귀속 = paid_date), 계약 입금 + 예외 프로젝트 직접 입금 공통 산식.
+     *  실제 입금된 금액만 반영·미입금 제외·환불/취소 차감. 부가세(예수금)는 매출이 아니므로 제외한다.
+     *  현금 축(VAT 포함 입금 총액)은 paidTotal() — 두 값은 부가세만큼 다르다.
      *  대시보드·리포트·반기·목표 달성률이 전부 이 메서드 하나를 호출한다(중복 구현 금지). */
     public static function confirmedRevenue(?string $from = null, ?string $to = null): int
     {
-        $p = [];
+        $p = [':sr' => self::vatSupplyRatio()];
         $r = self::range('pm.paid_date', $from, $to, $p);
-        return (int) Db::val("SELECT COALESCE(SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END),0)
-            FROM payments pm " . self::PAY_SOURCE_JOIN . "
-            WHERE pm.status='paid' AND " . self::PAY_SOURCE_COND . " $r", $p);
+        return (int) round((float) Db::val(
+            "SELECT COALESCE(SUM(
+                (CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END) * " . self::SUPPLY_RATIO_CASE . "
+             ),0)
+             FROM payments pm " . self::PAY_SOURCE_JOIN . "
+             WHERE pm.status='paid' AND " . self::PAY_SOURCE_COND . " $r", $p));
     }
 
-    /** 확정 순이익(R11) = 확정 매출(입금 기준) − 원가 총액(costs 확정 actual, spent_date 기준).
+    /** 프로젝트 1건의 확정 매출(공급가액·VAT 제외, R12) = 순입금 × 공급가 비율.
+     *  계약 연결은 계약 supply/총액 비율, 예외 프로젝트는 부가세율 환산(vatSupplyRatio).
+     *  프로젝트 상세 손익·보너스 산정 대상 매출이 공유한다. */
+    public static function projectConfirmedRevenue(array $p): int
+    {
+        if (!empty($p['contract_id'])) {
+            $cid = (int) $p['contract_id'];
+            $c = Db::one("SELECT contract_amount, supply_amount FROM contracts WHERE id = :id", [':id' => $cid]);
+            $net = self::contractNetPaid($cid);
+            $ratio = ($c && (int) $c['contract_amount'] > 0 && $c['supply_amount'] !== null)
+                ? (float) $c['supply_amount'] / (float) $c['contract_amount']
+                : self::vatSupplyRatio();
+            return (int) round($net * $ratio);
+        }
+        // 예외 프로젝트(계약 미연결) — 직접 입금 순액을 부가세율로 공급가 환산
+        return (int) round(self::projectNetPaid((int) ($p['id'] ?? 0)) * self::vatSupplyRatio());
+    }
+
+    /** 확정 순이익(R12) = 확정 매출(공급가액·VAT 제외) − 원가 총액(costs 확정 actual, spent_date 기준).
      *  완료 모집단(준공일 귀속) 산식 폐기 — 프로젝트 완료 여부만으로 손익을 확정하지 않는다. */
     public static function confirmedProfit(?string $from = null, ?string $to = null): int
     {
@@ -252,11 +286,16 @@ class AccountingService
         return $contract + $exception;
     }
 
-    /** 입금 총액(VAT 포함, 순입금) = Σ payments(kind='payment') − Σ payments(kind='refund')
-     *  — status='paid', 입금일(paid_date) 기준. R11: 계약 + 예외 프로젝트 직접 입금 공통 모집단. */
+    /** 입금 총액(VAT 포함, 순입금·현금 축) = Σ payments(kind='payment') − Σ payments(kind='refund')
+     *  — status='paid', 입금일(paid_date) 기준. 계약 + 예외 프로젝트 직접 입금 공통 모집단.
+     *  R12: 확정 매출(공급가액·VAT 제외)과 분리 — 이 값은 실제 입금된 현금(부가세 포함) 그대로다. */
     public static function paidTotal(?string $from = null, ?string $to = null): int
     {
-        return self::confirmedRevenue($from, $to); // R11 통일 — 확정 매출(입금 기준)과 동일 산식(단일 출처)
+        $p = [];
+        $r = self::range('pm.paid_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END),0)
+            FROM payments pm " . self::PAY_SOURCE_JOIN . "
+            WHERE pm.status='paid' AND " . self::PAY_SOURCE_COND . " $r", $p);
     }
 
     /** 환불 총액(VAT 포함, 별도 축) = Σ payments(kind='refund', status='paid') — 입금일(paid_date) 기준. R11 공통 모집단. */
@@ -379,30 +418,42 @@ class AccountingService
                AND (pj2.id = pm.project_id OR (pm.contract_id IS NOT NULL AND pj2.contract_id = pm.contract_id))
           ";
 
-    /** 직원 귀속 확정매출(R11) = Σ 프로젝트 순입금(paid, payment−refund) × 기여도 — 귀속 = paid_date. */
+    /** 직원 귀속 확정매출(공급가액·VAT 제외, R12) = Σ 프로젝트 순입금의 공급가 부분 × 기여도 — 귀속 = paid_date. */
     public static function employeeConfirmedRevenue(int $uid, ?string $from = null, ?string $to = null): int
     {
-        $p = [':u' => $uid];
+        $p = [':u' => $uid, ':sr' => self::vatSupplyRatio()];
         $r = self::range('pm.paid_date', $from, $to, $p);
-        return (int) Db::val("SELECT COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
-                * pa.contribution_pct/100),0)
+        return (int) round((float) Db::val(
+            "SELECT COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+                * " . self::SUPPLY_RATIO_CASE . " * pa.contribution_pct/100),0)
             FROM payments pm " . self::PAY_PROJECT_JOIN . "
             JOIN project_assignments pa ON pa.project_id = pj2.id AND pa.user_id=:u AND pa.contribution_pct > 0
-            WHERE pm.status='paid' AND (pm.contract_id IS NULL OR c.id IS NOT NULL) $r", $p);
+            WHERE pm.status='paid' AND (pm.contract_id IS NULL OR c.id IS NOT NULL) $r", $p));
     }
 
     /**
-     * 직원별 확정 기여액·귀속매출 일괄 조회(R11) — employeeConfirmedContribution/Revenue 와
-     * 동일 산식(입금×기여도 − 확정 지출×기여도)의 배치 버전(N+1 제거). 집계 0 인 직원은 키 부재(=0 취급).
-     * revenue = Σ 프로젝트 순입금 × 기여도(paid_date 귀속), cost = Σ 확정 지출 × 기여도(spent_date 귀속),
-     * contrib = revenue − cost, done = 기간 내 준공(완료·정산) 참여 프로젝트 수(참고 지표).
+     * 직원별 확정 기여액·귀속매출 일괄 조회(R12) — employeeConfirmedContribution/Revenue 와
+     * 동일 산식(공급가 매출×기여도 − 확정 지출×기여도)의 배치 버전(N+1 제거). 집계 0 인 직원은 키 부재(=0 취급).
+     * revenue = Σ 프로젝트 순입금의 공급가 부분(VAT 제외) × 기여도(paid_date 귀속),
+     * cost = Σ 확정 지출 × 기여도(spent_date 귀속), contrib = revenue − cost,
+     * done = 기간 내 준공(완료·정산) 참여 프로젝트 수(참고 지표).
      * @return array<int, array{contrib:int, revenue:int, cost:int, done:int}>
      */
     public static function employeeConfirmedByUser(?string $from = null, ?string $to = null): array
     {
         $out = [];
-        foreach (self::employeePaidByUser($from, $to) as $uid => $paid) {
-            $out[$uid] = ['contrib' => $paid, 'revenue' => $paid, 'cost' => 0, 'done' => 0];
+        // 귀속 매출 = 공급가액(VAT 제외) × 기여도 — 현금(employeePaidByUser)과 분리(R12)
+        $pr = [':sr' => self::vatSupplyRatio()];
+        $rr = self::range('pm.paid_date', $from, $to, $pr);
+        foreach (Db::all("SELECT pa.user_id AS uid,
+                COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+                    * " . self::SUPPLY_RATIO_CASE . " * pa.contribution_pct/100),0) AS revenue
+            FROM payments pm " . self::PAY_PROJECT_JOIN . "
+            JOIN project_assignments pa ON pa.project_id = pj2.id AND pa.contribution_pct > 0
+            WHERE pm.status='paid' AND (pm.contract_id IS NULL OR c.id IS NOT NULL) $rr
+            GROUP BY pa.user_id", $pr) as $row) {
+            $uid = (int) $row['uid'];
+            $out[$uid] = ['contrib' => (int) round((float) $row['revenue']), 'revenue' => (int) round((float) $row['revenue']), 'cost' => 0, 'done' => 0];
         }
         $p = [];
         $r = self::range('cs.spent_date', $from, $to, $p);

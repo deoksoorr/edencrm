@@ -4,7 +4,7 @@
 $statusLabels = ['active' => '재직', 'inactive' => '비활성'];
 $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관리자', 'site_manager' => '현장관리자', 'staff' => '직원', 'accountant' => '회계'];
 $projStatusLabels = ['preparing' => '준비중', 'in_progress' => '진행중', 'paused' => '중지', 'completed' => '완료', 'settled' => '정산', 'cancelled' => '취소', 'terminated' => '파기'];
-$payStatusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$payStatusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
 ?>
 <div class="page">
@@ -132,7 +132,7 @@ $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' 
     <div class="table-wrap">
       <table class="data compact">
         <thead>
-          <tr><th>프로젝트</th><th class="num">산정 대상 금액</th><th>산정 기준</th><th class="num">산정액</th><th class="num">지급액</th><th>지급일</th><th>상태</th><th>메모</th></tr>
+          <tr><th>프로젝트</th><th class="num">산정 대상 금액</th><th>산정 기준</th><th class="num">산정액</th><th class="num">확정 보너스</th><th>지급일</th><th>상태</th><th>메모</th></tr>
         </thead>
         <tbody>
           <?php foreach ($bonuses as $b): ?>
@@ -140,8 +140,8 @@ $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' 
               <td><?= $b['project_id'] ? e($b['project_name'] ?? ('#' . $b['project_id'])) : '<span class="muted">-</span>' ?></td>
               <td class="num mono"><?= moneyCell((float) $b['base_amount']) ?></td>
               <td><?= e($b['calc_basis'] ?? '-') ?></td>
-              <td class="num mono"><?= moneyCell((float) $b['calc_amount']) ?></td>
-              <td class="num mono"><?= moneyCell((float) $b['paid_amount']) ?></td>
+              <td class="num mono muted"><?= moneyCell((float) $b['calc_amount']) ?></td>
+              <td class="num mono"><b><?= moneyCell((float) $b['confirmed_bonus']) ?></b></td>
               <td><?= $b['pay_date'] ? e(fmtdate($b['pay_date'])) : '-' ?></td>
               <td><span class="badge <?= e($payStatusBadge[$b['pay_status']] ?? 'badge-info') ?>"><?= e($payStatusLabels[$b['pay_status']] ?? $b['pay_status']) ?></span></td>
               <td class="bonus-memo" title="<?= e($b['memo'] ?? '') ?>"><?= e(Util::truncate($b['memo'] ?? '-', 20)) ?></td>

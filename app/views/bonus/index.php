@@ -4,8 +4,8 @@
  * @var array $f @var int[] $years @var array $users @var array $projects
  * @var array $bonuses @var array $bonusTotals @var bool $canManage @var array $formUsers
  */
-$statusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
-$statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
+$statusLabels = ['unpaid' => '미지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
 ?>
 <div class="page">
   <div class="page-head">
@@ -65,8 +65,12 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
     <table class="data compact">
       <thead>
         <tr>
-          <th>직원</th><th>프로젝트</th><th>반기</th><th class="num">산정 대상 매출</th><th class="num">기여도 적용 매출</th>
-          <th class="num">산정액</th><th class="num">지급액</th><th class="num">미지급액</th>
+          <th>직원</th><th>프로젝트</th><th>반기</th>
+          <th class="num" title="확정 매출(공급가액·VAT 제외)">산정 대상 매출</th>
+          <th class="num" title="산정 대상 매출 × 기여율">적용 매출</th>
+          <th class="num" title="(확정 매출 − 지출) × 기여율 — 참고">적용 순이익</th>
+          <th class="num" title="적용 매출 × 보너스율 — 참고 계산값">산정액</th>
+          <th class="num" title="관리자가 확정한 실제 지급 금액 — 지급완료 시 이 금액만 지급">확정 보너스</th>
           <th>지급일</th><th>상태</th><th>지급담당자</th><th>메모</th>
           <?php if ($canManage): ?><th>관리</th><?php endif; ?>
         </tr>
@@ -82,10 +86,11 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
                 'year' => (int) $b['year'], 'half' => (int) $b['half'],
                 'base_amount' => (int) $b['base_amount'], 'calc_basis' => (string) ($b['calc_basis'] ?? ''),
                 'contrib_revenue' => $b['contrib_revenue'] !== null ? (int) $b['contrib_revenue'] : '',
+                'contrib_profit' => $b['contrib_profit'] !== null ? (int) $b['contrib_profit'] : '',
                 'bonus_rate' => $b['bonus_rate'] !== null ? (float) $b['bonus_rate'] : '',
                 'project_name' => (string) ($b['project_name'] ?? ''),
                 'user_name' => (string) ($b['user_name'] ?? ''),
-                'calc_amount' => (int) $b['calc_amount'], 'paid_amount' => (int) $b['paid_amount'],
+                'calc_amount' => (int) $b['calc_amount'], 'confirmed_bonus' => (int) $b['confirmed_bonus'],
                 'pay_date' => (string) ($b['pay_date'] ?? ''), 'pay_status' => $b['pay_status'],
                 'paid_by' => $b['paid_by'] !== null ? (int) $b['paid_by'] : '',
                 'memo' => (string) ($b['memo'] ?? ''), 'closed' => $closed,
@@ -98,9 +103,9 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
             <td class="num mono"><?= moneyCell((float) $b['base_amount']) ?></td>
             <td class="num mono"><?= $b['contrib_revenue'] !== null ? moneyCell((float) $b['contrib_revenue'])
                 : ($b['calc_basis'] !== null && $b['calc_basis'] !== '' ? e($b['calc_basis']) : '<span class="muted">-</span>') ?></td>
-            <td class="num mono"><?= moneyCell((float) $b['calc_amount']) ?></td>
-            <td class="num mono"><?= moneyCell((float) $b['paid_amount']) ?></td>
-            <td class="num mono"><?= $cancelled ? '-' : moneyCell(max(0, (float) $b['calc_amount'] - (float) $b['paid_amount'])) ?></td>
+            <td class="num mono<?= $b['contrib_profit'] !== null && (int) $b['contrib_profit'] < 0 ? ' text-danger' : '' ?>"><?= $b['contrib_profit'] !== null ? moneyCell((float) $b['contrib_profit']) : '<span class="muted">-</span>' ?></td>
+            <td class="num mono muted"><?= moneyCell((float) $b['calc_amount']) ?></td>
+            <td class="num mono"><b><?= moneyCell((float) $b['confirmed_bonus']) ?></b></td>
             <td><?= $b['pay_date'] ? e(fmtdate($b['pay_date'])) : '-' ?></td>
             <td><span class="badge <?= e($statusBadge[$b['pay_status']] ?? 'badge-info') ?>"><?= e($statusLabels[$b['pay_status']] ?? $b['pay_status']) ?></span></td>
             <td><?= e($b['paid_by_name'] ?? '-') ?></td>
@@ -122,11 +127,10 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
       </tbody>
       <tfoot>
         <tr class="bonus-sum">
-          <td colspan="5">합계 (취소 건 제외)</td>
-          <td class="num mono"><?= money($bonusTotals['calc']) ?></td>
-          <td class="num mono"><?= money($bonusTotals['paid']) ?></td>
-          <td class="num mono<?= $bonusTotals['unpaid'] > 0 ? ' text-danger' : '' ?>"><?= money($bonusTotals['unpaid']) ?></td>
-          <td colspan="<?= $canManage ? 5 : 4 ?>"></td>
+          <td colspan="6">합계 (취소 건 제외)</td>
+          <td class="num mono muted" title="산정액 합계(참고)"><?= money($bonusTotals['calc']) ?></td>
+          <td class="num mono"><b><?= money($bonusTotals['confirmed']) ?></b></td>
+          <td colspan="<?= $canManage ? 5 : 4 ?>">지급완료 <b><?= money($bonusTotals['paid']) ?></b>원 · <span class="<?= $bonusTotals['unpaid'] > 0 ? 'text-danger' : 'muted' ?>">미지급 <b><?= money($bonusTotals['unpaid']) ?></b>원</span></td>
         </tr>
       </tfoot>
     </table>
@@ -193,36 +197,36 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
       '<div class="field"><label class="field-label">반기</label><select name="half" class="select">' +
         '<option value="1"' + ((b.half || CUR.half) === 1 ? ' selected' : '') + '>상반기</option>' +
         '<option value="2"' + ((b.half || CUR.half) === 2 ? ' selected' : '') + '>하반기</option></select></div>' +
-      '<div class="field"><label class="field-label">산정 대상 매출(원) <span class="muted">(누적 확정 입금−환불)</span></label><input type="text" inputmode="numeric" name="base_amount" class="input" data-bonus-base value="' + (b.base_amount || '') + '"></div>' +
-      '<div class="field"><label class="field-label">기여도 적용 매출(원) <span class="muted">(매출 × 기여율/100)</span></label><input type="text" inputmode="numeric" name="contrib_revenue" class="input" data-bonus-contrib value="' + (b.contrib_revenue === 0 || b.contrib_revenue ? b.contrib_revenue : '') + '"></div>' +
-      '<div class="field"><label class="field-label">보너스율(%) <span class="muted">(산정 = 적용 매출 × 율/100)</span></label><input type="text" inputmode="decimal" name="bonus_rate" class="input" data-bonus-rate value="' + (b.bonus_rate === 0 || b.bonus_rate ? b.bonus_rate : '') + '" placeholder="예: 5"></div>' +
-      '<div class="field"><label class="field-label">산정 금액(원)</label><input type="text" inputmode="numeric" name="calc_amount" class="input" data-bonus-calc value="' + (b.calc_amount || '') + '"></div>' +
-      '<div class="field"><label class="field-label">지급 금액(원)</label><input type="text" inputmode="numeric" name="paid_amount" class="input" value="' + (b.paid_amount || 0) + '"></div>' +
-      '<div class="field"><label class="field-label">지급일</label><input type="date" name="pay_date" class="input" value="' + esc(b.pay_date) + '"></div>' +
-      '<div class="field"><label class="field-label">지급 담당자</label><select name="paid_by" class="select">' + selOpts(USERS, b.paid_by, '(미지정)') + '</select></div>' +
+      '<div class="field"><label class="field-label">산정 대상 매출(원) <span class="muted">(확정 매출·공급가·VAT 제외)</span></label><input type="text" inputmode="numeric" name="base_amount" class="input" data-bonus-base value="' + (b.base_amount || '') + '"></div>' +
+      '<div class="field"><label class="field-label">적용 매출(원) <span class="muted">(매출 × 기여율/100)</span></label><input type="text" inputmode="numeric" name="contrib_revenue" class="input" data-bonus-contrib value="' + (b.contrib_revenue === 0 || b.contrib_revenue ? b.contrib_revenue : '') + '"></div>' +
+      '<div class="field"><label class="field-label">적용 순이익(원) <span class="muted">(참고 · (매출−지출)×기여율)</span></label><input type="text" inputmode="numeric" name="contrib_profit" class="input input-muted" data-bonus-profit value="' + (b.contrib_profit === 0 || b.contrib_profit ? b.contrib_profit : '') + '" readonly></div>' +
+      '<div class="field"><label class="field-label">보너스율(%) <span class="muted">(산정액 = 적용 매출 × 율/100)</span></label><input type="text" inputmode="decimal" name="bonus_rate" class="input" data-bonus-rate value="' + (b.bonus_rate === 0 || b.bonus_rate ? b.bonus_rate : '') + '" placeholder="예: 5"></div>' +
+      '<div class="field"><label class="field-label">산정액(원) <span class="muted">(참고 계산값)</span></label><input type="text" inputmode="numeric" name="calc_amount" class="input input-muted" data-bonus-calc value="' + (b.calc_amount || '') + '" readonly></div>' +
+      '<div class="field"><label class="field-label">확정 보너스(원) <b class="text-danger">*</b> <span class="muted">(실제 지급 금액 — 이 금액만 지급)</span></label><input type="text" inputmode="numeric" name="confirmed_bonus" class="input" data-bonus-confirmed value="' + (b.confirmed_bonus === 0 || b.confirmed_bonus ? b.confirmed_bonus : '') + '" placeholder="기본값=산정액"></div>' +
       '<div class="field span2"><label class="field-label">메모</label><input type="text" name="memo" class="input" maxlength="500" value="' + esc(b.memo) + '"></div>' +
       reasonField(b.id && b.closed) +
       '</div>' +
       '<div class="muted fs-12 mt-8" data-bonus-calc-hint></div>' +
-      '<div class="muted fs-12 mt-8">지급 상태는 지급액에 따라 자동 산정됩니다. (0=기안 완료, 산정액 미만=부분지급, 이상=지급완료)</div>' +
+      '<div class="muted fs-12 mt-8">산정액은 참고 계산값이며, <b>확정 보너스</b>가 실제 지급 대상 금액입니다. 지급 여부는 목록의 <b>지급처리</b>로 관리합니다(등록 시 미지급).</div>' +
       '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary" data-bonus-submit>저장</button></div>' +
       '</form>';
   }
 
-  /** 지급 처리 폼(부분 전송 — 서버가 나머지 필드 기존 값 유지) */
+  /** 지급 처리 폼(부분 전송 — 서버가 나머지 필드 기존 값 유지). 확정 보너스를 '지급완료'로 전환. */
   function payFormHtml(b) {
     var today = new Date().toISOString().slice(0, 10);
     return '' +
       '<form data-bonus-form class="form">' +
       '<input type="hidden" name="id" value="' + b.id + '">' +
-      '<p class="muted fs-13 mt-0">산정액 ' + Number(b.calc_amount || 0).toLocaleString() + '원 · 현재 지급액 ' + Number(b.paid_amount || 0).toLocaleString() + '원</p>' +
+      '<input type="hidden" name="pay_status" value="paid">' +
+      '<p class="muted fs-13 mt-0">산정액(참고) ' + Number(b.calc_amount || 0).toLocaleString() + '원 · 이 확정 보너스를 <b>지급완료</b>로 처리합니다. 저장된 확정 보너스만 지급됩니다.</p>' +
       '<div class="form-grid">' +
-      '<div class="field"><label class="field-label">지급 금액(원) *</label><input type="text" inputmode="numeric" name="paid_amount" class="input" value="' + (b.paid_amount || b.calc_amount || 0) + '" required></div>' +
+      '<div class="field"><label class="field-label">확정 보너스(원) *</label><input type="text" inputmode="numeric" name="confirmed_bonus" class="input" value="' + (b.confirmed_bonus || b.calc_amount || 0) + '" required></div>' +
       '<div class="field"><label class="field-label">지급일</label><input type="date" name="pay_date" class="input" value="' + esc(b.pay_date || today) + '"></div>' +
       '<div class="field"><label class="field-label">지급 담당자</label><select name="paid_by" class="select">' + selOpts(USERS, b.paid_by, '(미지정)') + '</select></div>' +
       reasonField(b.closed) +
       '</div>' +
-      '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">지급 처리</button></div>' +
+      '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">지급완료 처리</button></div>' +
       '</form>';
   }
 
@@ -252,16 +256,21 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
     });
   }
   function recalcPreview(form) {
-    var d = form._calcData;
     var contribEl = form.querySelector('[data-bonus-contrib]');
     var rateEl = form.querySelector('[data-bonus-rate]');
     var calcEl = form.querySelector('[data-bonus-calc]');
+    var confEl = form.querySelector('[data-bonus-confirmed]');
     if (!contribEl || !rateEl || !calcEl) return;
     var rate = parseFloat(String(rateEl.value).replace(/,/g, ''));
     var contrib = parseFloat(String(contribEl.value).replace(/,/g, ''));
     if (!isNaN(rate) && !isNaN(contrib)) {
-      calcEl.value = Math.round(contrib * rate / 100); // 서버와 동일: 원 단위 반올림
-      if (d) calcEl.readOnly = true;
+      var calc = Math.round(contrib * rate / 100); // 서버와 동일: 원 단위 반올림
+      calcEl.value = calc;
+      // 확정 보너스가 비어있거나 자동값이면 산정액을 기본 제안(관리자가 수정하면 고정)
+      if (confEl && (confEl.value === '' || confEl.dataset.auto === '1')) {
+        confEl.value = calc;
+        confEl.dataset.auto = '1';
+      }
     }
   }
   function applyAssignee(form) {
@@ -272,11 +281,14 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
     var uid = uidEl.value;
     var a = (d.assignees || []).filter(function (x) { return String(x.user_id) === String(uid); })[0];
     var contribEl = form.querySelector('[data-bonus-contrib]');
+    var profitEl = form.querySelector('[data-bonus-profit]');
     if (a) {
       contribEl.value = a.contrib_revenue;
-      if (hint) hint.textContent = '자동 산정: ' + a.name + ' 기여율 ' + a.pct + '% → 기여도 적용 매출 ' + won(a.contrib_revenue) + '원. 저장 시 서버가 최신 데이터로 재계산합니다.';
+      if (profitEl) profitEl.value = a.contrib_profit;
+      if (hint) hint.textContent = '자동 산정: ' + a.name + ' 기여율 ' + a.pct + '% → 적용 매출 ' + won(a.contrib_revenue) + '원 · 적용 순이익 ' + won(a.contrib_profit) + '원. 저장 시 서버가 최신 데이터로 재계산합니다.';
     } else if (uid) {
       contribEl.value = '';
+      if (profitEl) profitEl.value = '';
       if (hint) hint.textContent = '이 직원은 배정 목록에 없습니다.';
     }
     recalcPreview(form);
@@ -307,9 +319,9 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
       var d = await api('bonus.calc', { project_id: pidEl.value }, { method: 'GET' });
       form._calcData = d;
       if (info) {
-        info.innerHTML = '계약 금액 <b>' + won(d.contract_amount) + '원</b> · 누적 확정 입금 <b>' + won(d.net_paid) + '원</b> · ' +
-          '산정 대상 매출 <b>' + won(d.base) + '원</b> · 배정 ' + (d.assignees || []).length + '명(기여도 합 ' + d.pct_sum + '%)' +
-          (!d.has_contract ? ' <span class="text-danger">— 계약 미연결: 실입금 0원 기준</span>' : '') +
+        info.innerHTML = '산정 대상 매출(확정 매출·공급가) <b>' + won(d.base) + '원</b> · 누적 입금(현금) ' + won(d.net_paid) + '원 · 순이익 ' + won(d.profit_base) + '원 · ' +
+          '배정 ' + (d.assignees || []).length + '명(기여도 합 ' + d.pct_sum + '%)' +
+          (d.is_exception ? ' <span class="muted">— 예외 프로젝트(직접 입금 기준)</span>' : (!d.has_contract ? ' <span class="text-danger">— 계약 미연결: 확정 매출 0원</span>' : '')) +
           (Math.abs(d.pct_sum - 100) > 0.01 ? ' <span class="text-danger">— 기여도 합계가 100%가 아닙니다(적용 매출 합계 ≠ 산정 대상 매출)</span>' : '');
       }
       form.querySelector('[data-bonus-base]').value = d.base;
@@ -355,6 +367,8 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 
     var form = e.target.closest('form[data-bonus-form]');
     if (!form) return;
     if (e.target.matches('[data-bonus-rate],[data-bonus-contrib]')) recalcPreview(form);
+    // 확정 보너스를 직접 수정하면 자동 제안 해제(이후 산정액 변경이 덮어쓰지 않음)
+    if (e.target.matches('[data-bonus-confirmed]')) e.target.dataset.auto = '0';
   });
 
   document.addEventListener('click', function (e) {

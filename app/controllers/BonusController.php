@@ -15,8 +15,8 @@
  */
 class BonusController
 {
-    /** 지급 상태 화이트리스트. */
-    private const PAY_STATUSES = ['unpaid', 'partial', 'paid', 'cancelled'];
+    /** 지급 상태 화이트리스트(R12: 부분지급 폐지). */
+    private const PAY_STATUSES = ['unpaid', 'paid', 'cancelled'];
 
     // ── 공통 헬퍼 ──
 
@@ -105,18 +105,24 @@ class BonusController
         );
     }
 
-    /** 보너스 합계(산정액/지급액/미지급액) — cancelled 제외.
-     *  미지급액은 행 단위 max(0, 산정−지급) 합 — 과지급 행이 다른 행의 미지급을 상쇄하지 않는다(R9-2). */
+    /** 보너스 합계(R12: 확정 보너스/지급 완료액/미지급액) — cancelled 제외.
+     *  확정 보너스 = 관리자 확정 지급 금액 합. 지급완료 = pay_status='paid' 확정 보너스 합.
+     *  미지급 = pay_status='unpaid' 확정 보너스 합(아직 보내지 않은 금액). 산정액(참고)은 별도 표시. */
     private function bonusTotals(array $rows): array
     {
-        $t = ['calc' => 0, 'paid' => 0, 'unpaid' => 0];
+        $t = ['calc' => 0, 'confirmed' => 0, 'paid' => 0, 'unpaid' => 0];
         foreach ($rows as $r) {
             if ($r['pay_status'] === 'cancelled') {
                 continue;
             }
-            $t['calc'] += (int) $r['calc_amount'];
-            $t['paid'] += (int) $r['paid_amount'];
-            $t['unpaid'] += max(0, (int) $r['calc_amount'] - (int) $r['paid_amount']);
+            $confirmed = (int) $r['confirmed_bonus'];
+            $t['calc']      += (int) $r['calc_amount'];
+            $t['confirmed'] += $confirmed;
+            if ($r['pay_status'] === 'paid') {
+                $t['paid'] += $confirmed;
+            } else {
+                $t['unpaid'] += $confirmed;
+            }
         }
         return $t;
     }
@@ -200,8 +206,8 @@ class BonusController
             $contractedByUser = AccountingService::contractedAmountByUser($from, $to);
             $bonusByUser = [];
             foreach (Db::all(
-                "SELECT user_id, COALESCE(SUM(paid_amount),0) AS s FROM site_bonuses
-                 WHERE deleted_at IS NULL AND pay_status <> 'cancelled' AND year=:y AND half=:h
+                "SELECT user_id, COALESCE(SUM(confirmed_bonus),0) AS s FROM site_bonuses
+                 WHERE deleted_at IS NULL AND pay_status = 'paid' AND year=:y AND half=:h
                  GROUP BY user_id",
                 [':y' => $f['year'], ':h' => $f['half']]
             ) as $b) {
@@ -336,25 +342,24 @@ class BonusController
         ]);
     }
 
-    // ── 연동 산정 (R10 확정 산식 — 프론트는 미리보기, 저장 시 서버가 동일 산식으로 재계산) ──
-    //   산정 대상 매출 = 프로젝트 연결 계약의 누적 확정 입금(입금−환불, status='paid') — 계약 미연결이면 0.
-    //                    계약 금액을 자동 사용하지 않는다(§14 금지). 미입금·취소·pending 제외는 contractNetPaid 정의가 보장.
-    //   기여도 적용 매출 = round(산정 대상 매출 × 기여율/100). 배정 기여율 합이 100%면 잔여 원 단위를
-    //                    마지막 직원에게 배분해 Σ기여도적용매출 == 산정 대상 매출을 보장한다.
-    //   산정 금액 = round(기여도 적용 매출 × 보너스율/100). 원 단위 반올림(round) 정책 — 전 구간 통일.
+    // ── 연동 산정 (R12 산식 — 프론트는 미리보기, 저장 시 서버가 동일 산식으로 재계산) ──
+    //   산정 대상 매출 = 프로젝트 확정 매출(공급가액·VAT 제외, 입금 기준) — 계약 입금/예외 프로젝트 직접 입금 공통.
+    //   기여도 적용 매출 = round(산정 대상 매출 × 기여율/100). 배정 기여율 합 100%면 잔여 원 단위를
+    //                    마지막 직원에게 배분해 Σ = 산정 대상 매출 보장.
+    //   적용 순이익 = round((프로젝트 확정 매출 − 프로젝트 확정 지출) × 기여율/100) — 참고·경고용.
+    //   산정액(참고) = round(기여도 적용 매출 × 보너스율/100).
+    //   확정 보너스 = 관리자 확정 지급 금액(기본값 = 산정액, 수정 가능) — 지급완료 시 이 금액만 지급.
 
-    /** 프로젝트의 산정 대상 매출(실입금 기준).
-     *  R11: 예외 프로젝트(계약 미연결)는 프로젝트 직접 입금(순액) — 계약 입금과 동일 축(입금−환불, paid). */
+    /** 프로젝트의 산정 대상 매출 = 확정 매출(공급가액·VAT 제외, 입금 기준). 예외 프로젝트 포함(R12). */
     private static function projectBonusBase(array $p): int
     {
-        $contractId = (int) ($p['contract_id'] ?? 0);
-        if ($contractId > 0) {
-            return max(0, AccountingService::contractNetPaid($contractId));
-        }
-        if ((int) ($p['is_exception'] ?? 0) === 1) {
-            return max(0, AccountingService::projectNetPaid((int) $p['id']));
-        }
-        return 0;
+        return max(0, AccountingService::projectConfirmedRevenue($p));
+    }
+
+    /** 프로젝트 순이익(확정 매출 공급가 − 확정 지출) — 적용 순이익 배분의 분자(음수 가능). */
+    private static function projectProfitBase(array $p): int
+    {
+        return AccountingService::projectConfirmedRevenue($p) - (int) ($p['actual_cost'] ?? 0);
     }
 
     /** 활성 배정 직원 목록(user_id/name/pct/user_status) — 이름순 고정(잔여 배분 순서의 단일 기준). */
@@ -409,37 +414,48 @@ class BonusController
         if (!$p) {
             Response::error('프로젝트를 찾을 수 없습니다.', 404);
         }
-        $base      = self::projectBonusBase($p);
+        $base       = self::projectBonusBase($p);            // 확정 매출(공급가·VAT 제외)
+        $profitBase = self::projectProfitBase($p);           // 확정 매출 − 지출
+        $netPaid    = (int) ($p['contract_id'] ?? 0) > 0     // 현금(VAT 포함) — 참고 표시용
+            ? AccountingService::contractNetPaid((int) $p['contract_id'])
+            : ((int) ($p['is_exception'] ?? 0) === 1 ? AccountingService::projectNetPaid((int) $p['id']) : 0);
         $assignees = self::activeAssignees($projectId);
         $alloc     = self::allocateContrib($base, $assignees);
         $pctSum    = 0.0;
         $list      = [];
         foreach ($assignees as $a) {
             $pctSum += (float) $a['pct'];
+            $uidA = (int) $a['user_id'];
             $list[] = [
-                'user_id'         => (int) $a['user_id'],
+                'user_id'         => $uidA,
                 'name'            => $a['name'],
                 'pct'             => (float) $a['pct'],
                 'user_status'     => $a['user_status'],
-                'contrib_revenue' => $alloc[(int) $a['user_id']],
+                'contrib_revenue' => $alloc[$uidA],
+                'contrib_profit'  => (int) round($profitBase * (float) $a['pct'] / 100),
             ];
         }
-        $pct = null;
+        $pct = $contribProfit = null;
         foreach ($list as $a) {
             if ($a['user_id'] === $userId) {
                 $pct = $a['pct'];
+                $contribProfit = $a['contrib_profit'];
                 break;
             }
         }
         Response::json([
             'contract_amount' => (int) $p['contract_amount'],
-            'net_paid'        => $base,
-            'base'            => $base,
+            'net_paid'        => $netPaid,     // 누적 확정 입금(현금·VAT 포함) — 참고
+            'base'            => $base,        // 산정 대상 매출 = 확정 매출(공급가·VAT 제외)
+            'profit_base'     => $profitBase,  // 프로젝트 순이익(확정매출−지출)
+            'project_cost'    => (int) ($p['actual_cost'] ?? 0),
             'has_contract'    => (int) ($p['contract_id'] ?? 0) > 0,
+            'is_exception'    => (int) ($p['is_exception'] ?? 0) === 1,
             'pct_sum'         => round($pctSum, 2),
             'assignees'       => $list,
             'pct'             => $pct,
             'contribRevenue'  => $userId > 0 ? ($alloc[$userId] ?? null) : null,
+            'contribProfit'   => $contribProfit,
         ]);
     }
 
@@ -494,11 +510,16 @@ class BonusController
         };
         $base = $money('base_amount', $before['base_amount'] ?? 0);
         $calc = $money('calc_amount', $before['calc_amount'] ?? 0);
-        $paid = $money('paid_amount', $before['paid_amount'] ?? 0);
+        // R12: 확정 보너스(구 paid_amount) — 실제 지급 금액. 미전송 시 기존 값(신규는 0 → 재계산 시 산정액으로 기본).
+        $confirmedBonus = $posted('confirmed_bonus')
+            ? $money('confirmed_bonus', 0)
+            : (int) ($before['confirmed_bonus'] ?? 0);
         // 기여도 적용 매출(R9-2) — 미전송 시 기존 값 유지(레거시 행은 NULL 유지)
         $contribRev = $posted('contrib_revenue')
             ? $money('contrib_revenue', 0)
             : ($before !== null && $before['contrib_revenue'] !== null ? (int) $before['contrib_revenue'] : null);
+        // 적용 순이익(R12) — 미전송 시 기존 값 유지, 재계산 시 서버가 산출
+        $contribProfit = $before !== null && $before['contrib_profit'] !== null ? (int) $before['contrib_profit'] : null;
         // 보너스율(R10) — 0~100, 소수 2자리
         $bonusRate = $before !== null && $before['bonus_rate'] !== null ? (float) $before['bonus_rate'] : null;
         if ($posted('bonus_rate')) {
@@ -607,29 +628,29 @@ class BonusController
             $recompute = $before === null
                 || $posted('bonus_rate') || $posted('base_amount') || $posted('user_id') || $posted('project_id');
             if ($recompute) {
-                $base  = self::projectBonusBase($proj);
-                $alloc = self::allocateContrib($base, $assignees);
+                $base       = self::projectBonusBase($proj);
+                $profitBase = self::projectProfitBase($proj);
+                $alloc      = self::allocateContrib($base, $assignees);
                 if (isset($alloc[$userId])) {
                     $contribRev = $alloc[$userId];
                 } elseif ($assignPct !== null) {
                     $contribRev = (int) round($base * $assignPct / 100);
                 }
+                if ($assignPct !== null) {
+                    $contribProfit = (int) round($profitBase * $assignPct / 100);
+                }
                 if ($bonusRate !== null && $contribRev !== null) {
                     $calc = (int) round($contribRev * $bonusRate / 100);
+                }
+                // 신규 등록·재계산 시 확정 보너스 미입력이면 산정액을 기본값으로 채운다(관리자가 수정 가능)
+                if (!$posted('confirmed_bonus') && $confirmedBonus === 0) {
+                    $confirmedBonus = $calc;
                 }
             }
         }
 
-        // pay_status 보정: cancelled 명시 외에는 지급액으로 산출
-        if ($payStatusIn === 'cancelled') {
-            $payStatus = 'cancelled';
-        } elseif ($paid <= 0) {
-            $payStatus = 'unpaid';
-        } elseif ($paid < $calc) {
-            $payStatus = 'partial';
-        } else {
-            $payStatus = 'paid';
-        }
+        // R12: pay_status = 명시값(미지급/지급완료/취소)만. 부분지급 폐지 — 금액 관계로 자동 파생하지 않는다.
+        $payStatus = in_array($payStatusIn, self::PAY_STATUSES, true) ? $payStatusIn : 'unpaid';
 
         // 기여율 스냅샷: 산정(등록·재계산) 시점의 배정 기여율 보존 — 이후 배정 변경이 과거 원장을 훼손하지 않도록.
         //   지급처리 등 재계산 없는 수정은 기존 스냅샷 유지.
@@ -649,9 +670,10 @@ class BonusController
             'base_amount'              => $base,
             'calc_basis'               => $calcBasis !== '' ? $calcBasis : null,
             'contrib_revenue'          => $contribRev,
+            'contrib_profit'           => $contribProfit,
             'bonus_rate'               => $bonusRate,
             'calc_amount'              => $calc,
-            'paid_amount'              => $paid,
+            'confirmed_bonus'          => $confirmedBonus,
             'pay_date'                 => $payDate !== '' ? $payDate : null,
             'pay_status'               => $payStatus,
             'paid_by'                  => $paidBy > 0 ? $paidBy : null,
@@ -661,10 +683,10 @@ class BonusController
 
         if ($id > 0) {
             Db::update('site_bonuses', $data, 'id = :id', [':id' => $id]);
-            // 액션 판별: 취소 전환 > 지급액·상태 변경(pay) > 일반 수정
+            // 액션 판별: 취소 전환 > 확정 보너스·상태 변경(pay) > 일반 수정
             if ($payStatus === 'cancelled' && $before['pay_status'] !== 'cancelled') {
                 $action = 'cancel';
-            } elseif ((int) $before['paid_amount'] !== $paid || $before['pay_status'] !== $payStatus) {
+            } elseif ((int) $before['confirmed_bonus'] !== $confirmedBonus || $before['pay_status'] !== $payStatus) {
                 $action = 'pay';
             } else {
                 $action = 'update';
@@ -748,12 +770,14 @@ class BonusController
             }
         }
 
-        $base  = self::projectBonusBase($proj);
-        $alloc = self::allocateContrib($base, $assignees);
+        $base       = self::projectBonusBase($proj);
+        $profitBase = self::projectProfitBase($proj);
+        $alloc      = self::allocateContrib($base, $assignees);
         $ids = [];
         foreach ($targets as $a) {
             $uid = (int) $a['user_id'];
             $contribRev = (int) ($alloc[$uid] ?? 0);
+            $calc = (int) round($contribRev * $bonusRate / 100);
             $data = [
                 'user_id'                  => $uid,
                 'project_id'               => $projectId,
@@ -762,9 +786,10 @@ class BonusController
                 'base_amount'              => $base,
                 'calc_basis'               => null,
                 'contrib_revenue'          => $contribRev,
+                'contrib_profit'           => (int) round($profitBase * (float) $a['pct'] / 100),
                 'bonus_rate'               => $bonusRate,
-                'calc_amount'              => (int) round($contribRev * $bonusRate / 100),
-                'paid_amount'              => 0,
+                'calc_amount'              => $calc,
+                'confirmed_bonus'          => $calc, // 확정 보너스 기본값 = 산정액(관리자가 수정 가능)
                 'pay_date'                 => null,
                 'pay_status'               => 'unpaid',
                 'paid_by'                  => null,

@@ -7,14 +7,15 @@
  */
 $actionLabels = ['create' => '등록', 'update' => '수정', 'pay' => '지급', 'cancel' => '취소', 'delete' => '삭제'];
 $actionBadge  = ['create' => 'badge-ok', 'update' => 'badge-info', 'pay' => 'badge-ok', 'cancel' => 'badge-warn', 'delete' => 'badge-danger'];
-$statusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$statusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $diffFields   = [
     'user_id' => '직원', 'project_id' => '프로젝트', 'year' => '연도', 'half' => '반기',
-    'base_amount' => '산정 대상 금액', 'calc_basis' => '산정 기준', 'calc_amount' => '산정액',
-    'paid_amount' => '지급액', 'pay_date' => '지급일', 'pay_status' => '상태',
+    'base_amount' => '산정 대상 금액', 'calc_basis' => '산정 기준',
+    'contrib_revenue' => '적용 매출', 'contrib_profit' => '적용 순이익', 'calc_amount' => '산정액',
+    'confirmed_bonus' => '확정 보너스', 'paid_amount' => '지급액(구)', 'pay_date' => '지급일', 'pay_status' => '상태',
     'paid_by' => '지급담당자', 'memo' => '메모',
 ];
-$moneyFields = ['base_amount' => 1, 'calc_amount' => 1, 'paid_amount' => 1];
+$moneyFields = ['base_amount' => 1, 'contrib_revenue' => 1, 'contrib_profit' => 1, 'calc_amount' => 1, 'confirmed_bonus' => 1, 'paid_amount' => 1];
 $fmtVal = static function (string $key, $v) use ($statusLabels, $moneyFields): string {
     if ($v === null || $v === '') {
         return '-';
@@ -87,7 +88,9 @@ if ($canAll) {
             // 주요 필드 차이 요약(등록=후값 요약, 삭제=문구, 그 외=변경 필드만 전→후)
             $changes = [];
             if ($r['action'] === 'create' && $after) {
-                foreach (['calc_amount', 'paid_amount', 'pay_status'] as $k) {
+                // 신규 행: 확정 보너스(신) 우선, 레거시 행은 지급액(구) 폴백
+                $amtKey = array_key_exists('confirmed_bonus', $after) ? 'confirmed_bonus' : 'paid_amount';
+                foreach (['calc_amount', $amtKey, 'pay_status'] as $k) {
                     $changes[] = $diffFields[$k] . ' ' . $fmtVal($k, $after[$k] ?? null);
                 }
             } elseif ($r['action'] === 'delete') {

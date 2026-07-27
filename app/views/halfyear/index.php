@@ -8,12 +8,12 @@
  * @var array $revenueKpi   {contracted, paid, revenue, receivable, projectCount}
  * @var array $profitKpi    {revenue, costReg, costDirect, profit, profitRate}
  * @var array $bonuses      필터 적용 보너스 목록
- * @var array $bonusTotals  {calc, paid, unpaid} — cancelled 제외
+ * @var array $bonusTotals  {calc, confirmed, paid, unpaid} — cancelled 제외
  * @var array $staffRows    직원별 표(view_all 시)
  * @var bool  $isClosed     마감 반기 여부
  */
-$statusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
-$statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
+$statusLabels = ['unpaid' => '미지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
 $scoped = $f['userId'] > 0; // 특정 직원 스코프(귀속치) 여부
 $selUserName = '';
 foreach ($users as $u) {
@@ -133,7 +133,7 @@ foreach ($users as $u) {
   <!-- 직원별 표 (전체 열람 권한) -->
   <div class="card mb-14">
     <div class="card-head"><div class="card-title">직원별 반기 실적</div>
-      <div class="muted fs-12">계약금액=담당 영업 수주 · 입금=기여율 귀속 · 확정매출/순이익=완료·정산 귀속 · 보너스=지급액(취소 제외)</div>
+      <div class="muted fs-12">계약금액=담당 영업 수주 · 입금=기여율 귀속(현금) · 확정매출/순이익=공급가·입금 귀속 · 보너스=지급완료 확정 보너스(취소 제외)</div>
     </div>
     <div class="table-wrap">
       <table class="data compact">
@@ -160,10 +160,10 @@ foreach ($users as $u) {
     <div class="card-head">
       <div class="card-title">현장 보너스</div>
       <div class="muted fs-12">
-        산정액 <b class="mono"><?= money($bonusTotals['calc']) ?></b>원 ·
-        지급액 <b class="mono"><?= money($bonusTotals['paid']) ?></b>원 ·
+        확정 보너스 <b class="mono"><?= money($bonusTotals['confirmed']) ?></b>원 ·
+        지급완료 <b class="mono"><?= money($bonusTotals['paid']) ?></b>원 ·
         미지급 <b class="mono<?= $bonusTotals['unpaid'] > 0 ? ' text-danger' : '' ?>"><?= money($bonusTotals['unpaid']) ?></b>원
-        <span class="muted">(취소 건 제외)</span>
+        <span class="muted">(산정액 <?= money($bonusTotals['calc']) ?>원 · 취소 건 제외)</span>
       </div>
     </div>
     <?php if (!$bonuses): ?>
@@ -172,7 +172,7 @@ foreach ($users as $u) {
     <div class="table-wrap">
       <table class="data compact">
         <thead>
-          <tr><th>직원</th><th>프로젝트</th><th class="num">산정 대상 매출</th><th class="num">기여도 적용 매출</th><th class="num">산정액</th><th class="num">지급액</th><th class="num">미지급액</th><th>지급일</th><th>지급 담당</th><th>상태</th><th>메모</th></tr>
+          <tr><th>직원</th><th>프로젝트</th><th class="num">산정 대상 매출</th><th class="num">적용 매출</th><th class="num">적용 순이익</th><th class="num">산정액</th><th class="num">확정 보너스</th><th>지급일</th><th>지급 담당</th><th>상태</th><th>메모</th></tr>
         </thead>
         <tbody>
           <?php foreach ($bonuses as $b): $cancelled = $b['pay_status'] === 'cancelled'; ?>
@@ -182,9 +182,9 @@ foreach ($users as $u) {
               <td class="num mono"><?= moneyCell((float) $b['base_amount']) ?></td>
               <td class="num mono"><?= $b['contrib_revenue'] !== null ? moneyCell((float) $b['contrib_revenue'])
                   : ($b['calc_basis'] !== null && $b['calc_basis'] !== '' ? e($b['calc_basis']) : '<span class="muted">-</span>') ?></td>
-              <td class="num mono"><?= moneyCell((float) $b['calc_amount']) ?></td>
-              <td class="num mono"><?= moneyCell((float) $b['paid_amount']) ?></td>
-              <td class="num mono"><?= $cancelled ? '-' : moneyCell(max(0, (float) $b['calc_amount'] - (float) $b['paid_amount'])) ?></td>
+              <td class="num mono<?= $b['contrib_profit'] !== null && (int) $b['contrib_profit'] < 0 ? ' text-danger' : '' ?>"><?= $b['contrib_profit'] !== null ? moneyCell((float) $b['contrib_profit']) : '<span class="muted">-</span>' ?></td>
+              <td class="num mono muted"><?= moneyCell((float) $b['calc_amount']) ?></td>
+              <td class="num mono"><b><?= moneyCell((float) $b['confirmed_bonus']) ?></b></td>
               <td><?= $b['pay_date'] ? e(fmtdate($b['pay_date'])) : '-' ?></td>
               <td><?= $b['paid_by'] ? e($b['paid_by_name'] ?? ('#' . $b['paid_by'])) : '<span class="muted">-</span>' ?></td>
               <td><span class="badge <?= e($statusBadge[$b['pay_status']] ?? 'badge-info') ?>"><?= e($statusLabels[$b['pay_status']] ?? $b['pay_status']) ?></span></td>
