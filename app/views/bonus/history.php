@@ -7,7 +7,7 @@
  */
 $actionLabels = ['create' => '등록', 'update' => '수정', 'pay' => '지급', 'cancel' => '취소', 'delete' => '삭제'];
 $actionBadge  = ['create' => 'badge-ok', 'update' => 'badge-info', 'pay' => 'badge-ok', 'cancel' => 'badge-warn', 'delete' => 'badge-danger'];
-$statusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$statusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $diffFields   = [
     'user_id' => '직원', 'project_id' => '프로젝트', 'year' => '연도', 'half' => '반기',
     'base_amount' => '산정 대상 금액', 'calc_basis' => '산정 기준', 'calc_amount' => '산정액',

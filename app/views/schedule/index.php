@@ -1,5 +1,5 @@
 <?php
-/** @var array $users @var array $projects @var array $slots @var bool $canManage @var bool $canManageAll */
+/** @var array $users @var array $projects @var array $slots @var array $types @var bool $canManage @var bool $canManageAll */
 ?>
 <div class="page">
   <div class="page-head">
@@ -31,12 +31,18 @@
     <select class="select" id="fProject">
       <option value="">전체 프로젝트</option>
       <?php foreach ($projects as $p): ?>
-        <option value="<?= (int) $p['id'] ?>"><?= e($p['project_no']) ?> · <?= e($p['name']) ?></option>
+        <option value="<?= (int) $p['id'] ?>"><?= !empty($p['is_exception']) ? '[예외] ' : '' ?><?= e($p['project_no']) ?> · <?= e($p['name']) ?></option>
       <?php endforeach; ?>
     </select>
-    <button class="btn btn-outline btn-sm" type="button" id="btnPrev">‹ 이전</button>
-    <button class="btn btn-outline btn-sm" type="button" id="btnToday">오늘</button>
-    <button class="btn btn-outline btn-sm" type="button" id="btnNext">다음 ›</button>
+    <select class="select" id="fSlot" title="시간대 필터 — 복수 시간대 일정은 해당하는 모든 시간대에서 조회됩니다">
+      <option value="">전체 시간대</option>
+      <?php foreach ($slots as $sk => $sl): ?>
+        <option value="<?= e($sk) ?>"><?= e($sl) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <button class="btn btn-outline" type="button" id="btnPrev">‹ 이전</button>
+    <button class="btn btn-outline" type="button" id="btnToday">오늘</button>
+    <button class="btn btn-outline" type="button" id="btnNext">다음 ›</button>
     <span class="page-info" id="curRangeLabel"></span>
   </div>
 
@@ -55,6 +61,7 @@ $initData = [
     'meId'         => (int) Auth::id(),
     'users'        => $users,
     'slots'        => $slots,
+    'types'        => $types, // 유형 목록 단일 출처(Stages::scheduleTypes — R6: vacation 제외)
 ];
 ?>
 <script>window.SCHED_INIT = <?= json_encode($initData, JSON_UNESCAPED_UNICODE) ?>;</script>

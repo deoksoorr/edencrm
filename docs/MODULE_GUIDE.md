@@ -35,9 +35,19 @@ public/assets/js/app.js, public/index.php, 다른 모듈의 파일. (CSS 클래�
 ## 핵심 계약값
 - 권한키·역할키·단계키·전체 컬럼은 `docs/DB_INTERFACE.md` 참조(그대로 사용, 컬럼 추정 금지).
 - 계산 산식은 `docs/ARCHITECTURE.md` 8절 = `Calc` 클래스.
-- 프로젝트 상태코드: preparing/in_progress/paused/completed 등(projects.status VARCHAR). contribution_mode: main/ratio/role.
+- **상태코드(R2 확정 — StatusService 단일 출처)**
+  - 계약(contracts.status): `draft`(작성중)/`active`(계약 진행)/`on_hold`(계약 보류)/`completed`(계약 완료)/`cancelled`(계약 취소)/`terminated`(계약 파기).
+    파기는 삭제가 아니라 상태 전환 — `contracts.terminate` 전용 플로우로만 진입하고 `contract_terminations`(파기일·사유·처리자·환불·위약금·정산·첨부)와
+    `contract_status_history` 에 기록된다. 파기·취소 계약은 계약 완료 수치·일반 미수금에서 제외, 환불·위약금·정산은 별도 축.
+  - 프로젝트(projects.status): `preparing`(진행 예정)/`in_progress`(진행 중)/`paused`(일시 중단)/`cancelled`(**취소 = 착공 전 철회**)/
+    `terminated`(**파기 = 진행 중 계약관계 종료**)/`completed`(완료)/`warranty`(하자보수)/`settled`(정산 완료).
+    **일시 중단 = 재개 가능 일시 정지.** 전환은 `projects.transition` 라우트가 StatusService::PROJECT_TRANSITIONS 전이 규칙을 서버측 검증
+    (예: completed→in_progress 재개는 사유 필수, settled 는 completed 에서만 진입, settled 는 최종 상태). 전환마다 `project_status_history` + Audit 기록.
+  - 취소·파기 프로젝트는 예상 매출·수주액·진행 수·직원 업무량·성과 집계에서 제외(브리프 §2). 물리 삭제 금지 — 일정·배정·원가·입금·파일·이력 보존.
+  - 입금(payments.kind): `payment`(정상 입금)/`refund`(환불). 순입금 = Σpayment − Σrefund — 미수금·입금 총액은 순입금 기준(AccountingService::PAID_SUM_SQL).
+- contribution_mode: main/ratio/role.
 - DB 접속(검증용): `/opt/homebrew/bin/mysql --socket="$PWD/.devdb/mysql.sock" -ueden_crm_user -pEdenCrm!local2026 eden_crm`
-- 로컬 서버: http://127.0.0.1:8080 (php -S, DocumentRoot=public). 테스트: admin/password123!, staff1/password123!.
+- 로컬 서버: http://127.0.0.1:8080 (php -S, DocumentRoot=public). 테스트: admin/password123!, maeng/password123! (전체 계정은 README '테스트 계정' 표).
 
 ## 완료 기준(각 모듈)
 1. `php -l` 전 파일 무오류.

@@ -46,10 +46,6 @@
     charts[id] = new Chart(el.getContext('2d'), config);
   }
 
-  function statusLabel(s) {
-    return { preparing: '준비중', in_progress: '진행중', paused: '중지', completed: '완료' }[s] || s;
-  }
-
   function periodParams() {
     const period = document.getElementById('fPeriod').value;
     const params = { period };
@@ -90,17 +86,21 @@
     const rcv = document.getElementById('stReceivable');
     rcv.innerHTML = '<span class="mono">' + esc(moneyShort(data.receivables.total)) + '</span><span class="u">원</span>';
     rcv.title = won(data.receivables.total);
-    document.getElementById('stRevenueRate').textContent = fmtPct(data.target_achievement.revenue_rate);
-    document.getElementById('stProfitRate').textContent = fmtPct(data.target_achievement.profit_rate);
+    // 목표 미설정(목표 0)은 '0%'가 아니라 '목표 미설정'으로 구분 표기(달성률 null)
+    const ta = data.target_achievement;
+    document.getElementById('stRevenueRate').textContent = ta.target_revenue > 0 ? fmtPct(ta.revenue_rate) : '목표 미설정';
+    document.getElementById('stProfitRate').textContent = ta.target_profit > 0 ? fmtPct(ta.profit_rate) : '목표 미설정';
 
-    // 차트: 월별 매출(막대)·순이익(선)
+    // 차트: 월별 확정 매출(공급가액·막대)·확정 순이익(선)
+    // x축 라벨은 'n월' 축약(대시보드와 동일 규칙 — 좁은 폭 회전·겹침 방지, NaN 방지 폴백 포함)
     const mt = data.monthly_trend || [];
+    const monthOf = (ym) => { const m = parseInt(String(ym).split('-').pop(), 10); return isNaN(m) ? ym : m + '월'; };
     renderChart('chartMonthly', {
       data: {
-        labels: mt.map((r) => r.ym),
+        labels: mt.map((r) => monthOf(r.ym)),
         datasets: [
-          { type: 'bar', label: '매출', data: mt.map((r) => r.revenue), backgroundColor: BRAND, borderRadius: 4, maxBarThickness: 42, order: 2 },
-          { type: 'line', label: '순이익', data: mt.map((r) => r.profit), borderColor: OK, backgroundColor: OK, borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5, order: 1 },
+          { type: 'bar', label: '확정 매출(공급가액)', data: mt.map((r) => r.revenue), backgroundColor: BRAND, borderRadius: 4, maxBarThickness: 42, order: 2 },
+          { type: 'line', label: '확정 순이익', data: mt.map((r) => r.profit), borderColor: OK, backgroundColor: OK, borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5, order: 1 },
         ],
       },
       options: {
@@ -108,10 +108,13 @@
         interaction: { mode: 'index', intersect: false },
         plugins: {
           legend: bottomLegend,
-          tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + won(c.parsed.y) } },
+          tooltip: { callbacks: {
+            title: (items) => (mt[items[0].dataIndex] || {}).ym || '',
+            label: (c) => c.dataset.label + ': ' + won(c.parsed.y),
+          } },
         },
         scales: {
-          x: { grid: { display: false } },
+          x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
           y: { border: { display: false }, grid: { color: '#eef1f4' }, ticks: { callback: (v) => moneyShort(v) } },
         },
       },
@@ -156,13 +159,13 @@
       },
     }, !stg.length);
 
-    // 차트: 공사유형별 매출(막대)
+    // 차트: 공사유형별 공급가액(VAT 제외·막대)
     const wt = data.by_work_type || [];
     renderChart('chartWorkType', {
       type: 'bar',
       data: {
         labels: wt.map((r) => r.work_type),
-        datasets: [{ label: '매출', data: wt.map((r) => r.revenue), backgroundColor: BRAND, borderRadius: 4, maxBarThickness: 42 }],
+        datasets: [{ label: '공급가액(VAT 제외)', data: wt.map((r) => r.revenue), backgroundColor: BRAND, borderRadius: 4, maxBarThickness: 42 }],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -186,7 +189,7 @@
     // 표: 프로젝트별 손익 (정밀 금액 — number_format 유지)
     document.getElementById('tbProjectPl').innerHTML = rowsHtml(data.project_pl, (r) => {
       const profitClass = r.profit < 0 ? ' num mono text-danger' : ' num mono';
-      return '<tr><td>' + esc(r.project_no) + ' ' + esc(r.name) + '</td><td><span class="badge badge-info">' + esc(statusLabel(r.status)) + '</span></td>'
+      return '<tr><td>' + esc(r.project_no) + ' ' + esc(r.name) + '</td><td><span class="badge badge-info">' + esc(r.status_label || r.status) + '</span></td>'
         + '<td class="num mono">' + fmtMoney(r.revenue) + '</td><td class="num mono">' + fmtMoney(r.cost) + '</td>'
         + '<td class="' + profitClass.trim() + '">' + fmtMoney(r.profit) + '</td><td class="num mono">' + fmtPct(r.profit_rate) + '</td></tr>';
     }, 6);

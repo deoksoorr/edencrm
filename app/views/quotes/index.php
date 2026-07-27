@@ -1,9 +1,10 @@
-<?php /** @var array $rows @var array $p @var array $filters @var array $statusLabels @var array $statusBadge */ ?>
+<?php /** @var array $rows @var array $p @var float $sumTotal @var array $range @var array $filters @var array $statusLabels @var array $statusBadge */ ?>
+<?php $filterOn = $filters['q'] !== '' || $filters['status'] !== '' || $filters['period'] !== ''; ?>
 <div class="page">
   <div class="page-head">
     <div>
       <h1 class="page-title">견적 관리</h1>
-      <div class="page-sub">전체 <?= number_format($p['total']) ?>건</div>
+      <div class="page-sub"><?= $filterOn ? '조회' : '전체' ?> <?= number_format($p['total']) ?>건 · 총액(VAT 포함) <?= money($sumTotal) ?>원</div>
     </div>
     <div class="page-actions">
       <?php if (can('quote.manage')): ?>
@@ -21,11 +22,13 @@
         <option value="<?= e($k) ?>" <?= $filters['status'] === $k ? 'selected' : '' ?>><?= e($label) ?></option>
       <?php endforeach; ?>
     </select>
-    <input type="date" name="date_from" class="input" value="<?= e($filters['date_from']) ?>">
-    <span class="muted">~</span>
-    <input type="date" name="date_to" class="input" value="<?= e($filters['date_to']) ?>">
+    <?php View::partial('partials/period_filter', [
+        'action'  => 'quotes.index',
+        'filters' => $filters,
+        'range'   => $range,
+    ]); ?>
     <button type="submit" class="btn btn-outline">검색</button>
-    <?php if ($filters['q'] || $filters['status'] || $filters['date_from'] || $filters['date_to']): ?>
+    <?php if ($filterOn): ?>
       <a href="<?= e(url('quotes.index')) ?>" class="btn btn-ghost">초기화</a>
     <?php endif; ?>
   </form>
@@ -43,7 +46,7 @@
       <table class="data">
         <thead>
           <tr>
-            <th>견적번호</th><th>고객</th><th class="num">총금액</th><th>상태</th><th>유효기간</th><th>작성일</th>
+            <th>견적번호</th><th>고객</th><th class="num" title="공급가액 + 부가세 − 할인 · VAT 포함">총액(VAT 포함)</th><th>상태</th><th>유효기간</th><th>작성일</th>
           </tr>
         </thead>
         <tbody>
@@ -61,15 +64,12 @@
       </table>
     </div>
 
-    <div class="pagination">
-      <div class="page-info"><?= number_format($p['from']) ?>-<?= number_format($p['to']) ?> / <?= number_format($p['total']) ?></div>
-      <?php
-        $qs = $filters;
-        for ($i = 1; $i <= $p['pages']; $i++):
-          $qs['page'] = $i;
-      ?>
-        <a class="<?= $i === $p['page'] ? 'cur' : '' ?>" href="<?= e(url('quotes.index', $qs)) ?>"><?= $i ?></a>
-      <?php endfor; ?>
-    </div>
+    <?php
+      $qs = array_filter($filters, static fn ($v) => $v !== '' && $v !== null);
+      View::partial('partials/pager', [
+          'pg'  => $p,
+          'url' => fn (int $pg): string => url('quotes.index', $qs + ['page' => $pg]),
+      ]);
+    ?>
   <?php endif; ?>
 </div>

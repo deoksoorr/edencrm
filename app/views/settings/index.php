@@ -2,7 +2,7 @@
 /** @var array $groups  ($group => [rows...]) */
 $groupLabels = ['general' => '일반', 'security' => '보안', 'upload' => '업로드', 'finance' => '재무', '운영 기능' => '운영 기능'];
 ?>
-<div class="page">
+<div class="page page-narrow">
   <div class="page-head">
     <h1 class="page-title">시스템 설정</h1>
     <div class="page-actions">
@@ -20,7 +20,7 @@ $groupLabels = ['general' => '일반', 'security' => '보안', 'upload' => '업�
             <div class="field">
               <label class="field-label"><?= e($r['label'] ?: $r['setting_key']) ?></label>
               <?php if (str_starts_with($r['setting_key'], 'feature_')): ?>
-                <select name="<?= e($r['setting_key']) ?>" class="input">
+                <select name="<?= e($r['setting_key']) ?>" class="select">
                   <option value="1"<?= $r['value']==='1'?' selected':'' ?>>사용</option>
                   <option value="0"<?= $r['value']!=='1'?' selected':'' ?>>사용 안 함</option>
                 </select>

@@ -74,22 +74,34 @@ class AccountingService
         return $sql;
     }
 
-    /** 확정 매출 = 완료 프로젝트 공급가액 합(준공일 기준). */
+    /** 완납(확정 매출) 계약 공통 조건 — 유효 계약(삭제·취소·파기 제외)이고
+     *  순입금(환불 차감, PAID_SUM_SQL) ≥ 계약 총액(>0)인 계약(별칭 c 고정). (R7 입금 완료 기준) */
+    public const CONFIRMED_CONTRACT_COND =
+        "c.deleted_at IS NULL AND c.status NOT IN ('cancelled','terminated')
+         AND c.contract_amount > 0
+         AND " . self::PAID_SUM_SQL . " >= c.contract_amount";
+
+    /** 확정 매출(공급가액) = 완납(순입금 ≥ 계약 총액) 유효 계약의 공급가액 합 — 입금 완료 기준(R7 사장 지시).
+     *  프로젝트 완료 여부와 무관, 귀속 시점 = 완납일(마지막 정상 입금일, LAST_PAID_SQL).
+     *  대시보드·리포트·목표 달성률이 전부 이 메서드 하나를 호출한다(중복 구현 금지). */
     public static function confirmedRevenue(?string $from = null, ?string $to = null): int
     {
         $p = [];
-        $r = self::range('actual_end_date', $from, $to, $p);
-        return (int) Db::val("SELECT COALESCE(SUM(supply_amount),0) FROM projects
-            WHERE deleted_at IS NULL AND status='completed' AND actual_end_date IS NOT NULL $r", $p);
+        $r = self::range(self::LAST_PAID_SQL, $from, $to, $p);
+        $rows = Db::all("SELECT c.contract_amount, c.supply_amount, c.vat_amount FROM contracts c
+            WHERE " . self::CONFIRMED_CONTRACT_COND . $r, $p);
+        $sum = 0;
+        foreach ($rows as $row) { $sum += self::supplyOf($row); }
+        return $sum;
     }
 
-    /** 확정 순이익 = 완료 프로젝트 (공급가액 − 실제원가) 합. */
+    /** 확정 순이익 = 완료(+정산) 프로젝트 (공급가액 − 실제원가) 합. */
     public static function confirmedProfit(?string $from = null, ?string $to = null): int
     {
         $p = [];
         $r = self::range('actual_end_date', $from, $to, $p);
         return (int) Db::val("SELECT COALESCE(SUM(supply_amount - actual_cost),0) FROM projects
-            WHERE deleted_at IS NULL AND status='completed' AND actual_end_date IS NOT NULL $r", $p);
+            WHERE deleted_at IS NULL AND status IN ('completed','settled') AND actual_end_date IS NOT NULL $r", $p);
     }
 
     /** 회사 확정 순이익(기여율 분모) — confirmedProfit 별칭. */
@@ -105,7 +117,7 @@ class AccountingService
             WHERE deleted_at IS NULL AND status IN ('preparing','in_progress')");
     }
 
-    /** 수주액 = 취소 아닌 프로젝트 공급가액 합(계약일 기준). $uid 지정 시 담당 영업(sales_user_id) 범위로 축소. */
+    /** 수주액 = 취소·파기 아닌 프로젝트 공급가액 합(계약일 기준). $uid 지정 시 담당 영업(sales_user_id) 범위로 축소. */
     public static function contractedAmount(?string $from = null, ?string $to = null, ?int $uid = null): int
     {
         $p = [];
@@ -113,26 +125,124 @@ class AccountingService
         $u = '';
         if ($uid !== null) { $u = ' AND sales_user_id = :u'; $p[':u'] = $uid; }
         return (int) Db::val("SELECT COALESCE(SUM(supply_amount),0) FROM projects
-            WHERE deleted_at IS NULL AND status<>'cancelled' AND contract_date IS NOT NULL $r $u", $p);
+            WHERE deleted_at IS NULL AND status NOT IN ('cancelled','terminated') AND contract_date IS NOT NULL $r $u", $p);
     }
 
-    /** 미수금(현금 축) = Σ 계약별 max(0, 계약총액 − 입금). terminated·삭제 제외. */
+    /** 미수금 모집단 상태(현금 축) — 체결(active) 이후 계약만. (R3 acctverify)
+     *  draft(작성중)는 체결 전 채권이 아니므로 제외(과대 계상 방지), terminated/cancelled 는 위약금·정산 별도 축.
+     *  ReportsController::receivables 목록·화면 툴팁·알림 모집단(NotificationsController)이 이 정의를 따른다. */
+    public const RECEIVABLE_STATUSES = ['active', 'on_hold', 'completed'];
+
+    /** 미수금 대상 계약 공통 조건(현금 축) — RECEIVABLE_STATUSES 기반 SQL 조각(별칭 c 고정). */
+    private const RECEIVABLE_CONTRACT_COND =
+        "c.deleted_at IS NULL AND c.status IN ('active','on_hold','completed')";
+
+    /** 계약별 순입금(payment−refund, status='paid') 상관 서브쿼리 SQL 조각(별칭 c 고정).
+     *  컨트롤러 목록 쿼리도 이 조각을 재사용한다. 미수금 = 계약총액 − 정상입금 + 환불 = 계약총액 − 순입금 (브리프 §1). */
+    public const PAID_SUM_SQL =
+        "COALESCE((SELECT SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+            FROM payments pm WHERE pm.contract_id=c.id AND pm.status='paid'),0)";
+
+    /** 계약별 마지막 입금일 = 정상 입금(kind='payment', status='paid')의 paid_date 최댓값 —
+     *  상관 서브쿼리 SQL 조각(별칭 c 고정, PAID_SUM_SQL 패턴 확장 · R4 T6).
+     *  등록·수정일 사용 금지, 환불·pending·cancelled 제외. 입금이 없으면 NULL(화면 '입금 없음').
+     *  계약 목록의 컬럼·정렬 4종·'최근 입금일' 기준 기간 필터가 이 조각 하나를 공유한다. */
+    public const LAST_PAID_SQL =
+        "(SELECT MAX(pm.paid_date) FROM payments pm
+            WHERE pm.contract_id=c.id AND pm.status='paid' AND pm.kind='payment')";
+
+    /** 계약 1건의 순입금(payment−refund, status='paid') — PAID_SUM_SQL 과 동일 산식의 단건 버전.
+     *  결제상태 재계산·환불 상한 검증 등 계약 단위 로직이 공유한다. */
+    public static function contractNetPaid(int $contractId): int
+    {
+        return (int) Db::val(
+            "SELECT COALESCE(SUM(CASE WHEN kind='refund' THEN -amount ELSE amount END),0)
+             FROM payments WHERE contract_id=:id AND status='paid'",
+            [':id' => $contractId]
+        );
+    }
+
+    /** 미수금(현금 축) = Σ 계약별 max(0, 계약총액 − 입금). 모집단 = RECEIVABLE_STATUSES(작성중·파기·취소·삭제 제외). */
     public static function receivable(): int
     {
         return (int) Db::val("SELECT COALESCE(SUM(GREATEST(0,
-                c.contract_amount - COALESCE((SELECT SUM(pm.amount) FROM payments pm WHERE pm.contract_id=c.id AND pm.status='paid'),0)
+                c.contract_amount - " . self::PAID_SUM_SQL . "
             )),0)
-            FROM contracts c WHERE c.deleted_at IS NULL AND c.status<>'terminated'");
+            FROM contracts c WHERE " . self::RECEIVABLE_CONTRACT_COND);
     }
 
-    /** 직원 확정 기여액 = Σ 완료 프로젝트 (공급−실제원가) × 기여도. */
+    /** 미수금 발생 계약 수 — receivable() 과 동일 모집단·동일 기준. */
+    public static function receivableCount(): int
+    {
+        return (int) Db::val("SELECT COUNT(*) FROM contracts c
+            WHERE " . self::RECEIVABLE_CONTRACT_COND . "
+              AND c.contract_amount > " . self::PAID_SUM_SQL);
+    }
+
+    /** 입금 총액(VAT 포함, 순입금) = Σ payments(kind='payment') − Σ payments(kind='refund') — status='paid', 입금일(paid_date) 기준. */
+    public static function paidTotal(?string $from = null, ?string $to = null): int
+    {
+        $p = [];
+        $r = self::range('pm.paid_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END),0)
+            FROM payments pm
+            JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
+            WHERE pm.status='paid' $r", $p);
+    }
+
+    /** 환불 총액(VAT 포함, 별도 축) = Σ payments(kind='refund', status='paid') — 입금일(paid_date) 기준. */
+    public static function refundTotal(?string $from = null, ?string $to = null): int
+    {
+        $p = [];
+        $r = self::range('pm.paid_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(pm.amount),0) FROM payments pm
+            JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
+            WHERE pm.status='paid' AND pm.kind='refund' $r", $p);
+    }
+
+    /**
+     * 계약(현금 축) 합계 — 계약관리 화면 요약용 배치 집계(전체 1쿼리, N+1 없음).
+     * 기본 = 삭제 제외 전체 계약. $whereSql/$params 전달 시 해당 모집단으로 축소
+     * (R4 T6: 계약 목록 합계 카드가 목록과 동일 WHERE 를 전달해 필터 연동 —
+     *  R3 의 "합계 전체 기준 고정" 결정을 R4 사용자 지시가 대체).
+     * 주의: $whereSql 은 하드코딩된 SQL 조각만 전달(사용자 입력 금지 — 값은 $params 바인딩).
+     * 별칭: contracts c · customers cu (검색 필터의 cu.name 참조 지원).
+     * 반환: count / contract(계약 총액 VAT 포함) / supply(공급가액) / vat(부가세) / paid(입금 총액 VAT 포함, 순입금)
+     *      / refund(환불 총액 — 별도 축) / receivable(미수금 — 모집단 RECEIVABLE_STATUSES, Σ max(0, 계약총액−순입금)).
+     */
+    public static function contractTotals(string $whereSql = 'c.deleted_at IS NULL', array $params = []): array
+    {
+        $rows = Db::all("SELECT c.status, c.contract_amount, c.supply_amount, c.vat_amount,
+                " . self::PAID_SUM_SQL . " AS paid,
+                COALESCE((SELECT SUM(pm2.amount) FROM payments pm2
+                    WHERE pm2.contract_id=c.id AND pm2.status='paid' AND pm2.kind='refund'),0) AS refund
+            FROM contracts c JOIN customers cu ON cu.id = c.customer_id
+            WHERE $whereSql", $params);
+        $t = ['count' => 0, 'contract' => 0, 'supply' => 0, 'vat' => 0, 'paid' => 0, 'refund' => 0, 'receivable' => 0];
+        foreach ($rows as $r) {
+            $contract = (int) $r['contract_amount'];
+            $supply = self::supplyOf($r);
+            $t['count']++;
+            $t['contract'] += $contract;
+            $t['supply'] += $supply;
+            $t['vat'] += $contract - $supply;
+            $t['paid'] += (int) $r['paid'];
+            $t['refund'] += (int) $r['refund'];
+            if (in_array($r['status'], self::RECEIVABLE_STATUSES, true)) {
+                $t['receivable'] += max(0, $contract - (int) $r['paid']);
+            }
+        }
+        return $t;
+    }
+
+    /** 직원 확정 기여액 = Σ 완료(+정산) 프로젝트 (공급−실제원가) × 기여도. */
     public static function employeeConfirmedContribution(int $uid, ?string $from = null, ?string $to = null): int
     {
         $p = [':u' => $uid];
         $r = self::range('p.actual_end_date', $from, $to, $p);
         return (int) Db::val("SELECT COALESCE(SUM((p.supply_amount - p.actual_cost) * pa.contribution_pct/100),0)
             FROM project_assignments pa JOIN projects p ON p.id=pa.project_id
-            WHERE p.deleted_at IS NULL AND p.status='completed' AND p.actual_end_date IS NOT NULL
+            WHERE p.deleted_at IS NULL AND p.status IN ('completed','settled') AND p.actual_end_date IS NOT NULL
               AND pa.user_id=:u $r", $p);
     }
 
@@ -151,24 +261,188 @@ class AccountingService
         return ['supply' => $contractAmount - $vat, 'vat' => $vat];
     }
 
-    /** 확정(완료) 실제원가 합. */
+    /**
+     * 분할 지급(계약금/중도금/잔금) 공통 산식 — 기준: 계약 총액(VAT 포함). (R3 브리프 §1)
+     * 각 비율 0~100, 소수 2자리 반올림 후 합계가 정확히 100 이 아니면 InvalidArgumentException.
+     * 계약금/중도금 = round(총액 × 비율 / 100), 잔금 = 총액 − 계약금 − 중도금
+     * — 반올림 보정은 잔금 귀속(세 금액 합 = 계약 총액 정확히). JS(계약 폼)도 동일 규칙을 사용한다.
+     * @return array{down:int, middle:int, balance:int}
+     */
+    public static function splitPayments(int $total, float $downPct, float $middlePct, float $balancePct): array
+    {
+        if ($total < 0) {
+            throw new InvalidArgumentException('계약 총액(VAT 포함)은 0 이상이어야 합니다.');
+        }
+        $d = round($downPct, 2);
+        $m = round($middlePct, 2);
+        $b = round($balancePct, 2);
+        foreach ([$d, $m, $b] as $p) {
+            if ($p < 0 || $p > 100) {
+                throw new InvalidArgumentException('분할 비율은 0~100 사이여야 합니다.');
+            }
+        }
+        if (abs($d + $m + $b - 100.0) > 0.001) {
+            throw new InvalidArgumentException('분할 비율 합계가 100%가 되어야 합니다. (현재 ' . rtrim(rtrim(number_format($d + $m + $b, 2), '0'), '.') . '%)');
+        }
+        $down   = (int) round($total * $d / 100);
+        $middle = (int) round($total * $m / 100);
+        return ['down' => $down, 'middle' => $middle, 'balance' => $total - $down - $middle];
+    }
+
+    /** 확정(완료+정산) 실제원가 합 = 원가 총액(확정). */
     public static function confirmedCost(?string $from = null, ?string $to = null): int
     {
         $p = [];
         $r = self::range('actual_end_date', $from, $to, $p);
         return (int) Db::val("SELECT COALESCE(SUM(actual_cost),0) FROM projects
-            WHERE deleted_at IS NULL AND status='completed' AND actual_end_date IS NOT NULL $r", $p);
+            WHERE deleted_at IS NULL AND status IN ('completed','settled') AND actual_end_date IS NOT NULL $r", $p);
     }
 
-    /** 직원 귀속 확정매출(완료 프로젝트 Σ 공급가×기여도) — 가중 순이익률 분모. */
+    /** 직원 귀속 확정매출(완료+정산 프로젝트 Σ 공급가×기여도) — 가중 순이익률 분모. */
     public static function employeeConfirmedRevenue(int $uid, ?string $from = null, ?string $to = null): int
     {
         $p = [':u' => $uid];
         $r = self::range('p.actual_end_date', $from, $to, $p);
         return (int) Db::val("SELECT COALESCE(SUM(p.supply_amount * pa.contribution_pct/100),0)
             FROM project_assignments pa JOIN projects p ON p.id=pa.project_id
-            WHERE p.deleted_at IS NULL AND p.status='completed' AND p.actual_end_date IS NOT NULL
+            WHERE p.deleted_at IS NULL AND p.status IN ('completed','settled') AND p.actual_end_date IS NOT NULL
               AND pa.user_id=:u $r", $p);
+    }
+
+    /**
+     * 직원별 확정 기여액·귀속매출 일괄 조회 — employeeConfirmedContribution/Revenue 와
+     * 동일 산식(모집단·SUM 식 동일, GROUP BY pa.user_id)의 배치 버전. 대시보드 직원 성과처럼
+     * 전 직원을 순회하는 화면의 사용자당 쿼리(N+1)를 제거한다(T10). 집계 0 인 직원은 키 부재(=0 취급).
+     * @return array<int, array{contrib:int, revenue:int}> uid ⇒ 기여액·귀속매출
+     */
+    public static function employeeConfirmedByUser(?string $from = null, ?string $to = null): array
+    {
+        $p = [];
+        $r = self::range('p.actual_end_date', $from, $to, $p);
+        $rows = Db::all("SELECT pa.user_id AS uid,
+                COALESCE(SUM((p.supply_amount - p.actual_cost) * pa.contribution_pct/100),0) AS contrib,
+                COALESCE(SUM(p.supply_amount * pa.contribution_pct/100),0) AS revenue,
+                COALESCE(SUM(p.actual_cost * pa.contribution_pct/100),0) AS cost,
+                COUNT(DISTINCT p.id) AS done_cnt
+            FROM project_assignments pa JOIN projects p ON p.id=pa.project_id
+            WHERE p.deleted_at IS NULL AND p.status IN ('completed','settled') AND p.actual_end_date IS NOT NULL
+              AND pa.contribution_pct > 0 $r
+            GROUP BY pa.user_id", $p);
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row['uid']] = ['contrib' => (int) $row['contrib'], 'revenue' => (int) $row['revenue'],
+                'cost' => (int) $row['cost'], 'done' => (int) $row['done_cnt']];
+        }
+        return $out;
+    }
+
+    /**
+     * 직원별 입금 기여(현금 축, VAT 포함) = Σ 계약 순입금(paid, payment−refund) × 기여도
+     * — 계약→프로젝트(1:1)→배정(contribution_pct) 경유. 기여율 0·미배정은 키 부재(=미반영, T9).
+     * @return array<int, int> uid ⇒ 입금 기여액
+     */
+    public static function employeePaidByUser(?string $from = null, ?string $to = null): array
+    {
+        $p = [];
+        $r = self::range('pm.paid_date', $from, $to, $p);
+        $rows = Db::all("SELECT pa.user_id AS uid,
+                COALESCE(SUM((CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+                    * pa.contribution_pct/100),0) AS paid
+            FROM payments pm
+            JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
+            JOIN projects pj ON pj.contract_id = c.id AND pj.deleted_at IS NULL
+            JOIN project_assignments pa ON pa.project_id = pj.id AND pa.contribution_pct > 0
+            WHERE pm.status='paid' $r
+            GROUP BY pa.user_id", $p);
+        $out = [];
+        foreach ($rows as $row) { $out[(int) $row['uid']] = (int) $row['paid']; }
+        return $out;
+    }
+
+    /**
+     * 직원별 참여 프로젝트 수 = 기여율>0 배정 기준(취소·파기·삭제 제외) — T9 대시보드 직원 성과.
+     * @return array<int, int> uid ⇒ 참여 프로젝트 수
+     */
+    public static function employeeProjectCountByUser(): array
+    {
+        $rows = Db::all("SELECT pa.user_id AS uid, COUNT(DISTINCT pa.project_id) AS c
+            FROM project_assignments pa JOIN projects p ON p.id=pa.project_id
+            WHERE p.deleted_at IS NULL AND p.status NOT IN ('cancelled','terminated')
+              AND pa.contribution_pct > 0
+            GROUP BY pa.user_id");
+        $out = [];
+        foreach ($rows as $row) { $out[(int) $row['uid']] = (int) $row['c']; }
+        return $out;
+    }
+
+    /**
+     * 담당 영업별 수주액 일괄 조회 — contractedAmount($from,$to,$uid) 와 동일 산식
+     * (GROUP BY sales_user_id)의 배치 버전(T10 N+1 제거). 수주 0 인 직원은 키 부재(=0 취급).
+     * @return array<int, int> uid ⇒ 수주 공급가액 합
+     */
+    public static function contractedAmountByUser(?string $from = null, ?string $to = null): array
+    {
+        $p = [];
+        $r = self::range('contract_date', $from, $to, $p);
+        $rows = Db::all("SELECT sales_user_id AS uid, COALESCE(SUM(supply_amount),0) AS v FROM projects
+            WHERE deleted_at IS NULL AND status NOT IN ('cancelled','terminated') AND contract_date IS NOT NULL
+              AND sales_user_id IS NOT NULL $r GROUP BY sales_user_id", $p);
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row['uid']] = (int) $row['v'];
+        }
+        return $out;
+    }
+
+    /**
+     * 원가 총액(발생일 기준) = costs(type='actual', cost_status='confirmed') 의 지출일(spent_date) 기준 합.
+     * 삭제 프로젝트 제외(실지출은 프로젝트 상태와 무관하게 집계 — 취소·파기 공사의 실비도 현금 유출).
+     * 기간 지정 시 spent_date IS NULL 행은 제외된다(발생일 미상 — 기간 귀속 불가).
+     * R3 대시보드 '이번 달 원가 총액' KPI 전용 신설 — 기존 confirmedCost(준공월 귀속)와 축이 다르다.
+     */
+    public static function costTotal(?string $from = null, ?string $to = null): int
+    {
+        $p = [];
+        $r = self::range('cs.spent_date', $from, $to, $p);
+        return (int) Db::val("SELECT COALESCE(SUM(cs.amount),0) FROM costs cs
+            JOIN projects pj ON pj.id = cs.project_id AND pj.deleted_at IS NULL
+            WHERE cs.type='actual' AND cs.cost_status='confirmed' $r", $p);
+    }
+
+    /** 계약 진행(status='active') 건수 — 삭제 제외. R3 대시보드 KPI. */
+    public static function activeContractCount(): int
+    {
+        return (int) Db::val("SELECT COUNT(*) FROM contracts c
+            WHERE c.deleted_at IS NULL AND c.status='active'");
+    }
+
+    /**
+     * 최근 입금 리스트(대시보드 T6) — paid 상태 정상 입금(kind='payment') 최근 $limit 건.
+     * 환불(refund)·대기(pending)·취소(cancelled) 행 제외, 삭제 계약 제외.
+     * 정렬: paid_date DESC → created_at DESC → id DESC (수정일 정렬 금지 — created_at 은 동률 보조키).
+     * contract_refund = 해당 계약의 환불 합(paid refund) — 환불 발생 계약의 입금 행에 배지 병기용
+     * (planner S3: 파기 환불은 costs 에 없어 '최근 출금(원가 지출)' 리스트에 안 나옴 — 여기 배지가 현금 유출을 드러낸다).
+     * project_name = 계약 연결 프로젝트명(없으면 NULL — 화면은 계약번호 표시).
+     */
+    public static function recentPaidPayments(int $limit = 8): array
+    {
+        $limit = max(1, min(20, $limit));
+        return Db::all(
+            "SELECT pm.id, pm.paid_date, pm.pay_type, pm.amount,
+                    c.id AS contract_id, c.contract_no, c.status AS contract_status,
+                    cu.name AS customer_name, u.name AS sales_user_name,
+                    (SELECT p.name FROM projects p
+                        WHERE p.contract_id=c.id AND p.deleted_at IS NULL ORDER BY p.id LIMIT 1) AS project_name,
+                    COALESCE((SELECT SUM(r.amount) FROM payments r
+                        WHERE r.contract_id=c.id AND r.status='paid' AND r.kind='refund'),0) AS contract_refund
+             FROM payments pm
+             JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
+             JOIN customers cu ON cu.id = c.customer_id
+             LEFT JOIN users u ON u.id = c.sales_user_id
+             WHERE pm.status='paid' AND pm.kind='payment'
+             ORDER BY pm.paid_date DESC, pm.created_at DESC, pm.id DESC
+             LIMIT $limit"
+        );
     }
 
     /** open 리드 가중 예상매출 합. $uid=null 전체. */

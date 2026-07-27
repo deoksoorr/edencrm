@@ -7,7 +7,17 @@
     if (!board) return;
 
     var canMove = board.dataset.canMove === '1';
+    var boardType = board.dataset.boardType || 'painting';
     var boardEl = document.getElementById('processBoard') || board;
+
+    // R10: 이동 응답의 서버 요약으로 상단 KPI 재동기화 — 하드코딩·수동 저장값 없음
+    function updateSummary(summary) {
+      if (!summary) return;
+      Object.keys(summary).forEach(function (k) {
+        var el = document.querySelector('[data-summary="' + k + '"]');
+        if (el) el.textContent = Number(summary[k]).toLocaleString();
+      });
+    }
     var lists = Array.prototype.slice.call(document.querySelectorAll('.kanban-list[data-stage-id]'));
     var activeTab = 'all';
 
@@ -117,7 +127,7 @@
               return;
             }
           }
-          var data = await api('process.move', { project_id: projectId, to_stage_id: toStageId });
+          var data = await api('process.move', { project_id: projectId, to_stage_id: toStageId, board_type: boardType });
           // 전체완료 게이트(R4): 미충족 항목 경고 → 확인+사유 입력 시에만 예외 진행(차단 아님)
           if (data && data.gate && data.gate.warnings) {
             var goOn = await EDEN.confirm(
@@ -131,7 +141,7 @@
               return;
             }
             data = await api('process.move', {
-              project_id: projectId, to_stage_id: toStageId,
+              project_id: projectId, to_stage_id: toStageId, board_type: boardType,
               gate_confirm: 1, gate_reason: gateReason.trim()
             });
           }
@@ -148,6 +158,15 @@
             enteredEl.textContent = ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2);
           }
           if (data && typeof data.progress !== 'undefined') updateCardProgress(item, data.progress);
+          // R10: 카드 상태·잠금 동기화 — 전체완료 자동 완료 시 즉시 잠금(.locked → 재드래그 차단, R7-F1 #4 필터와 일치)
+          if (data && data.status) {
+            item.dataset.status = data.status;
+            if (data.is_done) {
+              item.classList.remove('st-delayed', 'st-warn', 'st-normal');
+              item.classList.add('st-won', 'locked', 'pb-done');
+            }
+          }
+          if (data && data.summary) updateSummary(data.summary);
           updateColumnCounts();
         } catch (err) {
           toast((err && err.message) || '이동에 실패했습니다.', 'error');

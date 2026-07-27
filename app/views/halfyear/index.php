@@ -12,7 +12,7 @@
  * @var array $staffRows    직원별 표(view_all 시)
  * @var bool  $isClosed     마감 반기 여부
  */
-$statusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$statusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $statusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
 $scoped = $f['userId'] > 0; // 특정 직원 스코프(귀속치) 여부
 $selUserName = '';
@@ -107,12 +107,16 @@ foreach ($users as $u) {
         <div class="kpi-value"><?= moneyCell($profitKpi['revenue']) ?></div>
       </div>
       <div class="kpi" title="확정 실지출(costs actual·confirmed) · 지출일 기준 · 전사">
-        <div class="kpi-label">등록 지출(전사)</div>
+        <div class="kpi-label">확정 지출(전사)</div>
         <div class="kpi-value"><?= moneyCell($profitKpi['costReg']) ?></div>
       </div>
       <div class="kpi" title="완료·정산 프로젝트 실제원가 합 · 준공일 기준 · 전사">
         <div class="kpi-label">직접 원가(전사)</div>
         <div class="kpi-value"><?= moneyCell($profitKpi['costDirect']) ?></div>
+      </div>
+      <div class="kpi" title="확정 지출 − 직접 원가 · 지출일/준공일 기준 차이로 음수 가능 · 전사">
+        <div class="kpi-label">기타 비용(전사)</div>
+        <div class="kpi-value"><?= moneyCell($profitKpi['costOther']) ?></div>
       </div>
       <div class="kpi <?= $profitKpi['profit'] < 0 ? 'accent-danger' : 'accent-ok' ?>" title="<?= $scoped ? '(공급가 − 실제원가) × 기여율 · 완료·정산 기준' : '완료·정산 프로젝트 (공급가 − 실제원가) 합' ?>">
         <div class="kpi-label">순이익</div>
@@ -168,7 +172,7 @@ foreach ($users as $u) {
     <div class="table-wrap">
       <table class="data compact">
         <thead>
-          <tr><th>직원</th><th>프로젝트</th><th class="num">산정 대상 금액</th><th>산정 기준</th><th class="num">산정액</th><th class="num">지급액</th><th class="num">미지급액</th><th>지급일</th><th>상태</th></tr>
+          <tr><th>직원</th><th>프로젝트</th><th class="num">산정 대상 매출</th><th class="num">기여도 적용 매출</th><th class="num">산정액</th><th class="num">지급액</th><th class="num">미지급액</th><th>지급일</th><th>지급 담당</th><th>상태</th><th>메모</th></tr>
         </thead>
         <tbody>
           <?php foreach ($bonuses as $b): $cancelled = $b['pay_status'] === 'cancelled'; ?>
@@ -176,12 +180,15 @@ foreach ($users as $u) {
               <td><?= e($b['user_name']) ?></td>
               <td><?= $b['project_id'] ? e($b['project_name'] ?? ('#' . $b['project_id'])) : '<span class="muted">-</span>' ?></td>
               <td class="num mono"><?= moneyCell((float) $b['base_amount']) ?></td>
-              <td><?= e($b['calc_basis'] ?? '-') ?></td>
+              <td class="num mono"><?= $b['contrib_revenue'] !== null ? moneyCell((float) $b['contrib_revenue'])
+                  : ($b['calc_basis'] !== null && $b['calc_basis'] !== '' ? e($b['calc_basis']) : '<span class="muted">-</span>') ?></td>
               <td class="num mono"><?= moneyCell((float) $b['calc_amount']) ?></td>
               <td class="num mono"><?= moneyCell((float) $b['paid_amount']) ?></td>
-              <td class="num mono"><?= $cancelled ? '-' : moneyCell((float) $b['calc_amount'] - (float) $b['paid_amount']) ?></td>
+              <td class="num mono"><?= $cancelled ? '-' : moneyCell(max(0, (float) $b['calc_amount'] - (float) $b['paid_amount'])) ?></td>
               <td><?= $b['pay_date'] ? e(fmtdate($b['pay_date'])) : '-' ?></td>
+              <td><?= $b['paid_by'] ? e($b['paid_by_name'] ?? ('#' . $b['paid_by'])) : '<span class="muted">-</span>' ?></td>
               <td><span class="badge <?= e($statusBadge[$b['pay_status']] ?? 'badge-info') ?>"><?= e($statusLabels[$b['pay_status']] ?? $b['pay_status']) ?></span></td>
+              <td class="ellipsis" style="max-width:160px" title="<?= e($b['memo'] ?? '') ?>"><?= $b['memo'] !== null && $b['memo'] !== '' ? e(mb_strimwidth($b['memo'], 0, 40, '…')) : '<span class="muted">-</span>' ?></td>
             </tr>
           <?php endforeach; ?>
         </tbody>

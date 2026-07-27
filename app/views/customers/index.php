@@ -76,9 +76,14 @@ $filterParams = array_filter([
             <tr>
               <td>
                 <a href="<?= e(url('customers.show', ['id' => $r['id']])) ?>"><?= e($r['name']) ?></a>
-                <?php if ($r['company_name']): ?><div class="muted" style="font-size:11.5px"><?= e($r['company_name']) ?></div><?php endif; ?>
+                <?php if ($r['company_name']): ?><div class="muted fs-11"><?= e($r['company_name']) ?></div><?php endif; ?>
               </td>
-              <td><span class="badge badge-info"><?= e($typeLabel[$r['type']] ?? $r['type']) ?></span></td>
+              <td>
+                <span class="badge badge-info"><?= e($typeLabel[$r['type']] ?? $r['type']) ?></span>
+                <?php if ((int) ($r['is_business'] ?? 0) === 1): ?>
+                  <span class="badge <?= !empty($r['biz_license_file_id']) ? 'badge-ok' : 'badge-muted' ?>" title="사업자등록증 <?= !empty($r['biz_license_file_id']) ? '보유' : '미등록' ?>">등록증<?= !empty($r['biz_license_file_id']) ? '' : ' 없음' ?></span>
+                <?php endif; ?>
+              </td>
               <td><?= e($r['phone'] ?: '-') ?></td>
               <td><?= e($r['sales_user_name'] ?: '-') ?></td>
               <td><span class="badge <?= $statusBadge[$r['status']] ?? '' ?>"><?= e($statusLabel[$r['status']] ?? $r['status']) ?></span></td>
@@ -92,15 +97,9 @@ $filterParams = array_filter([
       </table>
     </div>
 
-    <div class="pagination">
-      <span class="page-info"><?= (int) $pg['from'] ?>-<?= (int) $pg['to'] ?> / <?= (int) $pg['total'] ?></span>
-      <?php if ($pg['page'] <= 1): ?><span class="disabled">이전</span><?php else: ?>
-        <a href="<?= e(url('customers.index', $filterParams + ['page' => $pg['page'] - 1])) ?>">이전</a>
-      <?php endif; ?>
-      <span class="cur"><?= (int) $pg['page'] ?> / <?= (int) $pg['pages'] ?></span>
-      <?php if ($pg['page'] >= $pg['pages']): ?><span class="disabled">다음</span><?php else: ?>
-        <a href="<?= e(url('customers.index', $filterParams + ['page' => $pg['page'] + 1])) ?>">다음</a>
-      <?php endif; ?>
-    </div>
+    <?php View::partial('partials/pager', [
+        'pg'  => $pg,
+        'url' => fn (int $p): string => url('customers.index', $filterParams + ['page' => $p]),
+    ]); ?>
   <?php endif; ?>
 </div>

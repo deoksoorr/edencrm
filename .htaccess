@@ -1,0 +1,55 @@
+# ============================================================================
+# EDEN CRM — 운영 루트 .htaccess (/www/eden-crm/) — R6 T4
+# 역할: (1) public/ 프론트 컨트롤러 위임 (2) 내부 디렉토리·민감 파일 차단
+#       (3) 업로드 저장소 차단은 storage/.htaccess 와 이중 방어.
+# 로컬 php -S 는 .htaccess 를 해석하지 않는다 — 운영(Apache) 검증은 T12 에서 실측.
+# ============================================================================
+
+Options -Indexes
+DirectoryIndex index.php
+
+# ── HTTPS 강제 (로컬/사설망 제외 — land 패턴) ──
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteCond %{HTTP_HOST} !^localhost [NC]
+    RewriteCond %{HTTP_HOST} !^127\.0\.0\.1 [NC]
+    RewriteCond %{HTTP_HOST} !^192\.168\. [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # ── 내부 경로 차단 (배포 제외 대상이지만 방어선 중첩) ──
+    RewriteRule ^(app|storage|database|scripts|docs|deploy|\.superpowers|\.devdb|\.git)(/|$) - [F,L]
+
+    # ── public/ 위임: /eden-crm/* → public/* (assets 포함) ──
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# ── 보안 헤더 ──
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# ── dotfile(.env·.git·.htaccess 등) 웹 접근 차단 ──
+<FilesMatch "(?i)^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# ── 민감 확장자(덤프/백업/로그/스크립트/설정) 재귀 차단 — *.sql 포함 ──
+<FilesMatch "(?i)\.(env|sql|sqlite|bak|old|orig|save|swp|zip|tar|gz|tgz|rar|7z|log|sh|ini|lock|md)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

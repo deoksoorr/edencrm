@@ -21,6 +21,7 @@
     <input class="input" type="date" name="date_from" value="<?= e($q['date_from']) ?>">
     <input class="input" type="date" name="date_to" value="<?= e($q['date_to']) ?>">
     <button class="btn btn-outline" type="submit">검색</button>
+    <a href="<?= e(url('worklogs.index')) ?>" class="btn btn-ghost">초기화</a>
   </form>
 
   <?php if (!$rows): ?>
@@ -38,7 +39,7 @@
         </thead>
         <tbody>
         <?php foreach ($rows as $r): ?>
-          <tr onclick="location.href='<?= e(url('worklogs.show', ['id' => $r['id']])) ?>'" style="cursor:pointer">
+          <tr class="row-link" onclick="location.href='<?= e(url('worklogs.show', ['id' => $r['id']])) ?>'">
             <td><?= e(fmtdate($r['work_date'])) ?></td>
             <td class="wrap"><?= e($r['project_no']) ?> · <?= e($r['project_name']) ?></td>
             <td><?= e($r['author_name']) ?></td>
@@ -56,11 +57,9 @@
         </tbody>
       </table>
     </div>
-    <div class="pagination">
-      <span class="page-info"><?= (int) $pg['from'] ?>-<?= (int) $pg['to'] ?> / 총 <?= (int) $pg['total'] ?>건</span>
-      <?php for ($i = 1; $i <= $pg['pages']; $i++): ?>
-        <a class="<?= $i === $pg['page'] ? 'cur' : '' ?>" href="<?= e(url('worklogs.index', array_merge($q, ['page' => $i]))) ?>"><?= $i ?></a>
-      <?php endfor; ?>
-    </div>
+    <?php View::partial('partials/pager', [
+        'pg'  => $pg,
+        'url' => fn (int $p): string => url('worklogs.index', array_merge($q, ['page' => $p])),
+    ]); ?>
   <?php endif; ?>
 </div>

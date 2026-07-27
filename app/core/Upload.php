@@ -107,8 +107,12 @@ class Upload
         return in_array($mime, $map[$ext], true);
     }
 
-    /** project_files.id 로 권한 검사 후 파일 스트리밍. */
-    public static function send(int $fileId, callable $authorize): never
+    /**
+     * project_files.id 로 권한 검사 후 파일 스트리밍.
+     * $inline=true 면 브라우저 미리보기(inline) — 안전한 MIME(이미지/PDF)에 한해 허용,
+     * 그 외에는 attachment 로 강제해 브라우저 실행을 차단한다.
+     */
+    public static function send(int $fileId, callable $authorize, bool $inline = false): never
     {
         $f = Db::one("SELECT * FROM project_files WHERE id = :id", [':id' => $fileId]);
         if (!$f) {
@@ -129,9 +133,12 @@ class Upload
             exit('파일이 존재하지 않습니다.');
         }
         Audit::log('file_download', 'project_files', $fileId, null, null);
-        header('Content-Type: ' . ($f['mime'] ?: 'application/octet-stream'));
+        $mime = (string) ($f['mime'] ?: 'application/octet-stream');
+        $safeInline = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $disposition = ($inline && in_array($mime, $safeInline, true)) ? 'inline' : 'attachment';
+        header('Content-Type: ' . $mime);
         header('Content-Length: ' . filesize($full));
-        header('Content-Disposition: attachment; filename="' . rawurlencode($f['original_name']) . '"');
+        header('Content-Disposition: ' . $disposition . '; filename="' . rawurlencode($f['original_name']) . '"');
         header('X-Content-Type-Options: nosniff');
         readfile($full);
         exit;

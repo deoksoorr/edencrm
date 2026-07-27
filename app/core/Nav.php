@@ -31,7 +31,7 @@ class Nav
             ],
             '관리' => [
                 ['staff.index', '직원 관리', 'staff.view', 'id'],
-                ['targets.index', '목표 관리', 'settings.manage', 'target'],
+                ['targets.index', '목표 관리', null, 'target'], // R9: 직원도 본인 공개 목표 열람(컨트롤러 스코프)
                 ['settings.index', '시스템 설정', 'settings.manage', 'settings'],
                 ['audit.index', '감사 로그', 'audit.view', 'shield'],
             ],

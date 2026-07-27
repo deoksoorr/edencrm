@@ -462,7 +462,9 @@ CREATE TABLE `projects` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `project_no` VARCHAR(30) NOT NULL,
   `name` VARCHAR(150) NOT NULL,
-  `customer_id` INT UNSIGNED NOT NULL,
+  `customer_id` INT UNSIGNED NULL COMMENT 'R10: 예외 프로젝트는 NULL 허용(고객명 스냅샷 사용)',
+  `is_exception` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '예외 프로젝트(수동 생성·계약 미연결) 여부(R10)',
+  `customer_name_snapshot` VARCHAR(150) NULL COMMENT '예외 프로젝트 고객명 자유입력 스냅샷(R10)',
   `contract_id` INT UNSIGNED NULL,
   `site_address` VARCHAR(255) NULL,
   `work_type` VARCHAR(50) NULL,
@@ -914,9 +916,11 @@ CREATE TABLE IF NOT EXISTS `site_bonuses` (
   `project_id` INT UNSIGNED NULL COMMENT '대상 현장(프로젝트, 선택)',
   `year` SMALLINT UNSIGNED NOT NULL,
   `half` TINYINT UNSIGNED NOT NULL COMMENT '1=상반기(1/1-6/30), 2=하반기(7/1-12/31)',
-  `base_amount` DECIMAL(14,0) NOT NULL DEFAULT 0 COMMENT '보너스 산정 대상 금액',
-  `calc_basis` VARCHAR(100) NULL COMMENT '산정 기준(예: 현장 순이익의 10%)',
-  `calc_amount` DECIMAL(14,0) NOT NULL DEFAULT 0 COMMENT '산정 금액',
+  `base_amount` DECIMAL(14,0) NOT NULL DEFAULT 0 COMMENT '산정 대상 매출(프로젝트 공급가 연동)',
+  `calc_basis` VARCHAR(100) NULL COMMENT '(레거시) 산정 기준 텍스트 — R9-2부터 미입력, 과거 행 표시 폴백',
+  `contrib_revenue` DECIMAL(14,0) NULL COMMENT '기여도 적용 매출 = 산정 대상 매출 × 기여율(R9-2)',
+  `bonus_rate` DECIMAL(5,2) NULL COMMENT '보너스율(%) — 산정 금액 = 기여도 적용 매출 × 보너스율/100 (R10)',
+  `calc_amount` DECIMAL(14,0) NOT NULL DEFAULT 0 COMMENT '산정 금액 = 기여도 적용 매출 × 보너스율/100 (R10)',
   `paid_amount` DECIMAL(14,0) NOT NULL DEFAULT 0 COMMENT '실제 지급 금액',
   `pay_date` DATE NULL,
   `pay_status` VARCHAR(20) NOT NULL DEFAULT 'unpaid' COMMENT 'unpaid/partial/paid/cancelled',
@@ -955,3 +959,58 @@ CREATE TABLE IF NOT EXISTS `site_bonus_history` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ============================================================================
+-- R9 목표 원장 — 유형(매출·순이익·계약액·계약건수·입금·프로젝트수) × 대상(회사·부서·직원)
+--                × 기간(월·분기·반기·연간·사용자지정). 달성률·상태는 저장하지 않고
+--                조회 시 GoalService 가 실제 데이터(AccountingService)로 계산한다.
+-- 원장 원칙: 소프트 삭제만, 모든 변경은 goal_history 에 전/후 JSON 보존.
+-- company_targets(대시보드·리포트 회사 목표)는 별도 유지 — 회귀 없음.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS `goals` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(100) NOT NULL COMMENT '목표명',
+  `metric` VARCHAR(20) NOT NULL COMMENT 'revenue/profit/contract_amount/contract_count/payment/project_count',
+  `subject_type` VARCHAR(10) NOT NULL DEFAULT 'company' COMMENT 'company/department/user',
+  `user_id` INT UNSIGNED NULL COMMENT 'subject_type=user 대상 직원',
+  `department_id` INT UNSIGNED NULL COMMENT 'subject_type=department 대상 부서(팀)',
+  `period_type` VARCHAR(10) NOT NULL COMMENT 'month/quarter/half/year/custom',
+  `year` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'custom=0',
+  `period_no` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'month 1-12 / quarter 1-4 / half 1-2 / year·custom 0',
+  `start_date` DATE NOT NULL COMMENT '기간 시작 — 전 기간유형 공통 실적 집계 기준',
+  `end_date` DATE NOT NULL COMMENT '기간 종료',
+  `target_value` DECIMAL(14,0) NOT NULL COMMENT '목표값(금액 원 / 건수)',
+  `owner_user_id` INT UNSIGNED NULL COMMENT '담당 직원(관리 책임)',
+  `memo` VARCHAR(500) NULL,
+  `is_public` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '대상 직원 본인 열람 허용',
+  `status` VARCHAR(10) NOT NULL DEFAULT 'active' COMMENT 'active/ended/cancelled — 달성/미달은 조회 시 계산',
+  `status_reason` VARCHAR(255) NULL COMMENT '종료/중단 사유',
+  `created_by` INT UNSIGNED NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` DATETIME NULL COMMENT '소프트 삭제(물리 삭제 금지)',
+  PRIMARY KEY (`id`),
+  KEY `idx_goals_range` (`start_date`, `end_date`),
+  KEY `idx_goals_user_period` (`user_id`, `period_type`, `year`, `period_no`),
+  KEY `idx_goals_status` (`status`, `deleted_at`),
+  CONSTRAINT `fk_goals_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_goals_dept` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_goals_owner` FOREIGN KEY (`owner_user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_goals_created_by` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `goal_history` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `goal_id` INT UNSIGNED NOT NULL,
+  `action` VARCHAR(20) NOT NULL COMMENT 'create/update/end/cancel/delete',
+  `before_json` TEXT NULL COMMENT '변경 전 값(JSON)',
+  `after_json` TEXT NULL COMMENT '변경 후 값(JSON)',
+  `reason` VARCHAR(255) NULL COMMENT '변경 사유(종료·중단·삭제 시 기록)',
+  `changed_by` INT UNSIGNED NULL,
+  `changed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_gh_goal` (`goal_id`),
+  KEY `idx_gh_changed_at` (`changed_at`),
+  CONSTRAINT `fk_gh_goal` FOREIGN KEY (`goal_id`) REFERENCES `goals` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_gh_user` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

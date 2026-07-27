@@ -1,6 +1,8 @@
 <?php
 /** @var array $customer @var array $activities @var array $contacts @var array $quotes
- *  @var array $contracts @var array $projects @var array $leads */
+ *  @var array $contracts @var array $projects @var array $leads @var ?array $licenseFile */
+$licenseFile = $licenseFile ?? null;
+$isBiz = (int) ($customer['is_business'] ?? 0) === 1;
 $typeLabel = ['individual' => '개인', 'company' => '법인'];
 $statusBadge = ['active' => 'badge-ok', 'inactive' => 'badge-muted', 'blacklist' => 'badge-danger'];
 $statusLabel = ['active' => '활성', 'inactive' => '비활성', 'blacklist' => '블랙리스트'];
@@ -13,6 +15,9 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
       <div class="detail-title">
         <?= e($customer['name']) ?>
         <span class="badge badge-info"><?= e($typeLabel[$customer['type']] ?? $customer['type']) ?></span>
+        <?php if ($isBiz): ?>
+          <span class="badge <?= $licenseFile ? 'badge-ok' : 'badge-muted' ?>">사업자<?= $licenseFile ? ' · 등록증 있음' : ' · 등록증 없음' ?></span>
+        <?php endif; ?>
         <span class="badge <?= $statusBadge[$customer['status']] ?? '' ?>"><?= e($statusLabel[$customer['status']] ?? $customer['status']) ?></span>
       </div>
       <div class="detail-meta">
@@ -72,6 +77,58 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
         <dt>개인정보동의</dt><dd><?= ((int) $customer['privacy_agreed'] === 1) ? '동의' : '미동의' ?></dd>
       </dl>
     </div></div>
+
+    <?php if ($isBiz || $licenseFile): // ── 사업자 정보·등록증 카드 (R4 T2) ── ?>
+    <div class="card"><div class="card-body">
+      <div class="card-title">사업자 정보</div>
+      <dl class="dl">
+        <dt>사업자등록번호</dt><dd class="mono"><?= e($customer['biz_reg_no'] ?: '-') ?></dd>
+        <dt>상호(법인명)</dt><dd><?= e($customer['biz_name'] ?: '-') ?></dd>
+        <dt>대표자명</dt><dd><?= e($customer['biz_ceo'] ?: '-') ?></dd>
+        <dt>사업장 소재지</dt><dd><?= e($customer['biz_address'] ?: '-') ?></dd>
+        <dt>업태 / 종목</dt><dd><?= e($customer['biz_type'] ?: '-') ?> / <?= e($customer['biz_item'] ?: '-') ?></dd>
+      </dl>
+
+      <div class="mt-14">
+        <div class="card-title">사업자등록증</div>
+        <?php if ($licenseFile): ?>
+          <div class="kv-row">
+            <div class="kv"><span class="kv-label">파일명</span><span class="kv-value"><?= e($licenseFile['original_name']) ?></span></div>
+            <div class="kv"><span class="kv-label">업로드일</span><span class="kv-value"><?= fmtdate($licenseFile['created_at'], 'Y-m-d H:i') ?></span></div>
+            <div class="kv"><span class="kv-label">업로드 직원</span><span class="kv-value"><?= e($licenseFile['uploader_name'] ?: '-') ?></span></div>
+          </div>
+          <div class="btn-group mt-14">
+            <a class="btn btn-outline btn-sm" target="_blank" rel="noopener"
+               href="<?= e(url('customers.license.download', ['id' => $licenseFile['id'], 'preview' => 1])) ?>">미리보기</a>
+            <a class="btn btn-outline btn-sm"
+               href="<?= e(url('customers.license.download', ['id' => $licenseFile['id']])) ?>">다운로드</a>
+            <?php if (can('customer.manage')): ?>
+              <form method="post" action="<?= e(url('customers.license.upload')) ?>" enctype="multipart/form-data" class="inline-form" id="licenseReplaceForm">
+                <?= csrf_field() ?>
+                <input type="hidden" name="customer_id" value="<?= (int) $customer['id'] ?>">
+                <input type="file" name="license_file" id="licenseReplaceInput" class="hidden" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                <button type="button" class="btn btn-outline btn-sm" id="btnLicenseReplace">교체</button>
+              </form>
+              <button type="button" class="btn btn-danger btn-sm" id="btnLicenseDelete">삭제</button>
+            <?php endif; ?>
+          </div>
+        <?php else: ?>
+          <div class="empty compact"><div class="empty-title">등록된 사업자등록증이 없습니다.</div></div>
+          <?php if (can('customer.manage')): ?>
+            <form method="post" action="<?= e(url('customers.license.upload')) ?>" enctype="multipart/form-data" class="form mt-14">
+              <?= csrf_field() ?>
+              <input type="hidden" name="customer_id" value="<?= (int) $customer['id'] ?>">
+              <div class="btn-group">
+                <input type="file" name="license_file" class="input" required accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                <button type="submit" class="btn btn-primary btn-sm">등록증 업로드</button>
+              </div>
+              <span class="field-hint">PDF·JPG·JPEG·PNG, 최대 10MB</span>
+            </form>
+          <?php endif; ?>
+        <?php endif; ?>
+      </div>
+    </div></div>
+    <?php endif; ?>
   </div>
 
   <div class="tab-panel" data-panel="timeline">
@@ -89,7 +146,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
             <span class="field-label">일시</span>
             <input type="datetime-local" name="activity_at" class="input" value="<?= date('Y-m-d\TH:i') ?>">
           </label>
-          <label class="field" style="justify-content:flex-end">
+          <label class="field field-action">
             <button type="submit" class="btn btn-primary">활동 추가</button>
           </label>
         </div>
@@ -100,7 +157,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
       </form>
       <?php endif; ?>
       <div class="timeline" id="activityTimeline">
-        <?php if (!$activities): ?><div class="empty" style="padding:20px"><div class="empty-title">기록된 활동이 없습니다.</div></div><?php endif; ?>
+        <?php if (!$activities): ?><div class="empty compact"><div class="empty-title">기록된 활동이 없습니다.</div></div><?php endif; ?>
         <?php foreach ($activities as $a): ?>
           <div class="timeline-item <?= e($a['activity_type']) ?>">
             <div class="timeline-time"><?= fmtdate($a['activity_at'], 'Y-m-d H:i') ?> · <?= e($a['user_name'] ?: '') ?></div>
@@ -128,7 +185,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
         </table></div>
       <?php endif; ?>
       <?php if (can('pipeline.manage')): ?>
-        <div style="margin-top:12px"><a class="btn btn-outline btn-sm" href="<?= e(url('pipeline.index')) ?>">파이프라인에서 신규 영업기회 등록</a></div>
+        <div class="mt-14"><a class="btn btn-outline btn-sm" href="<?= e(url('pipeline.index')) ?>">파이프라인에서 신규 영업기회 등록</a></div>
       <?php endif; ?>
     </div></div>
   </div>
@@ -190,12 +247,14 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
 
   <div class="tab-panel" data-panel="memo">
     <div class="card"><div class="card-body">
-      <div style="white-space:pre-wrap;font-size:13.5px"><?= e($customer['memo'] ?: '등록된 메모가 없습니다.') ?></div>
+      <div class="prewrap"><?= e($customer['memo'] ?: '등록된 메모가 없습니다.') ?></div>
     </div></div>
   </div>
 </div>
 <?php
-$inlineScript = <<<JS
+// r4-refactor(T10): 뷰 내 $inlineScript 대입은 View::capture 스코프에 갇혀 레이아웃에 전달되지 않아
+// 이 스크립트가 전혀 실행되지 않던 기존 버그 수정 — 뷰 콘텐츠에 직접 출력(DOMContentLoaded 로 app.js 로드 후 실행 보장).
+$viewScript = <<<JS
 (function(){
   var tabs = document.querySelectorAll('#custTabs .tab');
   tabs.forEach(function(t){
@@ -240,6 +299,30 @@ $inlineScript = <<<JS
     });
   }
 
+  // ── 사업자등록증 교체·삭제 (R4 T2) ──
+  var repBtn = document.getElementById('btnLicenseReplace');
+  if (repBtn) {
+    var repInput = document.getElementById('licenseReplaceInput');
+    repBtn.addEventListener('click', function(){ repInput.click(); });
+    repInput.addEventListener('change', function(){
+      if (repInput.files.length) document.getElementById('licenseReplaceForm').submit();
+    });
+  }
+  var licDelBtn = document.getElementById('btnLicenseDelete');
+  if (licDelBtn) {
+    licDelBtn.addEventListener('click', async function(){
+      var ok = await EDEN.confirm('사업자등록증 파일을 삭제하시겠습니까?', {danger:true, okLabel:'삭제'});
+      if (!ok) return;
+      try {
+        await api('customers.license.delete', {customer_id: {$customer['id']}});
+        toast('사업자등록증이 삭제되었습니다.', 'success');
+        location.reload();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  }
+
   var delBtn = document.getElementById('btnDeleteCustomer');
   if (delBtn) {
     delBtn.addEventListener('click', async function(){
@@ -257,3 +340,6 @@ $inlineScript = <<<JS
 })();
 JS;
 ?>
+<script>document.addEventListener('DOMContentLoaded', function () {
+<?= $viewScript ?>
+});</script>

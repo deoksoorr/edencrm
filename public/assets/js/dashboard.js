@@ -35,14 +35,18 @@
 
     const trendSum = (data.monthly_trend || []).reduce((s, r) => s + Math.abs(r.revenue) + Math.abs(r.profit), 0);
     if (trendEl && data.monthly_trend && trendSum === 0) {
-      showEmpty(trendEl, '최근 6개월 계약 매출 데이터가 아직 없습니다.');
+      showEmpty(trendEl, '최근 6개월 확정 매출(공급가액) 데이터가 아직 없습니다.');
     } else if (trendEl && data.monthly_trend) {
+      // x축 라벨은 'n월'로 축약(모바일 좁은 폭에서 연-월 6개가 회전·겹침) — 전체 연-월은 툴팁 제목으로 노출.
+      // ym 형식은 대시보드 '26-07'/리포트 '2026-07' 두 가지가 있어 마지막 '-' 뒤(월)만 취한다(NaN 방지).
+      const fullYm = data.monthly_trend.map((r) => r.ym);
+      const monthOf = (ym) => { const m = parseInt(String(ym).split('-').pop(), 10); return isNaN(m) ? ym : m + '월'; };
       new Chart(trendEl.getContext('2d'), {
         data: {
-          labels: data.monthly_trend.map((r) => r.ym),
+          labels: data.monthly_trend.map((r) => monthOf(r.ym)),
           datasets: [
-            { type: 'bar', label: '매출', data: data.monthly_trend.map((r) => r.revenue), backgroundColor: '#1a56db', borderRadius: 4, maxBarThickness: 42, order: 2 },
-            { type: 'line', label: '순이익', data: data.monthly_trend.map((r) => r.profit), borderColor: '#0f9d58', backgroundColor: '#0f9d58', borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5, order: 1 },
+            { type: 'bar', label: '확정 매출(공급가액)', data: data.monthly_trend.map((r) => r.revenue), backgroundColor: '#1a56db', borderRadius: 4, maxBarThickness: 42, order: 2 },
+            { type: 'line', label: '확정 순이익', data: data.monthly_trend.map((r) => r.profit), borderColor: '#0f9d58', backgroundColor: '#0f9d58', borderWidth: 2, tension: 0.35, pointRadius: 3, pointHoverRadius: 5, order: 1 },
           ],
         },
         options: {
@@ -50,10 +54,13 @@
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { position: 'bottom', labels: { boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true } },
-            tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + won(c.parsed.y) } },
+            tooltip: { callbacks: {
+              title: (items) => fullYm[items[0].dataIndex],
+              label: (c) => c.dataset.label + ': ' + won(c.parsed.y),
+            } },
           },
           scales: {
-            x: { grid: { display: false } },
+            x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true } },
             y: { border: { display: false }, grid: { color: '#eef1f4' }, ticks: { callback: (v) => moneyShort(v) } },
           },
         },

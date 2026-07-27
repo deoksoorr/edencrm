@@ -6,3 +6,10 @@ storage/logs/*
 .DS_Store
 .superpowers/
 .devdb/
+# 배포 비밀·산출물 (R6 T4) — 값 노출 금지
+deploy/cafe24.env
+deploy/config.production.php
+deploy/*.log
+deploy/*.local.txt
+deploy/ADMIN_CREDENTIALS.local.txt
+database/backups/

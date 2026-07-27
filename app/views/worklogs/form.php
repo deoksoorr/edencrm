@@ -1,7 +1,7 @@
 <?php
 /** @var array|null $row @var array $projects @var array $stages */
 ?>
-<div class="page">
+<div class="page page-narrow">
   <div class="page-head">
     <div class="page-title"><?= $row ? '작업일지 수정' : '작업일지 작성' ?></div>
   </div>

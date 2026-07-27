@@ -25,10 +25,21 @@ class QuotesController
     {
         $q       = Util::str('q');
         $status  = Util::str('status');
-        $from    = Util::str('date_from');
-        $to      = Util::str('date_to');
+        $period  = Util::str('period');
+        $fromIn  = Util::str('date_from');
+        $toIn    = Util::str('date_to');
         $page    = max(1, Util::int('page', 1));
         $perPage = (int) ($GLOBALS['config']['PAGE_SIZE'] ?? 20);
+
+        // 기간 필터 (R4 공통 규약): period 프리셋 → Util::periodRange 단일 계산.
+        // 하위호환 — period 없이 date_from/to 직접 진입 시 custom 으로 동작.
+        if ($period === '' && ($fromIn !== '' || $toIn !== '')) {
+            $period = 'custom';
+        }
+        if ($period !== '' && !isset(Util::PERIOD_PRESETS[$period])) {
+            $period = '';
+        }
+        $range = Util::periodRange($period, $fromIn !== '' ? $fromIn : null, $toIn !== '' ? $toIn : null);
 
         $where  = ['q.deleted_at IS NULL'];
         $params = [];
@@ -41,18 +52,27 @@ class QuotesController
             $where[] = 'q.status = :status';
             $params[':status'] = $status;
         }
-        if ($from !== '') {
+        if ($range['from'] !== null) {
             $where[] = 'DATE(q.created_at) >= :from';
-            $params[':from'] = $from;
+            $params[':from'] = $range['from'];
         }
-        if ($to !== '') {
+        if ($range['to'] !== null) {
             $where[] = 'DATE(q.created_at) <= :to';
-            $params[':to'] = $to;
+            $params[':to'] = $range['to'];
         }
         $whereSql = implode(' AND ', $where);
 
         $total = (int) Db::val(
             "SELECT COUNT(*) FROM quotes q JOIN customers c ON c.id = q.customer_id WHERE $whereSql",
+            $params
+        );
+        // 합계 카드(필터 연동): 현재 버전 총액(VAT 포함) 합
+        $sumTotal = (float) Db::val(
+            "SELECT COALESCE(SUM(qv.total_amount), 0)
+             FROM quotes q
+             JOIN customers c ON c.id = q.customer_id
+             LEFT JOIN quote_versions qv ON qv.id = q.current_version_id
+             WHERE $whereSql",
             $params
         );
         $p = Util::paginate($total, $page, $perPage);
@@ -74,7 +94,16 @@ class QuotesController
             'title'   => '견적 관리',
             'rows'    => $rows,
             'p'       => $p,
-            'filters' => ['q' => $q, 'status' => $status, 'date_from' => $from, 'date_to' => $to],
+            'sumTotal'=> $sumTotal,
+            'range'   => $range,
+            'filters' => [
+                'q'         => $q,
+                'status'    => $status,
+                'period'    => $period,
+                // custom 일 때만 URL 에 날짜 유지(프리셋은 period 만으로 재계산)
+                'date_from' => $period === 'custom' ? (string) ($range['from'] ?? '') : '',
+                'date_to'   => $period === 'custom' ? (string) ($range['to'] ?? '') : '',
+            ],
             'statusLabels' => self::STATUS_LABELS,
             'statusBadge'  => self::STATUS_BADGE,
         ]);
@@ -170,11 +199,9 @@ class QuotesController
         }
 
         $customers = Db::all("SELECT id, name, phone FROM customers WHERE deleted_at IS NULL ORDER BY name ASC");
-        $leads = Db::all(
-            "SELECT l.id, l.work_type, c.name AS customer_name
-             FROM leads l JOIN customers c ON c.id = l.customer_id
-             WHERE l.deleted_at IS NULL ORDER BY l.id DESC LIMIT 300"
-        );
+        // 영업기회는 선택된 고객 것만 서버 쿼리로 노출(고객 미선택 시 빈 목록 — 고객 변경 시 quotes.leads AJAX 재조회)
+        $selCustomerId = (int) ($quote['customer_id'] ?? 0);
+        $leads = $selCustomerId > 0 ? $this->leadOptionsFor($selCustomerId, (int) ($quote['lead_id'] ?? 0)) : [];
 
         View::render('quotes/form', [
             'title'     => $id ? '견적 수정' : '견적 등록',
@@ -201,6 +228,13 @@ class QuotesController
 
         if (!$customerId || !Db::val("SELECT id FROM customers WHERE id=:id AND deleted_at IS NULL", [':id' => $customerId])) {
             Response::redirect('quotes.form', $id ? ['id' => $id] : [], '고객을 선택하세요.', 'error');
+        }
+        // 영업기회-고객 소속 검증(서버측 강제): 삭제되지 않은 리드이며 선택 고객의 리드여야 저장 가능
+        if ($leadId !== null) {
+            $leadCustomer = Db::val("SELECT customer_id FROM leads WHERE id=:id AND deleted_at IS NULL", [':id' => $leadId]);
+            if ($leadCustomer === null || (int) $leadCustomer !== $customerId) {
+                Response::redirect('quotes.form', $id ? ['id' => $id] : [], '선택한 영업기회가 해당 고객의 영업기회가 아니거나 삭제되었습니다.', 'error');
+            }
         }
         if (!in_array($status, array_keys(self::STATUS_LABELS), true)) {
             $status = 'draft';
@@ -281,6 +315,16 @@ class QuotesController
         $after = Db::one("SELECT * FROM quotes WHERE id=:id", [':id' => $newId]);
         Audit::log($id ? 'quote_update' : 'quote_create', 'quotes', $newId, $before, $after);
 
+        // 리드 단계 자동 전진(R7-F5): 견적 문서 흐름 → 원본 파이프라인 단계 동기화
+        // (대시보드 깔때기·전환율이 원본 stage 를 세므로 파생 단계와 어긋나지 않게 전진)
+        if ($leadId) {
+            $stageMap = ['draft' => 'quote_drafting', 'sent' => 'quote_sent', 'accepted' => 'contract_pending'];
+            if (isset($stageMap[$status])) {
+                PipelineStageService::advanceLead($leadId, $stageMap[$status],
+                    '견적 ' . (self::STATUS_LABELS[$status] ?? $status) . ' 자동 전이');
+            }
+        }
+
         Response::redirect('quotes.show', ['id' => $newId], '견적이 저장되었습니다.');
     }
 
@@ -334,6 +378,34 @@ class QuotesController
         Response::redirect('quotes.index', [], '견적이 삭제되었습니다.');
     }
 
+    /** 고객별 영업기회 목록 AJAX(GET) — 견적 폼의 고객 변경 시 서버 쿼리로 재조회(프론트 필터링 금지). */
+    public function leadOptions(): void
+    {
+        $customerId = Util::int('customer_id', 0);
+        if ($customerId <= 0 || !Db::val("SELECT id FROM customers WHERE id=:id AND deleted_at IS NULL", [':id' => $customerId])) {
+            Response::error('고객을 찾을 수 없습니다.', 404);
+        }
+        Response::json(['leads' => $this->leadOptionsFor($customerId, Util::int('include_lead_id', 0))]);
+    }
+
+    /**
+     * 고객별 영업기회 선택지 — 서버 쿼리 단일 출처(quotes.form 초기 렌더 + quotes.leads AJAX 공용).
+     * 노출 정책: 소프트삭제 제외 + 실주·취소(pipeline_stages.is_lost=1) 단계 제외.
+     * 보류·계약완료(is_won) 등 나머지 단계는 재견적 수요가 있어 노출하되 단계명을 라벨에 표기한다.
+     * 수정 화면의 기존 연결 리드($includeLeadId)는 정책과 무관하게 항상 포함해 데이터 정합을 유지한다.
+     */
+    private function leadOptionsFor(int $customerId, int $includeLeadId = 0): array
+    {
+        return Db::all(
+            "SELECT l.id, l.work_type, ps.name AS stage_name
+             FROM leads l JOIN pipeline_stages ps ON ps.id = l.stage_id
+             WHERE l.deleted_at IS NULL AND l.customer_id = :cid
+               AND (ps.is_lost = 0 OR l.id = :keep)
+             ORDER BY l.id DESC LIMIT 300",
+            [':cid' => $customerId, ':keep' => $includeLeadId]
+        );
+    }
+
     /** POST items[idx][name/area/qty/unit_price/...] 를 정리·검증. */
     private function parseItems(array $raw): array
     {
@@ -350,19 +422,25 @@ class QuotesController
             $qty = $num('qty', 1) ?: 1;
             $unitPrice = $num('unit_price', 0);
             $area = (isset($row['area']) && $row['area'] !== '') ? $num('area', 0) : null;
-            // 금액 = 단가(원/㎡) × 면적 × 수량. 면적 미입력(개수 기준)이면 단가 × 수량.
+            // 기본금액 = 단가(원/㎡) × 면적 × 수량. 면적 미입력(개수 기준)이면 단가 × 수량.
             $areaFactor = ($area !== null && $area > 0) ? $area : 1;
+            $material    = $num('material_cost', 0);
+            $labor       = $num('labor_cost', 0);
+            $equipment   = $num('equipment_cost', 0);
+            $outsourcing = $num('outsourcing_cost', 0);
+            $etc         = $num('etc_cost', 0);
             $out[] = [
                 'name'             => $name,
                 'area'             => $area,
                 'qty'              => $qty,
                 'unit_price'       => $unitPrice,
-                'material_cost'    => $num('material_cost', 0),
-                'labor_cost'       => $num('labor_cost', 0),
-                'equipment_cost'   => $num('equipment_cost', 0),
-                'outsourcing_cost' => $num('outsourcing_cost', 0),
-                'etc_cost'         => $num('etc_cost', 0),
-                'amount'           => round($areaFactor * $qty * $unitPrice, 0),
+                'material_cost'    => $material,
+                'labor_cost'       => $labor,
+                'equipment_cost'   => $equipment,
+                'outsourcing_cost' => $outsourcing,
+                'etc_cost'         => $etc,
+                // R5 확정 산식: 금액 = 기본금액 + 재료비+인건비+장비비+외주비+기타비 (서버가 최종 권위 — 클라이언트 값 신뢰 저장 금지)
+                'amount'           => round($areaFactor * $qty * $unitPrice + $material + $labor + $equipment + $outsourcing + $etc, 0),
             ];
         }
         return $out;

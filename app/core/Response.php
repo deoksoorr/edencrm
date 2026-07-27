@@ -14,6 +14,13 @@ class Response
 
     public static function error(string $msg, int $status = 400, array $extra = []): never
     {
+        // AJAX(X-Requested-With/Accept: json)는 JSON, 브라우저 폼 제출은 HTML 오류 페이지로 응답한다.
+        // (네이티브 CRUD 폼의 서버측 검증 실패 시 원시 JSON 이 사용자에게 노출되던 문제 방지)
+        if (!self::wantsJson()) {
+            http_response_code($status);
+            View::renderError($status, '요청을 처리할 수 없습니다', $msg);
+            exit;
+        }
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'error' => $msg] + $extra, JSON_UNESCAPED_UNICODE);

@@ -58,16 +58,16 @@
 
     <?php if ($version): ?>
       <div class="kv-row mt-16">
-        <div class="kv"><div class="kv-label">공급가액</div><div class="kv-value"><?= moneyCell($version['subtotal']) ?></div></div>
-        <div class="kv"><div class="kv-label">부가세</div><div class="kv-value"><?= moneyCell($version['vat']) ?></div></div>
-        <div class="kv"><div class="kv-label">할인</div><div class="kv-value"><?= moneyCell($version['discount']) ?></div></div>
-        <div class="kv"><div class="kv-label">총 금액</div><div class="kv-value" style="color:var(--brand)"><?= moneyCell($version['total_amount']) ?></div></div>
+        <div class="kv" title="항목 금액 합 · VAT 제외"><div class="kv-label">공급가액(VAT 제외)</div><div class="kv-value"><?= moneyCell($version['subtotal']) ?></div></div>
+        <div class="kv" title="공급가액(할인 전) × 부가세율"><div class="kv-label">부가세</div><div class="kv-value"><?= moneyCell($version['vat']) ?></div></div>
+        <div class="kv" title="총액(VAT 포함)에서 차감되는 할인액"><div class="kv-label">할인</div><div class="kv-value"><?= moneyCell($version['discount']) ?></div></div>
+        <div class="kv" title="공급가액 + 부가세 − 할인 · VAT 포함"><div class="kv-label">총액(VAT 포함)</div><div class="kv-value hl"><?= moneyCell($version['total_amount']) ?></div></div>
       </div>
       <?php if (!empty($version['note'])): ?><div class="field-hint mt-8">메모: <?= e($version['note']) ?></div><?php endif; ?>
     <?php endif; ?>
     <?php if (!empty($quote['memo'])): ?>
       <div class="section-title mt-16">특이사항</div>
-      <div style="white-space:pre-wrap"><?= e($quote['memo']) ?></div>
+      <div class="prewrap"><?= e($quote['memo']) ?></div>
     <?php endif; ?>
   </div>
 
@@ -75,10 +75,10 @@
     <div class="section-head"><div class="st"><h2>버전 이력</h2></div></div>
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>버전</th><th class="num">공급가액</th><th class="num">부가세</th><th class="num">할인</th><th class="num">총액</th><th>작성자</th><th>작성일</th></tr></thead>
+        <thead><tr><th>버전</th><th class="num">공급가액(VAT 제외)</th><th class="num">부가세</th><th class="num">할인</th><th class="num" title="공급가액 + 부가세 − 할인 · VAT 포함">총액(VAT 포함)</th><th>작성자</th><th>작성일</th></tr></thead>
         <tbody>
           <?php foreach ($versions as $v): ?>
-            <tr<?= $v['id'] == $quote['current_version_id'] ? ' style="font-weight:600;background:#fafbfc"' : '' ?>>
+            <tr<?= $v['id'] == $quote['current_version_id'] ? ' class="row-hl"' : '' ?>>
               <td>v<?= (int) $v['version_no'] ?><?= $v['id'] == $quote['current_version_id'] ? ' <span class="badge badge-info">현재</span>' : '' ?></td>
               <td class="num mono"><?= money($v['subtotal']) ?></td>
               <td class="num mono"><?= money($v['vat']) ?></td>

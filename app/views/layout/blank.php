@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($__title) ?> · <?= e($GLOBALS['config']['APP_NAME']) ?></title>
 <meta name="csrf-token" content="<?= e(Csrf::token()) ?>">
-<link rel="stylesheet" href="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/css/app.css">
+<link rel="stylesheet" href="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/css/app.css?v=<?= (string) (@filemtime(__DIR__ . '/../../../public/assets/css/app.css') ?: 1) ?>">
 </head>
 <body class="blank-body">
 <?php

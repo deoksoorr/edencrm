@@ -1,5 +1,5 @@
 <?php /** @var array|null $staff @var array $departments @var array $roles */ ?>
-<div class="page">
+<div class="page page-narrow">
   <div class="page-head">
     <h1 class="page-title"><?= $staff ? '직원 정보 수정' : '직원 등록' ?></h1>
     <div class="page-actions"><a href="<?= e(url('staff.index')) ?>" class="btn btn-outline">목록으로</a></div>
@@ -114,7 +114,7 @@ document.getElementById('staffForm').addEventListener('submit', async function (
       EDEN.modal({
         title: '직원 등록 완료',
         body: '<p>초기 비밀번호가 발급되었습니다. 직원에게 안전하게 전달하세요.</p>' +
-              '<p style="font-size:20px;font-weight:700;letter-spacing:1px;background:var(--line-2);padding:10px 14px;border-radius:6px;text-align:center">' + data.temp_password + '</p>',
+              '<p class="temp-pw">' + data.temp_password + '</p>',
         buttons: [{ label: '확인', class: 'btn-primary', onClick: (close) => { close(); location.href = EDEN.url('staff.index'); } }],
       });
     } else {

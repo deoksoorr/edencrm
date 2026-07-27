@@ -3,7 +3,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 $GLOBALS['config'] = require __DIR__ . '/../../app/config/config.php'; // APP_PATH 등 상수 define + 배열 반환
-foreach (['Util', 'Db', 'Calc', 'Settings', 'AccountingService'] as $c) {
+foreach (['Util', 'Db', 'Calc', 'Settings', 'AccountingService', 'CostService', 'AttendanceService'] as $c) {
     $f = APP_PATH . '/core/' . $c . '.php';
     if (is_file($f)) { require_once $f; }
 }

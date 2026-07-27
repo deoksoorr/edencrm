@@ -1,9 +1,14 @@
 <?php
 /**
- * 고객 CRM. 목록/상세/등록수정/중복검사/병합/삭제/CSV.
+ * 고객 CRM. 목록/상세/등록수정/중복검사/병합/삭제/CSV + 사업자등록증 관리(R4 T2).
  */
+require_once APP_PATH . '/core/BizReg.php';
+
 class CustomersController
 {
+    /** 사업자등록증 허용 확장자 — PDF/JPG/JPEG/PNG만 (브리프 §1 규약). */
+    private const LICENSE_EXTS = ['pdf', 'jpg', 'jpeg', 'png'];
+
     private const SORT_MAP = [
         'created_at' => 'c.created_at DESC',
         'last_consult' => 'c.last_consult_date DESC',
@@ -110,9 +115,20 @@ class CustomersController
             [':id' => $id]
         );
 
+        $licenseFile = null;
+        if (!empty($customer['biz_license_file_id'])) {
+            $licenseFile = Db::one(
+                "SELECT f.*, u.name AS uploader_name FROM project_files f
+                 LEFT JOIN users u ON u.id = f.uploaded_by
+                 WHERE f.id = :fid AND f.entity_type = 'customer_license' AND f.entity_id = :cid",
+                [':fid' => (int) $customer['biz_license_file_id'], ':cid' => $id]
+            );
+        }
+
         View::render('customers/show', [
             'title' => '고객 상세 - ' . $customer['name'],
             'customer' => $customer,
+            'licenseFile' => $licenseFile,
             'activities' => $activities,
             'contacts' => $contacts,
             'quotes' => $quotes,
@@ -136,10 +152,20 @@ class CustomersController
             }
         }
 
+        $licenseFile = null;
+        if (!empty($customer['biz_license_file_id'])) {
+            $licenseFile = Db::one(
+                "SELECT id, original_name, created_at FROM project_files
+                 WHERE id = :fid AND entity_type = 'customer_license' AND entity_id = :cid",
+                [':fid' => (int) $customer['biz_license_file_id'], ':cid' => $id]
+            );
+        }
+
         View::render('customers/form', [
             'title' => $id ? '고객 정보 수정' : '신규 고객 등록',
             'customer' => $customer,
             'salesUsers' => $this->salesUserOptions((int) ($customer['sales_user_id'] ?? 0)),
+            'licenseFile' => $licenseFile,
         ]);
     }
 
@@ -155,9 +181,26 @@ class CustomersController
             Response::error('개인정보 수집·이용 동의가 필요합니다.', 422);
         }
 
+        // ── 사업자 정보 (R4 T2) — 번호는 형식(10자리)+국세청 체크섬 서버 검증(중복은 경고만, 차단 아님) ──
+        $isBusiness = Util::postInt('is_business', 0) === 1 ? 1 : 0;
+        $bizRegNo = Util::nullIfEmpty(Util::postStr('biz_reg_no'));
+        if ($bizRegNo !== null) {
+            if (!BizReg::isValid($bizRegNo)) {
+                Response::error('사업자등록번호가 올바르지 않습니다. 숫자 10자리와 검증번호를 확인하세요.', 422);
+            }
+            $bizRegNo = BizReg::format($bizRegNo);
+        }
+
         $data = [
             'type' => $type,
             'name' => $name,
+            'is_business' => $isBusiness,
+            'biz_reg_no' => $bizRegNo,
+            'biz_name' => Util::nullIfEmpty(Util::postStr('biz_name')),
+            'biz_ceo' => Util::nullIfEmpty(Util::postStr('biz_ceo')),
+            'biz_address' => Util::nullIfEmpty(Util::postStr('biz_address')),
+            'biz_type' => Util::nullIfEmpty(Util::postStr('biz_type')),
+            'biz_item' => Util::nullIfEmpty(Util::postStr('biz_item')),
             'company_name' => Util::nullIfEmpty(Util::postStr('company_name')),
             'contact_name' => Util::nullIfEmpty(Util::postStr('contact_name')),
             'phone' => Util::nullIfEmpty(Util::postStr('phone')),
@@ -190,20 +233,174 @@ class CustomersController
             Audit::log('customer.create', 'customers', $id, null, $data);
         }
 
+        // 폼에 첨부된 사업자등록증 파일이 있으면 저장(교체 포함) — 실패해도 고객 저장은 유지
+        if (!empty($_FILES['biz_license']) && ($_FILES['biz_license']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            try {
+                $this->storeLicenseFile($id, $_FILES['biz_license']);
+            } catch (\RuntimeException $e) {
+                if (Response::wantsJson()) {
+                    Response::error('고객은 저장되었으나 사업자등록증 업로드 실패: ' . $e->getMessage(), 422, ['id' => $id]);
+                }
+                Response::redirect('customers.show', ['id' => $id], '고객은 저장되었으나 사업자등록증 업로드에 실패했습니다: ' . $e->getMessage(), 'error');
+            }
+        }
+
         if (Response::wantsJson()) {
             Response::json(['id' => $id]);
         }
         Response::redirect('customers.show', ['id' => $id], '저장되었습니다.');
     }
 
-    /** 전화번호/이메일 중복 후보 (등록/수정 폼에서 AJAX 호출). */
+    /* ───────────────────── 사업자등록증 파일 (R4 T2) ─────────────────────
+     * 업로드/교체/삭제 = customer.manage(라우터 강제), 열람 = customer.view + Scope.
+     * 파일 보안은 기존 Upload 패턴 재사용: MIME+확장자 이중 검증, 실행 파일 금지,
+     * 난수 파일명+원본명 보존, DocumentRoot 밖(storage/uploads) 저장, 다운로드는 스트리밍. */
+
+    /** 등록증 업로드/교체 (POST customer_id + license_file). */
+    public function licenseUpload(): void
+    {
+        $customerId = (int) Util::postInt('customer_id', 0);
+        $customer = $this->findScopedCustomer($customerId);
+        if (!$customer) {
+            Response::error('고객을 찾을 수 없거나 접근 권한이 없습니다.', 404);
+        }
+
+        $file = $_FILES['license_file'] ?? null;
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            Response::error('업로드할 파일을 선택하세요.', 422);
+        }
+
+        try {
+            $fileId = $this->storeLicenseFile($customerId, $file);
+        } catch (\RuntimeException $e) {
+            if (Response::wantsJson()) {
+                Response::error($e->getMessage(), 422);
+            }
+            Response::redirect('customers.show', ['id' => $customerId], $e->getMessage(), 'error');
+        }
+
+        if (Response::wantsJson()) {
+            Response::json(['file_id' => $fileId]);
+        }
+        Response::redirect('customers.show', ['id' => $customerId], '사업자등록증이 업로드되었습니다.');
+    }
+
+    /** 등록증 다운로드/미리보기 — Upload::send + customer_license 전용 권한 콜백(Scope 강제). */
+    public function licenseDownload(): void
+    {
+        $fileId = (int) Util::int('id', 0);
+        if (!$fileId) {
+            http_response_code(404);
+            exit('파일을 찾을 수 없습니다.');
+        }
+        $inline = Util::int('preview', 0) === 1;
+        Upload::send($fileId, function (array $f): bool {
+            if (($f['entity_type'] ?? '') !== 'customer_license') {
+                return false; // 이 라우트는 사업자등록증 전용 — 타 엔티티 파일 접근 차단
+            }
+            return $this->findScopedCustomer((int) $f['entity_id']) !== null;
+        }, $inline);
+    }
+
+    /** 등록증 삭제 — Audit 기록 후 DB 행·물리 파일 제거. */
+    public function licenseDelete(): void
+    {
+        $customerId = (int) Util::postInt('customer_id', 0);
+        $customer = $this->findScopedCustomer($customerId);
+        if (!$customer) {
+            Response::error('고객을 찾을 수 없거나 접근 권한이 없습니다.', 404);
+        }
+        if (empty($customer['biz_license_file_id'])) {
+            Response::error('삭제할 사업자등록증이 없습니다.', 404);
+        }
+
+        $this->removeLicenseFile($customerId, (int) $customer['biz_license_file_id'], 'customer_license.delete');
+
+        if (Response::wantsJson()) {
+            Response::json(['customer_id' => $customerId]);
+        }
+        Response::redirect('customers.show', ['id' => $customerId], '사업자등록증이 삭제되었습니다.');
+    }
+
+    /** Scope 를 강제한 단일 고객 조회 (라이선스 계열 공용 가드). */
+    private function findScopedCustomer(int $customerId): ?array
+    {
+        if ($customerId <= 0) {
+            return null;
+        }
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
+        return Db::one(
+            "SELECT c.* FROM customers c WHERE c.id = :id AND c.deleted_at IS NULL AND $scopeSql",
+            [':id' => $customerId] + $scopeParams
+        );
+    }
+
+    /**
+     * 등록증 저장(기존 파일 있으면 교체). Upload::save 재사용 — PDF/JPG/JPEG/PNG만.
+     * @return int 새 project_files.id
+     * @throws RuntimeException 검증 실패 시
+     */
+    private function storeLicenseFile(int $customerId, array $file): int
+    {
+        $info = Upload::save($file, 'customers/' . $customerId, self::LICENSE_EXTS);
+
+        $customer = Db::one('SELECT id, biz_license_file_id FROM customers WHERE id = :id', [':id' => $customerId]);
+        $oldFileId = (int) ($customer['biz_license_file_id'] ?? 0);
+
+        $fileId = Db::insert('project_files', [
+            'project_id'    => null,
+            'entity_type'   => 'customer_license',
+            'entity_id'     => $customerId,
+            'original_name' => $info['original_name'],
+            'stored_name'   => $info['stored_name'],
+            'path'          => $info['path'],
+            'size'          => $info['size'],
+            'mime'          => $info['mime'],
+            'uploaded_by'   => Auth::id(),
+        ]);
+        Db::update('customers', ['biz_license_file_id' => $fileId], 'id = :id', [':id' => $customerId]);
+        Audit::log($oldFileId ? 'customer_license.replace' : 'customer_license.upload', 'project_files', $fileId, null, [
+            'customer_id'   => $customerId,
+            'original_name' => $info['original_name'],
+            'replaced_file_id' => $oldFileId ?: null,
+        ]);
+
+        if ($oldFileId) {
+            $this->removeLicenseFile($customerId, $oldFileId, 'customer_license.delete_replaced', false);
+        }
+        return $fileId;
+    }
+
+    /** 등록증 파일 제거: Audit → 포인터 해제(유지 시 생략) → project_files 행·물리 파일 삭제. */
+    private function removeLicenseFile(int $customerId, int $fileId, string $auditAction, bool $clearPointer = true): void
+    {
+        $f = Db::one(
+            "SELECT * FROM project_files WHERE id = :id AND entity_type = 'customer_license' AND entity_id = :cid",
+            [':id' => $fileId, ':cid' => $customerId]
+        );
+        if (!$f) {
+            return;
+        }
+        Audit::log($auditAction, 'project_files', $fileId, $f, null);
+        if ($clearPointer) {
+            Db::update('customers', ['biz_license_file_id' => null], 'id = :id', [':id' => $customerId]);
+        }
+        Db::run('DELETE FROM project_files WHERE id = :id', [':id' => $fileId]);
+        $full = UPLOAD_PATH . '/' . $f['path'];
+        if (is_file($full)) {
+            @unlink($full);
+        }
+    }
+
+    /** 전화번호/이메일/사업자등록번호 중복 후보 (등록/수정 폼에서 AJAX 호출 — 경고용, 차단 아님). */
     public function dupCheck(): void
     {
         $phone = trim((string) Util::input('phone', ''));
         $email = trim((string) Util::input('email', ''));
+        $bizRegNo = BizReg::normalize((string) Util::input('biz_reg_no', ''));
         $excludeId = (int) Util::input('id', 0);
 
-        if ($phone === '' && $email === '') {
+        if ($phone === '' && $email === '' && $bizRegNo === '') {
             Response::json(['candidates' => []]);
         }
 
@@ -217,8 +414,12 @@ class CustomersController
             $conds[] = 'email = :email';
             $params[':email'] = $email;
         }
+        if ($bizRegNo !== '') {
+            $conds[] = "REPLACE(biz_reg_no, '-', '') = :bizno";
+            $params[':bizno'] = $bizRegNo;
+        }
         $rows = Db::all(
-            "SELECT id, name, company_name, phone, email FROM customers
+            "SELECT id, name, company_name, phone, email, biz_reg_no FROM customers
              WHERE deleted_at IS NULL AND id <> :exclude AND (" . implode(' OR ', $conds) . ") LIMIT 5",
             $params
         );

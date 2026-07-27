@@ -83,12 +83,15 @@ $recentEvents = array_slice($recentEvents, 0, 5);
     <div>
       <div class="detail-title"><?= e($p['name']) ?>
         <span class="badge <?= $badgeClass ?>" title="상태 정의 — 취소: 착공 전 철회 · 파기: 진행 중 계약관계 종료 · 일시 중단: 재개 가능 일시 정지 · 정산 완료: 완료 후 대금 정산 종료"><?= e($statuses[$p['status']] ?? $p['status']) ?></span>
+        <?php if (!empty($p['is_exception'])): ?>
+          <span class="badge badge-warn" title="예외 프로젝트 — 계약 연결 없이 수동 생성됨(최고 관리자)">예외</span>
+        <?php endif; ?>
         <?php if ($psName !== null): ?>
           <span class="badge badge-stage" title="현재 공정(process_stage) — 이동은 '공정' 탭·공정 보드에서" style="--sc:<?= e($psColor) ?>"><?= e($psName) ?></span>
         <?php endif; ?>
       </div>
       <div class="detail-meta">
-        <?= e($p['project_no']) ?> · 고객 <?= e($p['customer_name']) ?> ·
+        <?= e($p['project_no']) ?> · 고객 <?= e($p['customer_name'] ?: '-') ?> ·
         현장주소 <?= e($p['site_address'] ?: '-') ?>
         <?php if ($isDelayed): ?><span class="text-danger"> · 지연</span><?php endif; ?>
       </div>
@@ -119,7 +122,7 @@ $recentEvents = array_slice($recentEvents, 0, 5);
     <div class="proj-summary ps-grouped">
       <div class="ps-info">
         <div class="kv" data-sum="customer"><div class="kv-label">고객</div>
-          <div class="kv-value"><a href="<?= e(url('customers.show', ['id' => $p['customer_id']])) ?>"><?= e($p['customer_name']) ?></a></div></div>
+          <div class="kv-value"><?php if (!empty($p['customer_id'])): ?><a href="<?= e(url('customers.show', ['id' => $p['customer_id']])) ?>"><?= e($p['customer_name']) ?></a><?php else: ?><?= e($p['customer_name'] ?: '-') ?><?php endif; // 예외 프로젝트: 고객 미연결 시 스냅샷명 텍스트 ?></div></div>
         <div class="kv" data-sum="address"><div class="kv-label">현장 주소</div><div class="kv-value"><?= e($p['site_address'] ?: '-') ?></div></div>
         <div class="kv" data-sum="status"><div class="kv-label">프로젝트 상태</div>
           <div class="kv-value"><span class="badge <?= $badgeClass ?>"><?= e($statuses[$p['status']] ?? $p['status']) ?></span></div></div>

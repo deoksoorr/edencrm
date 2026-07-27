@@ -37,17 +37,38 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
             <label class="field-label">프로젝트명<span class="req">*</span></label>
             <input type="text" name="name" class="input" required value="<?= $val('name') ?>">
           </div>
+          <?php // 예외 모드(신규=예외 생성, 수정=is_exception 프로젝트): 고객 연결 선택 사항 + 고객명 직접 입력 허용
+            $exMode = !$project || !empty($p['is_exception']); ?>
           <div class="field">
-            <label class="field-label">고객<span class="req">*</span></label>
-            <select name="customer_id" class="select" required>
-              <option value="">선택</option>
+            <label class="field-label">고객<?= $exMode ? '' : '<span class="req">*</span>' ?></label>
+            <select name="customer_id" class="select" id="projCustomerSel" <?= $exMode ? '' : 'required' ?>>
+              <option value=""><?= $exMode ? '선택 안 함 (고객명 직접 입력)' : '선택' ?></option>
               <?php foreach ($customers as $c): ?>
                 <option value="<?= (int) $c['id'] ?>" <?= (isset($p['customer_id']) && (int) $p['customer_id'] === (int) $c['id']) ? 'selected' : '' ?>>
                   <?= e($c['name']) ?><?= $c['company_name'] ? ' (' . e($c['company_name']) . ')' : '' ?>
                 </option>
               <?php endforeach; ?>
             </select>
+            <?php if ($exMode): ?>
+              <div class="field-hint">기존 고객 연결 또는 아래 <b>고객명 직접 입력</b> 중 하나는 필수입니다.</div>
+            <?php endif; ?>
           </div>
+          <?php if ($exMode): ?>
+          <div class="field">
+            <label class="field-label">고객명 직접 입력</label>
+            <input type="text" name="customer_name_snapshot" class="input" maxlength="150"
+                   value="<?= $val('customer_name_snapshot') ?>" placeholder="예: 한빛아파트 입주자대표회의">
+            <div class="field-hint">기존 고객을 연결하면 저장 시점 고객명이 자동 기록됩니다.</div>
+          </div>
+          <?php if ($project && Rbac::isRole('super_admin')): ?>
+          <div class="field col-span-2">
+            <label class="check">
+              <input type="checkbox" name="convert_to_normal" value="1" id="convertToNormal"> 일반 프로젝트로 전환
+            </label>
+            <div class="field-hint">전환 시 <b>기존 고객 연결이 필수</b>이며, 감사 로그(예외→일반 전환)에 기록됩니다.</div>
+          </div>
+          <?php endif; ?>
+          <?php endif; ?>
           <div class="field col-span-2">
             <label class="field-label">현장 주소</label>
             <input type="text" name="site_address" class="input" value="<?= $val('site_address') ?>">
@@ -101,7 +122,7 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
             <label class="field-label">기여도 배분방식</label>
             <select name="contribution_mode" class="select">
               <?php foreach ($contribModes as $k => $label): ?>
-                <option value="<?= e($k) ?>" <?= ($p['contribution_mode'] ?? 'main') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+                <option value="<?= e($k) ?>" <?= ($p['contribution_mode'] ?? 'ratio') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -153,3 +174,12 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
     </div>
   </div>
 </div>
+<?php if ($project && !empty($p['is_exception']) && Rbac::isRole('super_admin')): ?>
+<script>
+// 예외→일반 전환 체크 시 기존 고객 선택 필수화(서버측 검증과 동일 기준 — UI 선반영)
+document.getElementById('convertToNormal')?.addEventListener('change', function () {
+  var sel = document.getElementById('projCustomerSel');
+  if (sel) { sel.required = this.checked; }
+});
+</script>
+<?php endif; ?>

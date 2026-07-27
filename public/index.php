@@ -10,6 +10,9 @@ $config = require APP_CONFIG_FILE;      // 상수(APP_PATH 등) 정의 + 설정 
 $GLOBALS['config'] = $config;
 require APP_PATH . '/bootstrap.php';    // 코어 로드·세션·설정 override
 
+// 기술 스택 노출 최소화 — X-Powered-By(PHP 버전) 제거(핑거프린팅 축소). 호스트 expose_php 설정과 이중.
+header_remove('X-Powered-By');
+
 $routes = require APP_PATH . '/routes.php';
 
 $routeKey = $_GET['r'] ?? 'home';

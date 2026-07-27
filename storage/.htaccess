@@ -1,0 +1,16 @@
+# EDEN CRM — 업로드 저장소 웹 접근 전면 차단 (R6 T4)
+# 다운로드는 앱의 PHP 스트리밍(Upload::stream → readfile) 경유만 허용된다.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+
+# 위장 업로드(PHP) 실행 차단 — 접근 차단이 뚫려도 실행은 불가하도록 이중 방어
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phps
+RemoveType .php .phtml

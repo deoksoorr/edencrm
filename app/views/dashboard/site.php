@@ -1,6 +1,8 @@
 <?php
-/** 현장관리자 대시보드. @var array $me,$kpi,$attn,$process,$pgroups,$schedule */
-$pick = ['delayed', 'unassigned', 'worklog', 'inspect'];
+/**
+ * 현장관리자 대시보드. '주의' 레일 제거(R3) — 지연·미배정·일지·검수는 상단 '현장 핵심' KPI 가 동일 항목을 표시한다.
+ * @var array $me,$kpi,$process,$pgroups,$schedule
+ */
 $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수'];
 ?>
 <div class="page">
@@ -53,16 +55,6 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
     </div>
 
     <div class="col">
-      <div class="card pad">
-        <div class="section-head"><div class="st"><h2>주의가 필요한 항목</h2></div></div>
-        <div class="attn-list">
-          <?php foreach ($pick as $k): if (!isset($attn[$k])) { continue; } $a = $attn[$k]; ?>
-            <a class="attn-item <?= $a['n'] > 0 ? e($a['sev']) : 'zero' ?>" href="<?= e(url($a['route'], $a['params'])) ?>">
-              <span class="attn-label"><?= e($a['label']) ?></span><span class="attn-cnt"><?= number_format($a['n']) ?></span>
-            </a>
-          <?php endforeach; ?>
-        </div>
-      </div>
       <div class="card pad">
         <div class="section-head"><div class="st"><h2>이번 주 일정</h2></div>
           <a class="section-link" href="<?= e(url('schedule.index')) ?>">일정 →</a></div>

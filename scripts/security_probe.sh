@@ -3,9 +3,11 @@
 # 사용: bash scripts/security_probe.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-B="http://127.0.0.1:8080/index.php"
+# 대상 서버·DB 는 env 로 재지정 가능(격리 검증용). 기본은 상설 8080 + eden_crm.
+B="${SEC_BASE:-http://127.0.0.1:8080/index.php}"
+DBNAME="${SEC_DB:-eden_crm}"
 SOCK="$PWD/.devdb/mysql.sock"
-MYSQL(){ /opt/homebrew/bin/mysql --socket="$SOCK" -ueden_crm_user -p'EdenCrm!local2026' eden_crm -N -e "$1" 2>/dev/null; }
+MYSQL(){ /opt/homebrew/bin/mysql --socket="$SOCK" -ueden_crm_user -p'EdenCrm!local2026' "$DBNAME" -N -e "$1" 2>/dev/null; }
 PASS=0; FAIL=0; OUT=""
 note(){ if [ "$1" = ok ]; then PASS=$((PASS+1)); OUT+="  ✅ $2\n"; else FAIL=$((FAIL+1)); OUT+="  ❌ $2\n"; fi; }
 
@@ -14,8 +16,9 @@ login(){ local jar="$2"; curl -s -c "$jar" "$B?r=login" -o /tmp/sp_lp.html
   curl -s -b "$jar" -c "$jar" -o /dev/null --data-urlencode "_csrf=$t" --data-urlencode "login_id=$1" --data-urlencode "password=password123!" "$B?r=login.submit"; echo "$t"; }
 code(){ curl -s -o /dev/null -w "%{http_code}" "$@"; }
 
+# R6 T2 시드 계정: admin(super_admin)·chays(site_manager)·maeng/chaws(staff)
 JADMIN=$(mktemp); TOK=$(login admin "$JADMIN"); TOK=$(echo "$TOK"|tail -1)
-JSTAFF=$(mktemp); login staff1 "$JSTAFF" >/dev/null
+JSTAFF=$(mktemp); login maeng "$JSTAFF" >/dev/null   # 맹기현(staff, id 3)
 
 echo "== 1) 비로그인 관리자 URL 접근 차단 =="
 c=$(code "$B?r=staff.index"); [ "$c" = 302 ] && note ok "비로그인 staff.index→로그인(302)" || note fail "비로그인 staff.index=$c"
@@ -37,8 +40,8 @@ echo "== 4) XSS 저장 확인(고객 메모에 스크립트) =="
 # (컨트롤러 구현에 따라 skip 가능)
 
 echo "== 5) IDOR: 다른 프로젝트 접근 =="
-# staff1 이 접근 불가한 프로젝트 id 찾기
-PID=$(MYSQL "SELECT p.id FROM projects p WHERE p.deleted_at IS NULL AND p.sales_user_id<>6 AND p.site_manager_id<>6 AND NOT EXISTS(SELECT 1 FROM project_assignments a WHERE a.project_id=p.id AND a.user_id=6) LIMIT 1")
+# maeng(staff, id 3) 이 접근 불가한 프로젝트 id 찾기
+PID=$(MYSQL "SELECT p.id FROM projects p WHERE p.deleted_at IS NULL AND p.sales_user_id<>3 AND p.site_manager_id<>3 AND NOT EXISTS(SELECT 1 FROM project_assignments a WHERE a.project_id=p.id AND a.user_id=3) LIMIT 1")
 if [ -n "$PID" ]; then
   c=$(code -b "$JSTAFF" "$B?r=projects.show&id=$PID"); [ "$c" = 403 ] && note ok "staff 남의 프로젝트($PID) 접근 403" || note fail "staff 남의 프로젝트($PID)=$c (IDOR 의심)"
 else OUT+="  ⚠️ IDOR 테스트용 프로젝트 없음(seed 확인)\n"; fi

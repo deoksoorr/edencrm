@@ -102,6 +102,12 @@ class Stages
     // ── 공정(process) 단계 그룹 — 6그룹(공정 보드용, R3 브리프 §1 + R4 T3 + R8-A 유형 분리) ──
     //    그룹 메타(라벨·색)는 코드가 단일 출처, 각 그룹의 stage_key 목록은 DB(process_stages)가 단일 출처.
 
+    /** 공정 6그룹 메타 공개 접근자 — 설정 화면(그룹 탭)과 보드가 동일 라벨·순서를 공유(R10, 이중 출처 방지). */
+    public static function processGroupMeta(): array
+    {
+        return self::PROCESS_GROUP_META;
+    }
+
     /** 공정 6그룹 메타: key => [라벨, 절제된 단색]. 순서 = 화면 순서. */
     private const PROCESS_GROUP_META = [
         'waiting'  => ['label' => '대기중',    'color' => '#f59e0b'],

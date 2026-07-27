@@ -63,14 +63,14 @@ $base = ['user_id' => $userId ?: '', 'action' => $action, 'from' => $from, 'to' 
               <td>
                 <?php if ($r['before_json'] || $r['after_json']): ?>
                   <details>
-                    <summary style="cursor:pointer;color:var(--brand);font-size:12px">상세</summary>
+                    <summary class="summary-link">상세</summary>
                     <?php if ($r['before_json']): ?>
-                      <div class="field-hint" style="margin-top:6px">변경 전</div>
-                      <pre style="white-space:pre-wrap;font-size:11.5px;background:var(--line-2);padding:8px;border-radius:4px;max-width:360px;overflow-x:auto"><?= e($r['before_json']) ?></pre>
+                      <div class="field-hint mt-8">변경 전</div>
+                      <pre class="pre-json"><?= e($r['before_json']) ?></pre>
                     <?php endif; ?>
                     <?php if ($r['after_json']): ?>
                       <div class="field-hint">변경 후</div>
-                      <pre style="white-space:pre-wrap;font-size:11.5px;background:var(--line-2);padding:8px;border-radius:4px;max-width:360px;overflow-x:auto"><?= e($r['after_json']) ?></pre>
+                      <pre class="pre-json"><?= e($r['after_json']) ?></pre>
                     <?php endif; ?>
                   </details>
                 <?php else: ?>
@@ -83,11 +83,9 @@ $base = ['user_id' => $userId ?: '', 'action' => $action, 'from' => $from, 'to' 
       </table>
     </div>
 
-    <div class="pagination">
-      <span class="page-info"><?= $pg['from'] ?>-<?= $pg['to'] ?> / <?= number_format($pg['total']) ?>건</span>
-      <?php for ($i = 1; $i <= $pg['pages']; $i++): ?>
-        <a href="<?= e(url('audit.index', array_merge($base, ['page' => $i]))) ?>" class="<?= $i === $pg['page'] ? 'cur' : '' ?>"><?= $i ?></a>
-      <?php endfor; ?>
-    </div>
+    <?php View::partial('partials/pager', [
+        'pg'  => $pg,
+        'url' => fn (int $p): string => url('audit.index', array_merge($base, ['page' => $p])),
+    ]); ?>
   <?php endif; ?>
 </div>

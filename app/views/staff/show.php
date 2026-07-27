@@ -4,7 +4,7 @@
 $statusLabels = ['active' => '재직', 'inactive' => '비활성'];
 $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관리자', 'site_manager' => '현장관리자', 'staff' => '직원', 'accountant' => '회계'];
 $projStatusLabels = ['preparing' => '준비중', 'in_progress' => '진행중', 'paused' => '중지', 'completed' => '완료', 'settled' => '정산', 'cancelled' => '취소', 'terminated' => '파기'];
-$payStatusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
+$payStatusLabels = ['unpaid' => '기안 완료', 'partial' => '부분지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
 ?>
 <div class="page">

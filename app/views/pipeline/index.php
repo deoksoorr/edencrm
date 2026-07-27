@@ -1,94 +1,102 @@
 <?php
 /**
- * 영업 파이프라인. 상단 그룹 탭(클라이언트 전환) + 서버측 필터/검색/빠른필터 + 우측 상세 슬라이드 패널.
- * @var array $columns,$filters,$groups,$tabs,$salesUsers,$workTypes
- * @var int $shown,$total @var bool $fullAccess,$canManage
+ * 영업 파이프라인 — 조회 전용(R4 T7). 파생 7그룹 컬럼 + 상단 요약 + 공통 기간 필터(GET 제출).
+ * 표시 단계는 PipelineStageService 자동 산정(원본 12단계는 수정 폼에서만 관리).
+ * @var array $columns,$summary,$filters,$range,$basisOptions,$salesUsers
+ * @var int $total @var bool $fullAccess,$canManage,$quickAlertsOn
  */
 $f = $filters;
+$filterOn = $f['q'] !== '' || $f['sales_user_id'] || $f['period'] !== '' || $f['quick'] !== '';
+$quickLabels = [
+    'today' => '오늘 연락 필요', 'overdue' => '연락 지남', 'stale' => '3일+ 미접촉', 'closing' => '계약 임박',
+    'highvalue' => '고액 견적', 'longstay' => '장기 체류', 'unassigned' => '담당 미배정',
+];
+// 필터 유지용 파라미터(빈 값 제외, 내부 키 제외)
+$keep = array_filter(
+    ['q' => $f['q'], 'sales_user_id' => $f['sales_user_id'], 'period' => $f['period'],
+     'date_from' => $f['date_from'], 'date_to' => $f['date_to'], 'basis' => $f['basis'] !== 'created' ? $f['basis'] : ''],
+    static fn($v) => $v !== '' && $v !== null
+);
 ?>
 <div class="page page-wide">
   <div class="page-head">
     <div>
       <div class="page-title">영업 파이프라인</div>
-      <div class="page-sub"><?= $fullAccess ? '전체 영업기회' : '내 담당 영업기회' ?></div>
+      <div class="page-sub"><?= $fullAccess ? '전체 영업기회' : '내 담당 영업기회' ?>
+        · <?= $filterOn ? '조회' : '전체' ?> <b><?= (int) $summary['total'] ?></b><?= $filterOn ? ' / ' . (int) $total : '' ?>건
+        · 단계는 원본 데이터(계약·견적·리드 단계) 기준 자동 산정 — 조회 전용</div>
     </div>
     <div class="page-actions">
       <?php if ($canManage): ?>
-        <button type="button" class="btn btn-primary" id="btnNewLead">+ 신규 영업기회</button>
+        <a href="<?= e(url('pipeline.form')) ?>" class="btn btn-primary">+ 신규 영업기회</a>
       <?php endif; ?>
     </div>
   </div>
 
-  <div class="pl-toolbar">
-    <!-- 그룹 탭(전체/신규·상담/현장·견적/계약/보류·종료) -->
-    <div class="pl-tabs" id="plTabs">
-      <?php foreach ($tabs as $key => $tab): ?>
-        <button type="button" class="pl-tab<?= $f['tab'] === $key ? ' active' : '' ?>" data-tab="<?= e($key) ?>"
-                data-groups="<?= e(implode(',', $tab['groups'])) ?>">
-          <?= e($tab['label']) ?><span class="tcnt" data-tab-count="<?= e($key) ?>">0</span>
-        </button>
+  <!-- 상단 요약(필터 연동): 진행 예상·견적 진행·계약 전환·보류/종료 -->
+  <div class="kpi-grid pb-summary">
+    <div class="kpi accent-brand" title="종료·보류·계약 제외, 진행 그룹(신규 문의~견적 진행) 예상 계약 금액 합">
+      <div class="kpi-label">진행 예상 금액</div>
+      <div class="kpi-value"><?= e(moneyShort((float) $summary['open_amount'])) ?><span class="u">원 · <?= (int) $summary['open_count'] ?>건</span></div>
+    </div>
+    <div class="kpi" title="파생 단계 '견적 진행' 그룹의 예상 계약 금액 합">
+      <div class="kpi-label">견적 진행 금액</div>
+      <div class="kpi-value"><?= e(moneyShort((float) $summary['quoting_amount'])) ?><span class="u">원 · <?= (int) $summary['quoting_count'] ?>건</span></div>
+    </div>
+    <div class="kpi accent-ok" title="파생 단계 '계약' 그룹(연결 계약·계약완료 리드) 건수·예상 금액">
+      <div class="kpi-label">계약 전환</div>
+      <div class="kpi-value"><?= (int) $summary['contracted_count'] ?><span class="u">건 · <?= e(moneyShort((float) $summary['contracted_amount'])) ?>원</span></div>
+    </div>
+    <div class="kpi" title="파생 단계 보류·종료 건수(종료 리드의 예상 금액은 진행 예상에서 제외됨)">
+      <div class="kpi-label">보류 / 종료</div>
+      <div class="kpi-value"><?= (int) $summary['on_hold_count'] ?><span class="u">건</span> / <?= (int) $summary['closed_count'] ?><span class="u">건</span></div>
+    </div>
+  </div>
+
+  <!-- 필터: 검색·담당 + 공통 기간(기준 select 포함) — GET 제출로 카드·요약 동시 갱신 -->
+  <form class="toolbar" method="get" action="<?= e(url('pipeline.index')) ?>">
+    <input type="hidden" name="r" value="pipeline.index">
+    <?php if ($f['quick'] !== ''): ?><input type="hidden" name="quick" value="<?= e($f['quick']) ?>"><?php endif; ?>
+    <input type="text" name="q" class="input search" placeholder="고객·업체·연락처·주소·공사종류 검색" value="<?= e($f['q']) ?>">
+    <?php if ($fullAccess): ?>
+      <select name="sales_user_id" class="select">
+        <option value="">담당영업 전체</option>
+        <?php foreach ($salesUsers as $su): ?>
+          <option value="<?= (int) $su['id'] ?>" <?= (int) $f['sales_user_id'] === (int) $su['id'] ? 'selected' : '' ?>><?= e($su['name']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    <?php endif; ?>
+    <?php View::partial('partials/period_filter', [
+        'action'       => 'pipeline.index',
+        'filters'      => array_filter(['q' => $f['q'], 'sales_user_id' => $f['sales_user_id'], 'quick' => $f['quick']], static fn($v) => $v !== '' && $v !== null)
+                          + ['period' => $f['period'], 'date_from' => $f['date_from'], 'date_to' => $f['date_to'], 'basis' => $f['basis']],
+        'range'        => $range,
+        'basisOptions' => $basisOptions, // 등록일(기본)/최근 연락일 — 최근 연락일 기준은 연락 기록 없는 리드가 제외됨
+        'basisParam'   => 'basis',
+    ]); ?>
+    <button type="submit" class="btn btn-outline">검색</button>
+    <?php if ($filterOn): ?>
+      <a href="<?= e(url('pipeline.index')) ?>" class="btn btn-ghost">초기화</a>
+    <?php endif; ?>
+  </form>
+
+  <?php if ($quickAlertsOn): ?>
+    <!-- 빠른 필터 칩 — 기능 플래그(feature_pipeline_quick_alerts) ON 시에만 노출(r3 유지·확대) -->
+    <div class="pl-quick pl-quick-bar">
+      <?php foreach ($quickLabels as $qk => $ql): $on = $f['quick'] === $qk; ?>
+        <a class="qf<?= $on ? ' active' : '' ?>"
+           href="<?= e(url('pipeline.index', $keep + ($on ? [] : ['quick' => $qk]))) ?>"><?= e($ql) ?></a>
       <?php endforeach; ?>
     </div>
-
-    <!-- 필터 -->
-    <form class="pl-filterbar" id="pipelineFilter" autocomplete="off">
-      <input type="hidden" name="tab" value="<?= e($f['tab']) ?>">
-      <input type="text" name="q" class="input search" placeholder="고객·업체·연락처·주소·공사종류 검색" value="<?= e($f['q']) ?>">
-      <?php if ($fullAccess): ?>
-        <select name="sales_user_id" class="select">
-          <option value="">담당영업 전체</option>
-          <?php foreach ($salesUsers as $su): ?>
-            <option value="<?= (int) $su['id'] ?>" <?= (int) $f['sales_user_id'] === (int) $su['id'] ? 'selected' : '' ?>><?= e($su['name']) ?></option>
-          <?php endforeach; ?>
-        </select>
-      <?php endif; ?>
-      <select name="importance" class="select">
-        <option value="">중요도 전체</option>
-        <option value="high" <?= $f['importance'] === 'high' ? 'selected' : '' ?>>높음</option>
-        <option value="mid" <?= $f['importance'] === 'mid' ? 'selected' : '' ?>>보통</option>
-        <option value="low" <?= $f['importance'] === 'low' ? 'selected' : '' ?>>낮음</option>
-      </select>
-      <?php if ($workTypes): ?>
-        <select name="work_type" class="select">
-          <option value="">공사종류 전체</option>
-          <?php foreach ($workTypes as $wt): ?>
-            <option value="<?= e($wt) ?>" <?= $f['work_type'] === $wt ? 'selected' : '' ?>><?= e($wt) ?></option>
-          <?php endforeach; ?>
-        </select>
-      <?php endif; ?>
-      <input type="hidden" name="quick" id="plQuick" value="<?= e($f['quick']) ?>">
-      <button type="submit" class="btn btn-outline">검색</button>
-      <span class="pl-count" id="plCount">표시 <b><?= (int) $shown ?></b> / 전체 <?= (int) $total ?>건</span>
-    </form>
-
-    <!-- 빠른 필터 -->
-    <div class="pl-quick" id="plQuickChips">
-      <button type="button" class="qf" data-quick="today">오늘 연락 필요</button>
-      <button type="button" class="qf" data-quick="overdue">연락 지남</button>
-      <button type="button" class="qf" data-quick="stale">3일+ 미접촉</button>
-      <button type="button" class="qf" data-quick="highvalue">고액 견적</button>
-      <button type="button" class="qf" data-quick="closing">계약 임박</button>
-      <button type="button" class="qf" data-quick="longstay">장기 체류</button>
-      <button type="button" class="qf" data-quick="unassigned">담당 미배정</button>
+  <?php elseif ($f['quick'] !== ''): ?>
+    <!-- 칩 미노출 상태에서 빠른 필터 URL(대시보드 링크)로 진입한 경우: 적용 표시+해제 제공 -->
+    <div class="pl-quick pl-quick-bar">
+      <span class="qf active"><?= e($quickLabels[$f['quick']] ?? $f['quick']) ?>
+        <a href="<?= e(url('pipeline.index', $keep)) ?>" class="qf-x" aria-label="빠른 필터 해제">&times;</a></span>
     </div>
-
-    <!-- 적용된 필터 칩 -->
-    <div class="pl-applied" id="plApplied"></div>
-  </div>
+  <?php endif; ?>
 
   <div class="kanban" id="kanbanBoard">
-    <?php View::partial('pipeline/board', ['columns' => $columns, 'canManage' => $canManage]); ?>
+    <?php View::partial('pipeline/board', ['columns' => $columns]); ?>
   </div>
 </div>
-
-<!-- 우측 상세 슬라이드 패널 -->
-<div class="drawer-backdrop" id="leadDrawerBackdrop"></div>
-<aside class="drawer" id="leadDrawer" aria-hidden="true"></aside>
-
-<?php
-$inlineScript = 'window.PIPELINE_CONFIG = ' . json_encode([
-    'canManage' => $canManage,
-    'fullAccess' => $fullAccess,
-    'initialTab' => $f['tab'],
-], JSON_UNESCAPED_UNICODE) . ';';
-?>

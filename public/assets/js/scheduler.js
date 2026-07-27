@@ -1,20 +1,24 @@
 /* EDEN CRM — 일정 스케줄러: 월 캘린더 + 직원별 슬롯 타임라인(오전/오후/야간)
-   다중 참여자 · 색상은 참여 직원 개인색 · 시각 입력 없음(날짜+슬롯) */
+   R3: 시간대 복수 선택(slots 배열, 최소 1개) · 다중 참여자 · 색상은 참여 직원 개인색 · 시각 입력 없음(날짜+슬롯) */
 (function () {
   'use strict';
 
-  const cfg = window.SCHED_INIT || { canManage: false, canManageAll: false, meId: 0, users: [], slots: {} };
-  const SLOTS = cfg.slots && Object.keys(cfg.slots).length ? cfg.slots : { am: '오전', pm: '오후', night: '야간' };
-  const SLOT_KEYS = ['am', 'pm', 'night'];
+  const cfg = window.SCHED_INIT || { canManage: false, canManageAll: false, meId: 0, users: [], slots: {}, types: {} };
+  const SLOTS = cfg.slots && Object.keys(cfg.slots).length ? cfg.slots : { morning: '오전', afternoon: '오후', night: '야간' };
+  const SLOT_KEYS = ['morning', 'afternoon', 'night'];
+  // 유형 목록 단일 출처(Stages::scheduleTypes 미러) — R6: vacation 제거(폼 옵션·표시 비노출)
+  const TYPES = cfg.types && Object.keys(cfg.types).length ? cfg.types
+    : { work: '작업', meeting: '회의', site_visit: '현장방문', other: '기타' };
 
   const calRoot = document.getElementById('calRoot');
   const schedRoot = document.getElementById('schedRoot');
   const rangeLabel = document.getElementById('curRangeLabel');
   const fUser = document.getElementById('fUser');
   const fProject = document.getElementById('fProject');
+  const fSlot = document.getElementById('fSlot');
   if (!calRoot && !schedRoot) return;
 
-  const state = { view: 'month', ref: new Date(), userId: '', projectId: '', data: { schedules: [], holidays: [] } };
+  const state = { view: 'month', ref: new Date(), userId: '', projectId: '', slot: '', data: { schedules: [], holidays: [] } };
 
   const userColor = {};
   (cfg.users || []).forEach((u) => { userColor[u.id] = u.color || '#6b7280'; });
@@ -30,6 +34,26 @@
   }
   /** 공통 일정 라벨: [작업자] 작업내용 (작업자명이 항상 앞) */
   function schedLabel(ev) { return '[' + partNames(ev) + '] ' + ev.title; }
+  function typeLabel(ev) { return ev.type_label || TYPES[ev.type] || ev.type; }
+  /** 일정의 슬롯 배열(서버 slots 우선, 없으면 대표 slot 단일). */
+  function evSlots(ev) {
+    if (ev.slots && ev.slots.length) return ev.slots;
+    return [ev.slot && SLOTS[ev.slot] ? ev.slot : 'morning'];
+  }
+  /** T5 기간 일정 헬퍼: 종료일(단일일이면 시작일), 기간 여부, "7/10~7/15" 라벨 */
+  function evEnd(ev) { return ev.end_date && ev.end_date > ev.event_date ? ev.end_date : ev.event_date; }
+  function isPeriod(ev) { return evEnd(ev) !== ev.event_date; }
+  function periodLabel(ev) {
+    if (!isPeriod(ev)) return '';
+    const f = (s) => (+s.slice(5, 7)) + '/' + (+s.slice(8, 10));
+    return f(ev.event_date) + '~' + f(evEnd(ev));
+  }
+  /** [event_date, end_date] 구간의 각 날짜에 콜백 실행(캘린더·타임라인 버킷팅 공용) */
+  function eachEvDate(ev, fn) {
+    let d = new Date(ev.event_date + 'T00:00:00');
+    const stop = new Date(evEnd(ev) + 'T00:00:00');
+    for (; d <= stop; d.setDate(d.getDate() + 1)) fn(toDateStr(d));
+  }
 
   function monthRange(d) {
     const first = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -52,6 +76,7 @@
     const params = { from, to };
     if (state.userId) params.user_id = state.userId;
     if (state.projectId) params.project_id = state.projectId;
+    if (state.slot) params.slot = state.slot;
     try { state.data = (await api('schedule.data', params)) || { schedules: [], holidays: [] }; render(); }
     catch (e) { toast(e.message, 'error'); }
   }
@@ -72,7 +97,9 @@
     const todayStr = toDateStr(new Date());
     const hset = holidaySet();
     const byDay = {};
-    (state.data.schedules || []).forEach((ev) => { (byDay[ev.event_date] = byDay[ev.event_date] || []).push(ev); });
+    (state.data.schedules || []).forEach((ev) => {
+      eachEvDate(ev, (key) => { (byDay[key] = byDay[key] || []).push(ev); }); // T5 기간 일정: 각 날짜 칸에 표시
+    });
     Object.values(byDay).forEach((arr) => arr.sort((a, b) => slotRank(a.slot) - slotRank(b.slot)));
 
     let html = '<div class="cal-head"><div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div></div><div class="cal-grid">';
@@ -87,7 +114,8 @@
       html += '<div class="' + classes.join(' ') + '" data-date="' + key + '"><div class="cal-date">' + cur.getDate() + '</div>';
       evs.slice(0, 3).forEach((ev) => {
         html += '<div class="cal-ev" draggable="true" data-id="' + ev.id + '" style="background:' + primaryColor(ev) + ';color:#fff" title="' +
-          esc(ev.slot_label + ' · ' + schedLabel(ev)) + '"><b>[' + esc(partNames(ev)) + ']</b> ' + esc(ev.title) + '</div>';
+          esc((isPeriod(ev) ? periodLabel(ev) + ' · ' : '') + ev.slot_label + ' · ' + typeLabel(ev) + ' · ' + schedLabel(ev)) + '"><b>[' + esc(partNames(ev)) + ']</b> ' +
+          '<span class="ce-slots">' + esc(isPeriod(ev) ? periodLabel(ev) : ev.slot_label) + '</span> ' + esc(ev.title) + '</div>';
       });
       if (evs.length > 3) html += '<div class="cal-more">+' + (evs.length - 3) + '건</div>';
       html += '</div>';
@@ -105,8 +133,9 @@
       cell.addEventListener('dragover', (e) => e.preventDefault());
       cell.addEventListener('drop', (e) => {
         e.preventDefault();
-        const ev = (state.data.schedules || []).find((x) => String(x.id) === e.dataTransfer.getData('text/plain'));
-        if (ev) moveSchedule(ev, cell.dataset.date, ev.slot); // 날짜 변경, 슬롯 유지
+        const id = String(e.dataTransfer.getData('text/plain')).split(':')[0];
+        const ev = (state.data.schedules || []).find((x) => String(x.id) === id);
+        if (ev) moveSchedule(ev, cell.dataset.date, evSlots(ev)); // 날짜 변경, 슬롯 전체 유지
       });
     });
   }
@@ -130,13 +159,17 @@
 
     if (!users.length) { schedRoot.innerHTML = head + '<div class="sched-empty2">표시할 직원이 없습니다.</div>'; return; }
 
-    // index events: user -> date -> slot -> [ev]
+    // index events: user -> date -> slot -> [ev] (복수 슬롯 일정은 해당 슬롯 행마다 표시)
     const idx = {};
     (state.data.schedules || []).forEach((ev) => {
       (ev.participants || []).forEach((p) => {
-        idx[p.user_id] = idx[p.user_id] || {};
-        idx[p.user_id][ev.event_date] = idx[p.user_id][ev.event_date] || {};
-        (idx[p.user_id][ev.event_date][ev.slot] = idx[p.user_id][ev.event_date][ev.slot] || []).push(ev);
+        eachEvDate(ev, (ds) => { // T5 기간 일정: 기간 내 각 요일에 표시
+          idx[p.user_id] = idx[p.user_id] || {};
+          idx[p.user_id][ds] = idx[p.user_id][ds] || {};
+          evSlots(ev).forEach((sk) => {
+            (idx[p.user_id][ds][sk] = idx[p.user_id][ds][sk] || []).push(ev);
+          });
+        });
       });
     });
 
@@ -153,7 +186,7 @@
           const evs = ((idx[u.id] || {})[ds] || {})[sk] || [];
           let chips = '';
           evs.forEach((ev) => {
-            chips += '<div class="sched-chip" draggable="true" data-id="' + ev.id + '" style="background:' + uc + '" title="' + esc(ev.title + ' · ' + partNames(ev)) + '">' + esc(ev.title) + '</div>';
+            chips += '<div class="sched-chip" draggable="true" data-id="' + ev.id + '" data-slot="' + sk + '" style="background:' + uc + '" title="' + esc(ev.slot_label + ' · ' + typeLabel(ev) + ' · ' + ev.title + ' · ' + partNames(ev)) + '">' + esc(ev.title) + '</div>';
           });
           row += '<div class="sched-slot ' + sk + '" data-date="' + ds + '" data-slot="' + sk + '">' + chips + '</div>';
         });
@@ -168,23 +201,33 @@
   function bindTimelineEvents() {
     schedRoot.querySelectorAll('.sched-chip').forEach((el) => {
       el.addEventListener('click', (e) => { e.stopPropagation(); openDetail(+el.dataset.id); });
-      el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', el.dataset.id));
+      // 'id:출발슬롯' — 드롭 시 출발 슬롯만 대상 슬롯으로 치환(나머지 슬롯 유지)
+      el.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', el.dataset.id + ':' + (el.dataset.slot || '')));
     });
     schedRoot.querySelectorAll('.sched-slot').forEach((slot) => {
       slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drop-hover'); });
       slot.addEventListener('dragleave', () => slot.classList.remove('drop-hover'));
       slot.addEventListener('drop', (e) => {
         e.preventDefault(); slot.classList.remove('drop-hover');
-        const ev = (state.data.schedules || []).find((x) => String(x.id) === e.dataTransfer.getData('text/plain'));
-        if (ev) moveSchedule(ev, slot.dataset.date, slot.dataset.slot);
+        const parts = String(e.dataTransfer.getData('text/plain')).split(':');
+        const ev = (state.data.schedules || []).find((x) => String(x.id) === parts[0]);
+        if (!ev) return;
+        const srcSlot = parts[1] || evSlots(ev)[0];
+        const target = slot.dataset.slot;
+        // 출발 슬롯 → 대상 슬롯 치환 후 중복 제거·표준 순서 정렬
+        const next = evSlots(ev).map((s) => (s === srcSlot ? target : s));
+        const set = SLOT_KEYS.filter((k) => next.indexOf(k) !== -1);
+        moveSchedule(ev, slot.dataset.date, set);
       });
     });
   }
 
   // ── 이동/저장 ──
-  async function moveSchedule(ev, newDate, newSlot) {
-    if (ev.event_date === newDate && ev.slot === newSlot) return;
-    await submitMove({ id: ev.id, event_date: newDate, slot: newSlot });
+  async function moveSchedule(ev, newDate, newSlots) {
+    const cur = evSlots(ev).join(',');
+    const next = (newSlots || []).join(',');
+    if (ev.event_date === newDate && cur === next) return;
+    await submitMove({ id: ev.id, event_date: newDate, slots: next });
   }
   async function submitMove(payload, confirmed) {
     if (confirmed) payload.confirmed = 1;
@@ -234,10 +277,10 @@
       '<div class="dl">' +
       '<dt>제목</dt><dd>' + esc(ev.title) + '</dd>' +
       '<dt>참여 직원</dt><dd><div class="part-chosen">' + parts + '</div></dd>' +
-      '<dt>날짜</dt><dd>' + esc(ev.event_date) + '</dd>' +
+      '<dt>날짜</dt><dd>' + esc(ev.event_date) + (isPeriod(ev) ? ' ~ ' + esc(evEnd(ev)) : '') + '</dd>' +
       '<dt>시간대</dt><dd>' + esc(ev.slot_label) + '</dd>' +
       '<dt>프로젝트</dt><dd>' + (ev.project_name ? esc(ev.project_no + ' · ' + ev.project_name) : '-') + '</dd>' +
-      '<dt>유형</dt><dd>' + esc(ev.type) + '</dd>' +
+      '<dt>유형</dt><dd>' + esc(typeLabel(ev)) + '</dd>' +
       '<dt>메모</dt><dd>' + esc(ev.memo || '-') + '</dd>' +
       '</div>';
     const buttons = [{ label: '닫기', class: 'btn-outline', onClick: (close) => close() }];
@@ -267,10 +310,10 @@
       '<span class="user-color-dot" style="background:' + (u.color || '#6b7280') + '"></span>' + esc(u.name) + '</label>').join('');
     const projOpts = '<option value="">없음</option>' + Array.from(fProject ? fProject.options : []).filter((o) => o.value)
       .map((o) => '<option value="' + o.value + '"' + (isEdit && String(ev.project_id) === o.value ? ' selected' : '') + '>' + esc(o.textContent) + '</option>').join('');
-    const typeOpts = [['work', '작업'], ['meeting', '회의'], ['site_visit', '현장방문'], ['vacation', '휴무'], ['other', '기타']]
-      .map((t) => '<option value="' + t[0] + '"' + (isEdit && ev.type === t[0] ? ' selected' : '') + '>' + t[1] + '</option>').join('');
-    const curSlot = isEdit ? ev.slot : 'am';
-    const slotTabs = SLOT_KEYS.map((k) => '<button type="button" class="slot-tab' + (k === curSlot ? ' active' : '') + '" data-slot="' + k + '">' + esc(SLOTS[k]) + '</button>').join('');
+    const typeOpts = Object.keys(TYPES) // 서버 목록(Stages::scheduleTypes) 그대로 — R6: vacation 없음
+      .map((k) => '<option value="' + k + '"' + (isEdit && ev.type === k ? ' selected' : '') + '>' + esc(TYPES[k]) + '</option>').join('');
+    const curSlots = isEdit ? evSlots(ev) : ['morning']; // 복수 선택(토글) — 최소 1개
+    const slotTabs = SLOT_KEYS.map((k) => '<button type="button" class="slot-tab' + (curSlots.indexOf(k) !== -1 ? ' active' : '') + '" data-slot="' + k + '" aria-pressed="' + (curSlots.indexOf(k) !== -1) + '">' + esc(SLOTS[k]) + '</button>').join('');
 
     const body = document.createElement('div');
     body.innerHTML =
@@ -278,8 +321,10 @@
       '<div class="field"><label class="field-label">제목 <span class="req">*</span></label><input class="input" id="sfTitle" value="' + esc(isEdit ? ev.title : '') + '"></div>' +
       '<div class="field"><label class="field-label">참여 직원 <span class="req">*</span></label><div class="part-picker" id="sfParts">' + partList + '</div></div>' +
       '<div class="form-grid">' +
-      '<div class="field"><label class="field-label">날짜 <span class="req">*</span></label><input class="input" type="date" id="sfDate" value="' + (isEdit ? esc(ev.event_date) : toDateStr(state.ref)) + '"></div>' +
-      '<div class="field"><label class="field-label">시간대 <span class="req">*</span></label><div class="slot-tabs" id="sfSlots">' + slotTabs + '</div><input type="hidden" id="sfSlot" value="' + curSlot + '"></div>' +
+      '<div class="field"><label class="field-label">시작일 <span class="req">*</span></label><input class="input" type="date" id="sfDate" value="' + (isEdit ? esc(ev.event_date) : toDateStr(state.ref)) + '"></div>' +
+      '<div class="field"><label class="field-label">종료일 <span class="muted" style="font-weight:400">(기간 일정 — 미입력 시 하루)</span></label><input class="input" type="date" id="sfEndDate" value="' + (isEdit && isPeriod(ev) ? esc(evEnd(ev)) : '') + '"></div>' +
+      '<div class="field"><label class="field-label">시간대 <span class="req">*</span> <span class="muted" style="font-weight:400">(복수 선택 가능)</span></label><div class="slot-tabs" id="sfSlots">' + slotTabs + '</div></div>' +
+      '<div class="field"><label class="check"><input type="checkbox" id="sfAllDay"' + (isEdit && String(ev.all_day) === '1' ? ' checked' : '') + '> 종일(전 시간대)</label></div>' +
       '<div class="field"><label class="field-label">프로젝트</label><select class="select" id="sfProject">' + projOpts + '</select></div>' +
       '<div class="field"><label class="field-label">유형</label><select class="select" id="sfType">' + typeOpts + '</select></div>' +
       '</div>' +
@@ -288,8 +333,12 @@
 
     body.querySelector('#sfSlots').addEventListener('click', (e) => {
       const b = e.target.closest('.slot-tab'); if (!b) return;
-      body.querySelectorAll('.slot-tab').forEach((s) => s.classList.remove('active'));
-      b.classList.add('active'); body.querySelector('#sfSlot').value = b.dataset.slot;
+      b.classList.toggle('active'); // 복수 선택 토글 (최소 1개는 저장 시 검증)
+      b.setAttribute('aria-pressed', b.classList.contains('active') ? 'true' : 'false');
+    });
+    body.querySelector('#sfAllDay').addEventListener('change', (e) => {
+      if (!e.target.checked) return; // 종일 체크 시 전 슬롯 활성화(해제는 슬롯 개별 조작)
+      body.querySelectorAll('#sfSlots .slot-tab').forEach((b) => { b.classList.add('active'); b.setAttribute('aria-pressed', 'true'); });
     });
 
     EDEN.modal({
@@ -299,18 +348,24 @@
         {
           label: '저장', class: 'btn-primary', onClick: async (close, btn) => {
             const ids = Array.from(body.querySelectorAll('#sfParts input:checked')).map((c) => c.value);
+            const slots = Array.from(body.querySelectorAll('#sfSlots .slot-tab.active')).map((b) => b.dataset.slot);
             const payload = {
               id: isEdit ? ev.id : undefined,
               title: body.querySelector('#sfTitle').value.trim(),
               participant_ids: ids.join(','),
               event_date: body.querySelector('#sfDate').value,
-              slot: body.querySelector('#sfSlot').value,
+              end_date: body.querySelector('#sfEndDate').value || body.querySelector('#sfDate').value,
+              all_day: body.querySelector('#sfAllDay').checked ? 1 : 0,
+              slots: slots.join(','),
               project_id: body.querySelector('#sfProject').value,
               type: body.querySelector('#sfType').value,
               memo: body.querySelector('#sfMemo').value,
             };
-            if (!payload.title || !ids.length || !payload.event_date || !payload.slot) {
-              toast('제목·참여 직원·날짜·시간대를 입력하세요.', 'error'); return;
+            if (!slots.length) {
+              toast('시간대(오전/오후/야간)를 1개 이상 선택하세요.', 'error'); return;
+            }
+            if (!payload.title || !ids.length || !payload.event_date) {
+              toast('제목·참여 직원·날짜를 입력하세요.', 'error'); return;
             }
             btn.disabled = true;
             try { if (await submitSave(payload)) close(); }
@@ -334,6 +389,7 @@
   });
   fUser?.addEventListener('change', () => { state.userId = fUser.value; loadData(); });
   fProject?.addEventListener('change', () => { state.projectId = fProject.value; loadData(); });
+  fSlot?.addEventListener('change', () => { state.slot = fSlot.value; loadData(); });
   document.getElementById('btnPrev')?.addEventListener('click', () => { shiftRef(-1); loadData(); });
   document.getElementById('btnNext')?.addEventListener('click', () => { shiftRef(1); loadData(); });
   document.getElementById('btnToday')?.addEventListener('click', () => { state.ref = new Date(); loadData(); });

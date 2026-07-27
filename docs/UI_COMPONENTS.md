@@ -34,7 +34,7 @@
 
 ## PHP 헬퍼(뷰 전역 함수)
 - `e($s)` 이스케이프 · `money($n)` 12,345,678 · **`moneyShort($n)` 146.4억/6,050만** · **`moneyCell($n)` 축약+정확값 title HTML** · `pct($n)` 12.3% · `pctSigned($n)` +12.3% · `fmtdate($d,'n/j')`.
-- `Stages::pipelineGroups/pipelineTabs/processGroups/processTabs/importanceLabel`.
+- `Stages::pipelineGroups/pipelineTabs/processGroups/processTabs`.
 - 큰 금액(억 단위)이 카드·KPI·요약에 들어가면 `moneyShort`/`moneyCell` 사용. **표(table)의 정밀 금액은 `number_format` 유지 + `.num.mono` 우측정렬**(표는 정확값이 우선).
 
 ## 이미지

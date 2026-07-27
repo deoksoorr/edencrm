@@ -9,4 +9,5 @@ return [
     'DB_NAME'   => 'eden_crm',
     'DB_USER'   => 'eden_crm_user',
     'DB_PASS'   => '',
+    'TBL_PREFIX' => '',                // 공유 DB 테이블 prefix(운영 edencrm_). '' 이면 rewrite 미작동
 ];

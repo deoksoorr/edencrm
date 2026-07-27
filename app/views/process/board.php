@@ -10,7 +10,7 @@ $totalCount = (int) $summary['total'];
 $typeLabels = Stages::constructionTypes(); // R8-A: 도장/인테리어 최상위 탭
 $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
 ?>
-<div class="page page-wide" data-board data-can-move="<?= $canMove ? '1' : '0' ?>" data-can-manage="<?= !empty($canManage) ? '1' : '0' ?>">
+<div class="page page-wide" data-board data-board-type="<?= e($boardType) ?>" data-can-move="<?= $canMove ? '1' : '0' ?>" data-can-manage="<?= !empty($canManage) ? '1' : '0' ?>">
   <div class="page-head">
     <div>
       <div class="page-title">공정 보드</div>
@@ -34,27 +34,27 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
   <div class="kpi-grid pb-summary">
     <div class="kpi accent-brand" title="projects.status = 'in_progress' 기준(대시보드 '진행 중'과 동일 정의)">
       <div class="kpi-label">전체 진행 프로젝트</div>
-      <div class="kpi-value"><?= number_format($summary['active']) ?><span class="u">건</span></div>
+      <div class="kpi-value"><span data-summary="active"><?= number_format($summary["active"]) ?></span><span class="u">건</span></div>
     </div>
     <div class="kpi accent-wait" title="'대기중' 공정 컬럼의 프로젝트 수(진행 예정 포함)">
       <div class="kpi-label">대기중</div>
-      <div class="kpi-value"><?= number_format($summary['waiting']) ?><span class="u">건</span></div>
+      <div class="kpi-value"><span data-summary="waiting"><?= number_format($summary["waiting"]) ?></span><span class="u">건</span></div>
     </div>
     <div class="kpi" title="카드가 1건 이상 있는 실공정(1~18단계) 수">
       <div class="kpi-label">진행 공정 수</div>
-      <div class="kpi-value"><?= number_format($summary['stages']) ?><span class="u">개</span></div>
+      <div class="kpi-value"><span data-summary="stages"><?= number_format($summary["stages"]) ?></span><span class="u">개</span></div>
     </div>
     <div class="kpi accent-warn" title="진행 중 프로젝트가 확인 필요 공정(🔒)에 있는 수 — 대시보드 '검수 대기'와 동일 정의">
       <div class="kpi-label">검수 대기</div>
-      <div class="kpi-value"><?= number_format($summary['inspect']) ?><span class="u">건</span></div>
+      <div class="kpi-value"><span data-summary="inspect"><?= number_format($summary["inspect"]) ?></span><span class="u">건</span></div>
     </div>
     <div class="kpi accent-danger" title="준공예정일 경과 + 준공 미처리 — 대시보드·프로젝트 목록 '지연'과 동일 정의">
       <div class="kpi-label">지연 프로젝트</div>
-      <div class="kpi-value"><?= number_format($summary['delayed']) ?><span class="u">건</span></div>
+      <div class="kpi-value"><span data-summary="delayed"><?= number_format($summary["delayed"]) ?></span><span class="u">건</span></div>
     </div>
     <div class="kpi accent-ok" title="완료·정산 프로젝트 — 종결(전체완료) 컬럼에 노출되며 이동은 불가(상태 재개 후 이동 가능)">
       <div class="kpi-label">완료·정산</div>
-      <div class="kpi-value"><?= number_format($summary['done']) ?><span class="u">건</span></div>
+      <div class="kpi-value"><span data-summary="done"><?= number_format($summary["done"]) ?></span><span class="u">건</span></div>
     </div>
   </div>
 
@@ -132,7 +132,7 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
                   <span class="badge <?= e($statusBadge[$p['status']] ?? 'badge-muted') ?>" title="프로젝트 상태(공정 상태와 별개)"><?= e($statusLabels[$p['status']] ?? $p['status']) ?></span>
                 </div>
                 <div class="pc-sub">
-                  <span><?= e($p['customer_name']) ?></span>
+                  <span><?= e($p['customer_name'] ?: '-') ?><?php if (!empty($p['is_exception'])): ?> <span class="badge badge-warn fs-11" title="예외 프로젝트(계약 미연결 수동 생성)">예외</span><?php endif; ?></span>
                   <span class="ellipsis" title="<?= e($p['site_address'] ?: '') ?>"><?= e($p['site_address'] ? Util::truncate($p['site_address'], 14) : '주소 미등록') ?></span>
                 </div>
                 <div class="pc-meta">

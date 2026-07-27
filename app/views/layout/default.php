@@ -16,7 +16,9 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($__title) ?> · <?= e($GLOBALS['config']['APP_NAME']) ?></title>
 <meta name="csrf-token" content="<?= e(Csrf::token()) ?>">
-<link rel="stylesheet" href="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/css/app.css">
+<?php /* 정적 자원 캐시버스팅: 파일 수정시각을 버전으로 — 배포 즉시 새 CSS/JS 반영(모바일 캐시 잔존 방지) */
+$__assetVer = static fn(string $rel): string => (string) (@filemtime(__DIR__ . '/../../../public/assets/' . $rel) ?: 1); ?>
+<link rel="stylesheet" href="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/css/app.css?v=<?= $__assetVer('css/app.css') ?>">
 </head>
 <body>
 <div class="layout">
@@ -69,7 +71,7 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
     </header>
 
     <?php if ($flash): ?>
-      <div class="flash flash-<?= e($flash['type']) ?>" id="serverFlash"><?= e($flash['msg']) ?></div>
+      <div class="flash flash-<?= e($flash['type']) ?>" id="serverFlash"><?= e($flash['msg']) ?><?php /* r3-contractflow: 플래시에 선택적 이동 링크 */ if (!empty($flash['link']['url'])): ?> <a href="<?= e($flash['link']['url']) ?>"><?= e($flash['link']['label'] ?? '바로 가기 →') ?></a><?php endif; ?></div>
     <?php endif; ?>
 
     <main class="content">
@@ -77,9 +79,9 @@ $roleLabels = ['super_admin' => '슈퍼관리자', 'sales_manager' => '영업관
     </main>
   </div>
 </div>
-<script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/js/app.js"></script>
+<script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/js/app.js?v=<?= $__assetVer('js/app.js') ?>"></script>
 <?php foreach (($scripts ?? []) as $s): ?>
-<script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/<?= e($s) ?>"></script>
+<script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/<?= e($s) ?>?v=<?= $__assetVer($s) ?>"></script>
 <?php endforeach; ?>
 <?php if (!empty($inlineScript)): ?><script><?= $inlineScript ?></script><?php endif; ?>
 </body>

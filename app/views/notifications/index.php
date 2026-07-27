@@ -13,8 +13,10 @@ $typeLabels = [
 ?>
 <div class="page">
   <div class="page-head">
-    <h1 class="page-title">알림</h1>
-    <div class="page-sub">읽지 않은 알림 <?= (int) $unread ?>건</div>
+    <div>
+      <h1 class="page-title">알림</h1>
+      <div class="page-sub">읽지 않은 알림 <?= (int) $unread ?>건</div>
+    </div>
     <div class="page-actions">
       <button type="button" class="btn btn-outline" id="btnReadAll" <?= $unread > 0 ? '' : 'disabled' ?>>전체 읽음 처리</button>
     </div>
@@ -51,27 +53,14 @@ $typeLabels = [
     <?php endforeach; ?>
   </div>
 
-  <div class="pagination">
-    <span class="page-info"><?= (int) $pg['from'] ?>-<?= (int) $pg['to'] ?> / <?= (int) $pg['total'] ?>건</span>
-    <?php for ($i = 1; $i <= $pg['pages']; $i++): ?>
-      <a class="<?= $i === $pg['page'] ? 'cur' : '' ?>" href="<?= e(url('notifications.index', ['filter' => $filter, 'page' => $i])) ?>"><?= $i ?></a>
-    <?php endfor; ?>
-  </div>
+  <?php View::partial('partials/pager', [
+      'pg'  => $pg,
+      'url' => fn (int $p): string => url('notifications.index', ['filter' => $filter, 'page' => $p]),
+  ]); ?>
   <?php endif; ?>
 </div>
 
-<style>
-.notif-row{padding:14px 16px;cursor:pointer}
-.notif-row.notif-sep{border-top:1px solid var(--line-2)}
-.notif-row:hover{background:#fafbfc}
-.notif-row.unread{background:var(--brand-soft)}
-.notif-row.unread:hover{background:#dde9fd}
-.notif-main{display:flex;align-items:center;gap:8px}
-.notif-title{font-weight:600;font-size:13.5px}
-.notif-msg{font-size:12.5px;color:var(--ink-2);margin-top:4px}
-.notif-time{font-size:11.5px;color:var(--ink-3);margin-top:5px}
-</style>
-
+<?php /* 화면 전용 <style> 은 app.css 의 r3-formscss 블록(.notif-*)으로 승격됨 */ ?>
 <script>
 document.querySelectorAll('.notif-row').forEach(function (row) {
   row.addEventListener('click', async function () {

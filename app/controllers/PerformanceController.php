@@ -38,9 +38,20 @@ class PerformanceController
 
         $depMap = array_column(Db::all('SELECT id, name FROM departments'), 'name', 'id');
 
+        // 전 직원 순회 시 사용자당 4쿼리(N+1)를 제거하기 위한 배치 프리로드.
+        // 배치 메서드는 단건 메서드(employeeConfirmedRevenue/Contribution·contractedAmount)와
+        // 동일 산식(모집단·SUM 식 동일, GROUP BY user)이라 값이 1원까지 일치한다(대시보드 staffPerformance 와 동일 패턴).
+        $mFrom = sprintf('%04d-%02d-01', $year, $month);
+        $mTo   = date('Y-m-t', strtotime($mFrom));
+        $bulk = [
+            'confirmed'       => AccountingService::employeeConfirmedByUser(),
+            'confirmedMonth'  => AccountingService::employeeConfirmedByUser($mFrom, $mTo),
+            'contractedMonth' => AccountingService::contractedAmountByUser($mFrom, $mTo),
+        ];
+
         $rows = [];
         foreach ($users as $u) {
-            $perf = $this->computePerformance((int) $u['id'], $year, $month);
+            $perf = $this->computePerformance((int) $u['id'], $year, $month, $bulk);
             $rows[] = $perf + [
                 'user_id'    => (int) $u['id'],
                 'name'       => $u['name'],
@@ -102,9 +113,10 @@ class PerformanceController
         $totalContribution = 0.0;
         foreach ($assignments as $a) {
             $profit      = AccountingService::projectActualProfit($a);
-            $confirmed   = ($a['status'] === 'completed' && $a['actual_end_date'] !== null);
+            $confirmed   = (in_array($a['status'], ['completed', 'settled'], true) && $a['actual_end_date'] !== null);
+            $excluded    = in_array($a['status'], ['cancelled', 'terminated'], true); // 취소·파기 — 예상 기여에서도 제외
             $myConfirmed = $confirmed ? AccountingService::contribution($profit, (float) $a['contribution_pct']) : 0;
-            $myExpected  = $confirmed ? 0 : AccountingService::contribution($profit, (float) $a['contribution_pct']);
+            $myExpected  = ($confirmed || $excluded) ? 0 : AccountingService::contribution($profit, (float) $a['contribution_pct']);
             $totalContribution += $myConfirmed;
             $contributionRows[] = [
                 'project_id'       => (int) $a['project_id'],
@@ -114,6 +126,7 @@ class PerformanceController
                 'assign_role'      => $a['assign_role'],
                 'contribution_pct' => (float) $a['contribution_pct'],
                 'confirmed'        => $confirmed,
+                'excluded'         => $excluded, // 취소·파기 — 확정·예상 기여 모두 제외(브리프 §2)
                 'project_profit'   => $profit,
                 'my_contribution'  => $myConfirmed,
                 'my_expected'      => $myExpected,
@@ -143,14 +156,16 @@ class PerformanceController
      * 총매출/총순이익/평균순이익률은 대시보드 staffPerformance 와 동일하게
      * AccountingService(공급가·완료·귀속) 기준으로 산출한다(가중 순이익률).
      */
-    private function computePerformance(int $uid, int $year, int $month): array
+    private function computePerformance(int $uid, int $year, int $month, ?array $bulk = null): array
     {
         $projects = Db::all(
-            "SELECT DISTINCT p.id, p.status, p.contract_amount, p.end_date, p.actual_end_date
+            "SELECT DISTINCT p.id, p.status, p.contract_amount, p.end_date, p.actual_end_date,
+                    (SELECT COALESCE(SUM(pa2.contribution_pct),0) FROM project_assignments pa2
+                      WHERE pa2.project_id = p.id AND pa2.user_id = :pct_u) AS my_pct
              FROM projects p
              LEFT JOIN project_assignments pa ON pa.project_id = p.id AND pa.user_id = :pa_u
              WHERE p.deleted_at IS NULL AND (p.sales_user_id = :sales_u OR p.site_manager_id = :site_u OR pa.user_id = :assign_u)",
-            [':pa_u' => $uid, ':sales_u' => $uid, ':site_u' => $uid, ':assign_u' => $uid]
+            [':pct_u' => $uid, ':pa_u' => $uid, ':sales_u' => $uid, ':site_u' => $uid, ':assign_u' => $uid]
         );
 
         $total = count($projects);
@@ -161,36 +176,50 @@ class PerformanceController
         $today = date('Y-m-d');
 
         foreach ($projects as $p) {
-            $totalContractAmount += (float) $p['contract_amount'];
-            if ($p['status'] === 'completed') {
+            // 취소·파기 프로젝트는 담당 수·총계약금액(업무량·성과)에서 제외(브리프 §2)
+            if (in_array($p['status'], ['cancelled', 'terminated'], true)) {
+                $total--;
+                continue;
+            }
+            // T9: 전체금액 100% 중복 귀속 금지 — 기여율 가중(기여율 없으면 미반영)
+            $totalContractAmount += (float) $p['contract_amount'] * (float) $p['my_pct'] / 100;
+            if (in_array($p['status'], ['completed', 'settled'], true)) {
                 $completed++;
             } elseif ($p['status'] === 'in_progress') {
                 $inProgress++;
             }
-            if ($p['status'] !== 'completed' && $p['actual_end_date'] === null
+            if (!in_array($p['status'], ['completed', 'settled', 'cancelled', 'terminated'], true)
+                && $p['actual_end_date'] === null
                 && $p['end_date'] !== null && $p['end_date'] < $today) {
                 $delayed++;
             }
         }
 
-        // 귀속 확정매출/확정순이익(완료·공급가 기준) — 대시보드 staffPerformance 와 동일 서비스.
-        $attrRev = AccountingService::employeeConfirmedRevenue($uid);
-        $contrib = AccountingService::employeeConfirmedContribution($uid);
+        // 이번달 범위(수주·당월 기여 스코프)
+        $mFrom = sprintf('%04d-%02d-01', $year, $month);
+        $mTo   = date('Y-m-t', strtotime($mFrom));
+
+        // 귀속 확정매출/확정순이익(완료·공급가 기준) + 당월 수주·기여 — 대시보드 staffPerformance 와 동일 서비스.
+        // index() 처럼 전 직원을 순회할 때는 배치 프리로드(bulk)를 넘겨 사용자당 4쿼리(N+1)를 제거한다.
+        // 배치 메서드는 단건 메서드와 동일 산식(모집단·SUM 식 동일, GROUP BY user)이라 값이 1원까지 일치한다.
+        if ($bulk !== null) {
+            $attrRev      = (int) ($bulk['confirmed'][$uid]['revenue'] ?? 0);
+            $contrib      = (int) ($bulk['confirmed'][$uid]['contrib'] ?? 0);
+            $monthProfit  = (int) ($bulk['confirmedMonth'][$uid]['contrib'] ?? 0);
+            $monthRevenue = (int) ($bulk['contractedMonth'][$uid] ?? 0);
+        } else {
+            $attrRev      = AccountingService::employeeConfirmedRevenue($uid);
+            $contrib      = AccountingService::employeeConfirmedContribution($uid);
+            $monthProfit  = AccountingService::employeeConfirmedContribution($uid, $mFrom, $mTo);
+            $monthRevenue = AccountingService::contractedAmount($mFrom, $mTo, $uid);
+        }
         $totalCost = $attrRev - $contrib;
         $avgProfitRate = Calc::rate($contrib, $attrRev);
 
-        $target = Db::one(
-            'SELECT target_revenue, target_profit FROM targets WHERE user_id=:u AND year=:y AND month=:m',
-            [':u' => $uid, ':y' => $year, ':m' => $month]
-        );
-        $targetRevenue = $target ? (float) $target['target_revenue'] : 0.0;
-        $targetProfit  = $target ? (float) $target['target_profit'] : 0.0;
-
-        // 이번달 담당(sales_user) 수주 공급가 — AccountingService 단일 출처(취소 제외).
-        $mFrom = sprintf('%04d-%02d-01', $year, $month);
-        $mTo   = date('Y-m-t', strtotime($mFrom));
-        $monthRevenue = AccountingService::contractedAmount($mFrom, $mTo, $uid);
-        $monthProfit = AccountingService::employeeConfirmedContribution($uid, $mFrom, $mTo);
+        // R9: 목표 원장(goals 월간·개인) 우선, 레거시 targets 폴백 — GoalService 브리지
+        $target = GoalService::personalMonthTarget($uid, $year, $month);
+        $targetRevenue = (float) ($target['revenue'] ?? 0.0);
+        $targetProfit  = (float) ($target['profit'] ?? 0.0);
 
         $leadTotal = (int) Db::val('SELECT COUNT(*) FROM leads WHERE sales_user_id=:u AND deleted_at IS NULL', [':u' => $uid]);
         $leadWon = (int) Db::val(

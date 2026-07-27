@@ -12,7 +12,9 @@ define('UPLOAD_PATH', STORAGE_PATH . '/uploads');
 define('VIEW_PATH', APP_PATH . '/views');
 
 // ── 로컬/운영 환경값 로드 ──
-$localFile = __DIR__ . '/config.local.php';
+// EDEN_CONFIG_LOCAL 환경변수로 대체 로컬 설정 파일을 지정할 수 있다
+// (스크래치 DB 등가 검증·병렬 QA 용 — 미지정 시 기존 경로 그대로).
+$localFile = getenv('EDEN_CONFIG_LOCAL') ?: (__DIR__ . '/config.local.php');
 if (!is_file($localFile)) {
     http_response_code(500);
     exit('설정 파일(config.local.php)이 없습니다. config.local.example.php 를 복사해 생성하세요.');
@@ -30,6 +32,8 @@ $config = array_merge([
     'LOCK_MINUTES'    => 15,          // 잠금 시간(분)
     'UPLOAD_MAX'      => 10 * 1024 * 1024,  // 업로드 최대 크기(바이트)
     'PAGE_SIZE'       => 20,
+    // 운영 공유 DB 테이블 prefix(Db 레이어 SQL rewrite). '' 이면 rewrite 미작동(로컬 기본).
+    'TBL_PREFIX'      => '',
     // DB 기본값(로컬이 덮음)
     'DB_HOST'   => '127.0.0.1',
     'DB_PORT'   => 3306,

@@ -7,9 +7,9 @@
       <div class="auth-desc">최초 로그인 시 새 비밀번호를 설정해야 합니다.</div>
     </div>
 <?php else: ?>
-<div class="page">
+<div class="page page-narrow">
   <div class="page-head"><h1 class="page-title">비밀번호 변경</h1></div>
-  <div class="card" style="max-width:480px">
+  <div class="card pad maxw-sm">
 <?php endif; ?>
 
     <form method="post" action="<?= e(url('password.update')) ?>" class="<?= $forced ? 'auth-form' : 'form' ?>">

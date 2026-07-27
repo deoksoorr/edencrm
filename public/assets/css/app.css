@@ -971,10 +971,10 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 .staff-half-form .select{height:30px;font-size:12.5px;width:auto}
 /* 직원 목록·보너스 관리 버튼 — 셀 밖으로 밀리지 않게 한 줄 고정(가로 스크롤은 table-wrap 담당),
    모바일에서는 버튼을 축소해 표 최소폭을 줄인다 */
-.staff-actions,.bonus-actions{flex-wrap:nowrap}
-.staff-actions .btn,.bonus-actions .btn{white-space:nowrap}
+.staff-actions,.bonus-actions,.goal-actions{flex-wrap:nowrap}
+.staff-actions .btn,.bonus-actions .btn,.goal-actions .btn{white-space:nowrap}
 @media(max-width:640px){
-  .staff-actions .btn,.bonus-actions .btn{padding:3px 7px;font-size:11.5px}
+  .staff-actions .btn,.bonus-actions .btn,.goal-actions .btn{padding:3px 7px;font-size:11.5px}
   .staff-half-form{flex-wrap:wrap}
 }
 
@@ -1007,3 +1007,15 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .stage-type-select,.stage-group-select{width:auto;min-width:86px;height:32px;font-size:12.5px}
 .stage-desc-input{width:180px;font-size:12.5px}
 @media(max-width:900px){.stage-desc-input{width:120px}}
+
+/* R10: 공정 설정 그룹 필터 중 정렬 잠금 표시 */
+.stage-sort-locked .stage-drag{opacity:.3;pointer-events:none}
+
+/* R10: 연동 자동 산정 읽기 전용 입력 표시 */
+.input-muted[readonly]{background:var(--line-2);color:var(--ink-2);cursor:default}
+
+/* R10: 공정/영업 단계 관리 — 좁은 화면에서 행 내부 폼 줄바꿈(본문 가로 스크롤 금지) */
+@media(max-width:1024px){
+  .stage-row form{flex-wrap:wrap}
+  .stage-name-input,.stage-desc-input,.stage-color-input{min-width:0;max-width:100%}
+}

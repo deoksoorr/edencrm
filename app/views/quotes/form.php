@@ -17,7 +17,7 @@ $versionNote = '';
       <div class="form-grid">
         <div class="field">
           <label class="field-label">고객 <span class="req">*</span></label>
-          <select name="customer_id" class="select" required>
+          <select name="customer_id" id="customerSelect" class="select" required>
             <option value="">선택하세요</option>
             <?php foreach ($customers as $c): ?>
               <option value="<?= (int) $c['id'] ?>" <?= (int) ($quote['customer_id'] ?? 0) === (int) $c['id'] ? 'selected' : '' ?>>
@@ -28,14 +28,16 @@ $versionNote = '';
         </div>
         <div class="field">
           <label class="field-label">연결 영업기회(리드)</label>
-          <select name="lead_id" class="select">
+          <select name="lead_id" id="leadSelect" class="select" <?= empty($quote['customer_id']) ? 'disabled' : '' ?>>
             <option value="">선택 안함</option>
             <?php foreach ($leads as $l): ?>
               <option value="<?= (int) $l['id'] ?>" <?= (int) ($quote['lead_id'] ?? 0) === (int) $l['id'] ? 'selected' : '' ?>>
-                #<?= (int) $l['id'] ?> · <?= e($l['customer_name']) ?><?= $l['work_type'] ? ' · ' . e($l['work_type']) : '' ?>
+                #<?= (int) $l['id'] ?><?= $l['work_type'] ? ' · ' . e($l['work_type']) : '' ?><?= $l['stage_name'] ? ' · ' . e($l['stage_name']) : '' ?>
               </option>
             <?php endforeach; ?>
           </select>
+          <div class="field-hint" id="leadHint"><?= empty($quote['customer_id'])
+            ? '고객을 먼저 선택하면 해당 고객의 영업기회만 표시됩니다.' : '선택한 고객의 영업기회만 표시됩니다(실주·취소 제외).' ?></div>
         </div>
         <div class="field">
           <label class="field-label">유효기간</label>
@@ -75,7 +77,7 @@ $versionNote = '';
                 <th class="num" style="min-width:100px">장비비</th>
                 <th class="num" style="min-width:100px">외주비</th>
                 <th class="num" style="min-width:100px">기타비용</th>
-                <th class="num" style="min-width:110px">금액</th>
+                <th class="num" style="min-width:110px" title="면적×수량×단가 + 재료비+인건비+장비비+외주비+기타비용">금액</th>
                 <th></th>
               </tr>
             </thead>
@@ -83,13 +85,13 @@ $versionNote = '';
           </table>
         </div>
         <div class="kv-row mt-16">
-          <div class="kv"><div class="kv-label">공급가액</div><div class="kv-value" id="sumSubtotal">0</div></div>
-          <div class="kv"><div class="kv-label">부가세(<?= e(rtrim(rtrim(number_format($vatRate, 1), '0'), '.')) ?>%)</div><div class="kv-value" id="sumVat">0</div></div>
-          <div class="field" style="width:160px">
+          <div class="kv" title="항목 금액 합 · VAT 제외"><div class="kv-label">공급가액(VAT 제외)</div><div class="kv-value" id="sumSubtotal">0</div></div>
+          <div class="kv" title="공급가액(할인 전) × 부가세율"><div class="kv-label">부가세(<?= e(rtrim(rtrim(number_format($vatRate, 1), '0'), '.')) ?>%)</div><div class="kv-value" id="sumVat">0</div></div>
+          <div class="field" style="width:160px" title="총액(VAT 포함)에서 차감 — 부가세는 할인 전 공급가액 기준으로 계산됩니다">
             <label class="field-label">할인</label>
             <input type="text" inputmode="numeric" name="discount" id="inputDiscount" class="input money-input" value="<?= e((string) (int) $discount) ?>">
           </div>
-          <div class="kv"><div class="kv-label">총 금액</div><div class="kv-value" id="sumTotal" style="color:var(--brand);font-size:19px">0</div></div>
+          <div class="kv" title="공급가액 + 부가세 − 할인 · VAT 포함"><div class="kv-label">총액(VAT 포함)</div><div class="kv-value hl xl" id="sumTotal">0</div></div>
         </div>
       </div>
     </div>

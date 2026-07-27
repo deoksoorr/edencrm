@@ -511,7 +511,8 @@ class DashboardController
         $y = (int) date('Y'); $m = (int) date('n');
         if ($uid !== null) {
             // 개인 목표: 실제(actual) = 담당 이번달 수주 공급가 합(공급가 기준 통일, 취소 제외) — AccountingService 단일 출처
-            $target = (float) Db::val("SELECT COALESCE(target_revenue,0) FROM targets WHERE user_id=:u AND year=:y AND month=:m", [':u' => $uid, ':y' => $y, ':m' => $m]);
+            // 목표값은 R9 목표 원장(goals 월간·개인) 우선, 레거시 targets 폴백 — GoalService 브리지
+            $target = (float) (GoalService::personalMonthTarget($uid, $y, $m)['revenue'] ?? 0.0);
             $mFrom = sprintf('%04d-%02d-01', $y, $m);
             $mTo   = date('Y-m-t', strtotime($mFrom));
             $actual = (float) AccountingService::contractedAmount($mFrom, $mTo, $uid);

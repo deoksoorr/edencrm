@@ -105,7 +105,8 @@ class BonusController
         );
     }
 
-    /** 보너스 합계(산정액/지급액/미지급액=산정−지급) — cancelled 제외. */
+    /** 보너스 합계(산정액/지급액/미지급액) — cancelled 제외.
+     *  미지급액은 행 단위 max(0, 산정−지급) 합 — 과지급 행이 다른 행의 미지급을 상쇄하지 않는다(R9-2). */
     private function bonusTotals(array $rows): array
     {
         $t = ['calc' => 0, 'paid' => 0, 'unpaid' => 0];
@@ -115,8 +116,8 @@ class BonusController
             }
             $t['calc'] += (int) $r['calc_amount'];
             $t['paid'] += (int) $r['paid_amount'];
+            $t['unpaid'] += max(0, (int) $r['calc_amount'] - (int) $r['paid_amount']);
         }
-        $t['unpaid'] = $t['calc'] - $t['paid'];
         return $t;
     }
 
@@ -234,6 +235,7 @@ class BonusController
             ],
             'profitKpi'    => [
                 'revenue' => $revenue, 'costReg' => $costReg, 'costDirect' => $costDirect,
+                'costOther' => $costReg - $costDirect,
                 'profit' => $profit, 'profitRate' => $profitRate,
             ],
             'bonuses'      => $bonuses,
@@ -334,6 +336,106 @@ class BonusController
         ]);
     }
 
+    // ── 연동 산정 (R10 확정 산식 — 프론트는 미리보기, 저장 시 서버가 동일 산식으로 재계산) ──
+    //   산정 대상 매출 = 프로젝트 연결 계약의 누적 확정 입금(입금−환불, status='paid') — 계약 미연결이면 0.
+    //                    계약 금액을 자동 사용하지 않는다(§14 금지). 미입금·취소·pending 제외는 contractNetPaid 정의가 보장.
+    //   기여도 적용 매출 = round(산정 대상 매출 × 기여율/100). 배정 기여율 합이 100%면 잔여 원 단위를
+    //                    마지막 직원에게 배분해 Σ기여도적용매출 == 산정 대상 매출을 보장한다.
+    //   산정 금액 = round(기여도 적용 매출 × 보너스율/100). 원 단위 반올림(round) 정책 — 전 구간 통일.
+
+    /** 프로젝트의 산정 대상 매출(실입금 기준). */
+    private static function projectBonusBase(array $p): int
+    {
+        $contractId = (int) ($p['contract_id'] ?? 0);
+        return $contractId > 0 ? max(0, AccountingService::contractNetPaid($contractId)) : 0;
+    }
+
+    /** 활성 배정 직원 목록(user_id/name/pct/user_status) — 이름순 고정(잔여 배분 순서의 단일 기준). */
+    private static function activeAssignees(int $projectId): array
+    {
+        return Db::all(
+            "SELECT pa.user_id, u.name, pa.contribution_pct AS pct, u.status AS user_status
+             FROM project_assignments pa
+             JOIN users u ON u.id = pa.user_id AND u.deleted_at IS NULL
+             WHERE pa.project_id = :p AND pa.status = 'active'
+             ORDER BY u.name, pa.user_id",
+            [':p' => $projectId]
+        );
+    }
+
+    /**
+     * 직원별 기여도 적용 매출 배분표. Σpct 가 100±0.01 이면 마지막 직원 = base − Σ(앞선 배분)으로
+     * 합계를 산정 대상 매출과 정확히 일치시킨다(§4 검증식).
+     * @return array<int,int> user_id => contrib_revenue
+     */
+    private static function allocateContrib(int $base, array $assignees): array
+    {
+        $map = [];
+        $pctSum = 0.0;
+        foreach ($assignees as $a) {
+            $pctSum += (float) $a['pct'];
+        }
+        $exact = abs($pctSum - 100.0) < 0.01;
+        $acc = 0;
+        $n = count($assignees);
+        foreach ($assignees as $i => $a) {
+            if ($exact && $i === $n - 1) {
+                $v = $base - $acc; // 잔여 배분
+            } else {
+                $v = (int) round($base * (float) $a['pct'] / 100);
+            }
+            $map[(int) $a['user_id']] = $v;
+            $acc += $v;
+        }
+        return $map;
+    }
+
+    /**
+     * 연동 산정 정보(JSON, bonus.manage) — 보너스 폼 자동 채움.
+     * 프로젝트 선택 직후 필요한 값 일체: 계약금액·누적입금(=산정 대상 매출)·배정 직원 목록(기여도·배분액 포함).
+     */
+    public function calcInfo(): void
+    {
+        $projectId = Util::int('project_id', 0) ?: 0;
+        $userId    = Util::int('user_id', 0) ?: 0;
+        $p = Db::one('SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL', [':id' => $projectId]);
+        if (!$p) {
+            Response::error('프로젝트를 찾을 수 없습니다.', 404);
+        }
+        $base      = self::projectBonusBase($p);
+        $assignees = self::activeAssignees($projectId);
+        $alloc     = self::allocateContrib($base, $assignees);
+        $pctSum    = 0.0;
+        $list      = [];
+        foreach ($assignees as $a) {
+            $pctSum += (float) $a['pct'];
+            $list[] = [
+                'user_id'         => (int) $a['user_id'],
+                'name'            => $a['name'],
+                'pct'             => (float) $a['pct'],
+                'user_status'     => $a['user_status'],
+                'contrib_revenue' => $alloc[(int) $a['user_id']],
+            ];
+        }
+        $pct = null;
+        foreach ($list as $a) {
+            if ($a['user_id'] === $userId) {
+                $pct = $a['pct'];
+                break;
+            }
+        }
+        Response::json([
+            'contract_amount' => (int) $p['contract_amount'],
+            'net_paid'        => $base,
+            'base'            => $base,
+            'has_contract'    => (int) ($p['contract_id'] ?? 0) > 0,
+            'pct_sum'         => round($pctSum, 2),
+            'assignees'       => $list,
+            'pct'             => $pct,
+            'contribRevenue'  => $userId > 0 ? ($alloc[$userId] ?? null) : null,
+        ]);
+    }
+
     // ── 쓰기 (라우터가 bonus.manage + POST + CSRF 강제) ──
 
     /**
@@ -343,6 +445,10 @@ class BonusController
      */
     public function save(): void
     {
+        // R10: 전체 배정 직원 일괄 등록 모드 — 별도 흐름
+        if (Util::postInt('all_assignees', 0) === 1) {
+            $this->saveBulk();
+        }
         $id     = Util::postInt('id', 0) ?: 0;
         $before = null;
         if ($id > 0) {
@@ -382,6 +488,23 @@ class BonusController
         $base = $money('base_amount', $before['base_amount'] ?? 0);
         $calc = $money('calc_amount', $before['calc_amount'] ?? 0);
         $paid = $money('paid_amount', $before['paid_amount'] ?? 0);
+        // 기여도 적용 매출(R9-2) — 미전송 시 기존 값 유지(레거시 행은 NULL 유지)
+        $contribRev = $posted('contrib_revenue')
+            ? $money('contrib_revenue', 0)
+            : ($before !== null && $before['contrib_revenue'] !== null ? (int) $before['contrib_revenue'] : null);
+        // 보너스율(R10) — 0~100, 소수 2자리
+        $bonusRate = $before !== null && $before['bonus_rate'] !== null ? (float) $before['bonus_rate'] : null;
+        if ($posted('bonus_rate')) {
+            $r = str_replace([',', ' '], '', Util::postStr('bonus_rate'));
+            if ($r === '') {
+                $bonusRate = null;
+            } else {
+                if (!preg_match('/^\d+(\.\d{1,2})?$/', $r) || (float) $r > 100) {
+                    Response::error('보너스율은 0~100 사이여야 합니다. (소수 2자리)', 422);
+                }
+                $bonusRate = (float) $r;
+            }
+        }
 
         // ── 검증 ──
         if ($userId <= 0) {
@@ -397,8 +520,10 @@ class BonusController
                 Response::error('대상 직원이 존재하지 않거나 활성 상태가 아닙니다.', 422);
             }
         }
+        $proj = null;
         if ($projectId > 0) {
-            if (!Db::one('SELECT id FROM projects WHERE id = :id AND deleted_at IS NULL', [':id' => $projectId])) {
+            $proj = Db::one('SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL', [':id' => $projectId]);
+            if (!$proj) {
                 Response::error('선택한 프로젝트를 찾을 수 없습니다.', 422);
             }
         }
@@ -433,6 +558,61 @@ class BonusController
             }
         }
 
+        // ── R10 연동 강제·재계산 (프로젝트 연결 시) ──
+        $assignPct = null;
+        if ($projectId > 0) {
+            $assignees = self::activeAssignees($projectId);
+            $found = null;
+            foreach ($assignees as $a) {
+                if ((int) $a['user_id'] === $userId) {
+                    $found = $a;
+                    break;
+                }
+            }
+            // 배정 직원만 신규 등록 가능(§3) — 기존 원장 수정(배정 해제된 과거 건)은 이력 보존 위해 허용
+            $keyChanged = $before === null
+                || (int) $before['user_id'] !== $userId
+                || (int) ($before['project_id'] ?? 0) !== $projectId;
+            if ($keyChanged && !$found) {
+                Response::error('해당 프로젝트에 배정된 직원만 보너스 대상으로 등록할 수 있습니다.', 422);
+            }
+            $assignPct = $found !== null ? (float) $found['pct'] : null;
+
+            // 중복 산정 경고(동일 프로젝트·직원·반기, 취소·삭제 제외) — 관리자 확인(confirm_dup) 후 등록
+            $dupKeyChanged = $keyChanged
+                || (int) ($before['year'] ?? 0) !== $year
+                || (int) ($before['half'] ?? 0) !== $half;
+            if ($dupKeyChanged && Util::postInt('confirm_dup', 0) !== 1) {
+                $dupCnt = (int) Db::val(
+                    "SELECT COUNT(*) FROM site_bonuses
+                     WHERE deleted_at IS NULL AND pay_status <> 'cancelled'
+                       AND project_id = :p AND user_id = :u AND year = :y AND half = :h AND id <> :me",
+                    [':p' => $projectId, ':u' => $userId, ':y' => $year, ':h' => $half, ':me' => $id]
+                );
+                if ($dupCnt > 0) {
+                    Response::json(['dup_warning' => true,
+                        'message' => "같은 프로젝트·직원·반기의 보너스가 이미 {$dupCnt}건 있습니다. 중복 산정에 주의하세요."]);
+                }
+            }
+
+            // 서버 재계산(§5: 프론트 값 불신) — 신규이거나 산정 관련 필드가 전송된 수정이면 최신 데이터로 재계산.
+            //   지급처리 부분 폼(지급액·지급일만 전송)은 재계산하지 않음 — 지급완료 건 자동 덮어쓰기 금지.
+            $recompute = $before === null
+                || $posted('bonus_rate') || $posted('base_amount') || $posted('user_id') || $posted('project_id');
+            if ($recompute) {
+                $base  = self::projectBonusBase($proj);
+                $alloc = self::allocateContrib($base, $assignees);
+                if (isset($alloc[$userId])) {
+                    $contribRev = $alloc[$userId];
+                } elseif ($assignPct !== null) {
+                    $contribRev = (int) round($base * $assignPct / 100);
+                }
+                if ($bonusRate !== null && $contribRev !== null) {
+                    $calc = (int) round($contribRev * $bonusRate / 100);
+                }
+            }
+        }
+
         // pay_status 보정: cancelled 명시 외에는 지급액으로 산출
         if ($payStatusIn === 'cancelled') {
             $payStatus = 'cancelled';
@@ -444,20 +624,14 @@ class BonusController
             $payStatus = 'paid';
         }
 
-        // 기여율 스냅샷: 등록 시 해당 user+project 의 active 배정 합(없으면 NULL),
-        // 수정 시 기존 값 유지 — 이후 담당자·배정 변경이 과거 원장을 훼손하지 않도록.
-        if ($before !== null) {
+        // 기여율 스냅샷: 산정(등록·재계산) 시점의 배정 기여율 보존 — 이후 배정 변경이 과거 원장을 훼손하지 않도록.
+        //   지급처리 등 재계산 없는 수정은 기존 스냅샷 유지.
+        if ($projectId > 0 && ($recompute ?? false) && $assignPct !== null) {
+            $pctSnapshot = $assignPct;
+        } elseif ($before !== null) {
             $pctSnapshot = $before['contribution_pct_at_calc'];
         } else {
-            $pctSnapshot = null;
-            if ($projectId > 0) {
-                $pctSnapshot = Db::val(
-                    "SELECT SUM(contribution_pct) FROM project_assignments
-                     WHERE project_id = :p AND user_id = :u AND status = 'active'",
-                    [':p' => $projectId, ':u' => $userId]
-                );
-                $pctSnapshot = $pctSnapshot !== null ? (float) $pctSnapshot : null;
-            }
+            $pctSnapshot = $assignPct;
         }
 
         $data = [
@@ -467,6 +641,8 @@ class BonusController
             'half'                     => $half,
             'base_amount'              => $base,
             'calc_basis'               => $calcBasis !== '' ? $calcBasis : null,
+            'contrib_revenue'          => $contribRev,
+            'bonus_rate'               => $bonusRate,
             'calc_amount'              => $calc,
             'paid_amount'              => $paid,
             'pay_date'                 => $payDate !== '' ? $payDate : null,
@@ -504,6 +680,105 @@ class BonusController
         Audit::log('bonus.save', 'site_bonuses', $id, $before, $after);
 
         Response::json(['id' => $id]);
+    }
+
+    /**
+     * 전체 배정 직원 일괄 등록(R10) — 프로젝트의 활성 배정 직원 전원(기여도>0·활성 직원)에게
+     * 동일 보너스율로 초안(unpaid) 생성. 잔여 원 단위는 배분표(allocateContrib)가 마지막 직원에 배분.
+     */
+    private function saveBulk(): void
+    {
+        $projectId = Util::postInt('project_id', 0) ?: 0;
+        $proj = $projectId > 0
+            ? Db::one('SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL', [':id' => $projectId]) : null;
+        if (!$proj) {
+            Response::error('일괄 등록에는 프로젝트를 선택해야 합니다.', 422);
+        }
+        $year = Util::postInt('year', 0) ?: 0;
+        $half = Util::postInt('half', 0) ?: 0;
+        if ($year < 2020 || $year > 2100) {
+            Response::error('연도는 2020~2100 사이여야 합니다.', 422);
+        }
+        if (!in_array($half, [1, 2], true)) {
+            Response::error('반기는 상반기(1) 또는 하반기(2)여야 합니다.', 422);
+        }
+        $r = str_replace([',', ' '], '', Util::postStr('bonus_rate'));
+        if ($r === '' || !preg_match('/^\d+(\.\d{1,2})?$/', $r) || (float) $r > 100) {
+            Response::error('일괄 등록에는 보너스율(0~100)이 필요합니다.', 422);
+        }
+        $bonusRate = (float) $r;
+        $memo = trim(Util::postStr('memo'));
+        if (mb_strlen($memo) > 500) {
+            Response::error('메모는 500자 이내여야 합니다.', 422);
+        }
+
+        $assignees = self::activeAssignees($projectId);
+        if (!$assignees) {
+            Response::error('배정 직원이 없는 프로젝트입니다 — 보너스를 등록할 수 없습니다.', 422);
+        }
+        // 대상 = 기여도 > 0 + 활성 직원(§3: 비활성 직원 신규 지급 제한)
+        $targets = array_values(array_filter(
+            $assignees,
+            static fn ($a) => (float) $a['pct'] > 0 && $a['user_status'] === 'active'
+        ));
+        if (!$targets) {
+            Response::error('기여도가 0%보다 큰 활성 배정 직원이 없습니다.', 422);
+        }
+
+        // 중복 경고 — 대상 중 동일 반기 기존 건 존재 시(취소·삭제 제외)
+        if (Util::postInt('confirm_dup', 0) !== 1) {
+            $in = implode(',', array_map(static fn ($a) => (int) $a['user_id'], $targets)); // int 캐스팅 완료
+            $dupNames = array_column(Db::all(
+                "SELECT DISTINCT u.name FROM site_bonuses b JOIN users u ON u.id = b.user_id
+                 WHERE b.deleted_at IS NULL AND b.pay_status <> 'cancelled'
+                   AND b.project_id = :p AND b.year = :y AND b.half = :h AND b.user_id IN ($in)",
+                [':p' => $projectId, ':y' => $year, ':h' => $half]
+            ), 'name');
+            if ($dupNames) {
+                Response::json(['dup_warning' => true,
+                    'message' => '같은 프로젝트·반기의 보너스가 이미 있는 직원: ' . implode(', ', $dupNames)
+                        . ' — 중복 산정에 주의하세요.']);
+            }
+        }
+
+        $base  = self::projectBonusBase($proj);
+        $alloc = self::allocateContrib($base, $assignees);
+        $ids = [];
+        foreach ($targets as $a) {
+            $uid = (int) $a['user_id'];
+            $contribRev = (int) ($alloc[$uid] ?? 0);
+            $data = [
+                'user_id'                  => $uid,
+                'project_id'               => $projectId,
+                'year'                     => $year,
+                'half'                     => $half,
+                'base_amount'              => $base,
+                'calc_basis'               => null,
+                'contrib_revenue'          => $contribRev,
+                'bonus_rate'               => $bonusRate,
+                'calc_amount'              => (int) round($contribRev * $bonusRate / 100),
+                'paid_amount'              => 0,
+                'pay_date'                 => null,
+                'pay_status'               => 'unpaid',
+                'paid_by'                  => null,
+                'memo'                     => $memo !== '' ? $memo : null,
+                'contribution_pct_at_calc' => (float) $a['pct'],
+                'created_by'               => Auth::id(),
+            ];
+            $newId = Db::insert('site_bonuses', $data);
+            $after = Db::one('SELECT * FROM site_bonuses WHERE id = :id', [':id' => $newId]);
+            Db::insert('site_bonus_history', [
+                'bonus_id'    => $newId,
+                'action'      => 'create',
+                'before_json' => null,
+                'after_json'  => json_encode($after, JSON_UNESCAPED_UNICODE),
+                'reason'      => null,
+                'changed_by'  => Auth::id(),
+            ]);
+            Audit::log('bonus.save', 'site_bonuses', $newId, null, $after);
+            $ids[] = $newId;
+        }
+        Response::json(['ids' => $ids, 'count' => count($ids)]);
     }
 
     /** 소프트 삭제(원장 원칙 — 물리 DELETE 금지). 마감 반기면 reason 필수. */

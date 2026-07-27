@@ -45,21 +45,31 @@ bash scripts/start_dev.sh      # 격리 MySQL(:3307) 기동 + (없으면)스키�
 운영 배포 시에는 `scripts/start_dev.sh` 대신 실제 호스팅 MySQL + 웹서버를 쓰고, `config.local.php` 를 교체하세요.
 
 ## 테스트 계정 (⚠️ 운영 배포 전 반드시 변경)
-| 아이디 | 비밀번호 | 역할 |
-|---|---|---|
-| admin | password123! | 슈퍼관리자(사장) |
-| sales1 | password123! | 영업관리자 |
-| site1 | password123! | 현장관리자 |
-| staff1 | password123! | 일반직원 |
-| acct1 | password123! | 회계·정산 |
-
-> staff6 은 최초 로그인 시 비밀번호 변경 요구(must_change_password) 케이스입니다.
+| 아이디 | 비밀번호 | 이름 | 역할 |
+|---|---|---|---|
+| admin | password123! | 김덕수 | 슈퍼관리자(사장) |
+| chays | password123! | 차윤석 | 현장관리자 |
+| maeng | password123! | 맹기현 | 일반직원 |
+| chaws | password123! | 차우석 | 일반직원 |
 
 ## 권한 체계(RBAC)
-5개 역할(super_admin / sales_manager / site_manager / staff / accountant)과 30개 세분 권한.
+5개 역할(super_admin / sales_manager / site_manager / staff / accountant)과 31개 세분 권한(R6 `attendance.manage` 포함).
 **화면 메뉴 숨김에 그치지 않고, 라우터가 모든 요청에서 권한(perm)·로그인·CSRF·메서드를 강제**하며,
 데이터 접근 범위(본인 담당/배정 프로젝트만 등)는 `Scope` 헬퍼로 쿼리 레벨에서 차단합니다(IDOR 방지).
 자세한 매핑은 `docs/ARCHITECTURE.md` 6절, 권한 키는 `docs/DB_INTERFACE.md` 참조.
+비개발자용 화면 사용법은 **[사용자 매뉴얼(관리자용) — docs/USER_MANUAL.md](docs/USER_MANUAL.md)** 참조(고객 등록→계약→공정→정산 24개 업무 절차).
+
+### 제품 문서 (R4~R6)
+- **[제품 설명서(관리자용) — docs/PRODUCT_MANUAL.md](docs/PRODUCT_MANUAL.md)** — 메뉴 구조·기간 필터·파이프라인 자동 단계·공정 19단계·근태(R6 최종)·프로젝트 상세 요약 그룹핑·오류 조치·점검 체크리스트
+- [회계 기준 — docs/ACCOUNTING_RULES.md](docs/ACCOUNTING_RULES.md) — 손익/현금 두 축·순입금·미수금·분할 지급·파기/환불·원가 이축·알려진 트레이드오프
+- [직원 기여 규칙 — docs/EMPLOYEE_CONTRIBUTION_RULES.md](docs/EMPLOYEE_CONTRIBUTION_RULES.md) — 기여 매출·기여 원가·기여 순이익·기여율(main/ratio/role)·Σ기여=회사 순이익 항등·목표 달성률
+- [근태 관리 규칙 — docs/ATTENDANCE_RULES.md](docs/ATTENDANCE_RULES.md) — 휴가 비노출·수동 지각/무단결근 관리자 등록·해제·통계 3종·권한·감사 로그
+- [영업 파이프라인 산정 규칙 — docs/SALES_PIPELINE_RULES.md](docs/SALES_PIPELINE_RULES.md) — 조회 전용 원칙·7그룹 우선순위·12단계 fallback 매핑·연결 후보 dry-run
+- [공정 흐름 가이드 — docs/PROCESS_FLOW.md](docs/PROCESS_FLOW.md) — 대기중+19단계·하자보수·전체완료 게이트·상태/공정 분리
+- [QA 검증 결과 요약 — docs/QA_REPORT.md](docs/QA_REPORT.md) — R6 RC 검수(보안·회계·CRM·UI·성능) 판정·결함·재검, R4 회귀
+- [DB 변경 이력 — docs/MIGRATION_REPORT.md](docs/MIGRATION_REPORT.md) — R2~R6 마이그레이션·운영 prefix(edencrm_)·보정 스크립트·롤백
+- [운영 배포 보고서 — docs/DEPLOYMENT_REPORT.md](docs/DEPLOYMENT_REPORT.md) — 카페24 배포 절차·체크리스트(실측은 배포 후 코디네이터 기입)
+- [롤백 가이드 — docs/ROLLBACK_GUIDE.md](docs/ROLLBACK_GUIDE.md) — 실패 트리거·롤백 순서·rollback.sql/rollback.sh 사용법·백업 규칙
 
 ## 보안
 - 비밀번호 `password_hash()`(bcrypt), 로그인 5회 실패 시 15분 잠금, 세션 고정 방어(로그인 시 `session_regenerate_id`)
@@ -74,6 +84,7 @@ public/          DocumentRoot (index.php 단일 진입점, assets)
 app/
   config/        config.php(공통) + config.local.php(비밀값, git 제외)
   core/          Db Auth Rbac Csrf Audit View Response Util Calc Upload Nav Notif Scope
+                 AccountingService(회계) StatusService(상태·이력) CostService(원가) Settings Stages
   controllers/   모듈별 컨트롤러
   models/        (선택) 쿼리 모음
   views/         layout/ + 모듈별 템플릿
@@ -87,11 +98,11 @@ scripts/         qa_smoke.sh, security_probe.sh
 ## 주요 기능
 - **고객 CRM**: 고객 등록/상세(활동 타임라인·견적·계약·프로젝트 통합), 중복검사·병합, CSV 내보내기
 - **영업 파이프라인**: 칸반 드래그앤드롭 단계 이동, 예상 순이익률 자동계산, 가중 예상매출
-- **견적·계약**: 견적 항목·버전 이력·인쇄, 계약·입금(payments)·미수금, 계약→프로젝트 전환
-- **프로젝트·공정 보드**: 드래그앤드롭 공정 단계 이동(이력·사유·지연표시·완료잠금), 파일/현장사진
+- **견적·계약**: 견적 항목·버전 이력·인쇄, 계약·입금(payments)·미수금, 계약→프로젝트 전환, 계약 파기(사유·환불·위약금·정산 기록, 물리 삭제 없음)
+- **프로젝트·공정 보드**: 드래그앤드롭 공정 단계 이동(이력·사유·지연표시·완료잠금), 파일/현장사진, 상태 8종(진행 예정/진행 중/일시 중단/취소/파기/완료/하자보수/정산 완료) 전이 규칙·이력(`project_status_history`)
 - **일정 스케줄러**: 월 캘린더 + 직원별 주간 타임라인, 드래그 이동, 일정 충돌 경고(승인식)
 - **직원 배정·작업일지**: 다중 배정·기여도, 작업일지·현장사진·관리자 확인
-- **원가·수익률**: 예상/실제 원가·순이익·순이익률, 적자·달성률
+- **원가·수익률**: 일자별 원가 입력(자재 수량×단가·인건 일수/시간×단가 자동계산, 조정 사유·증빙 첨부·CSV), 확정(confirmed) 원가만 합산한 원가 총액·실제 순이익(공급가액−원가 총액), 적자·달성률 — 단일 출처 `CostService`
 - **직원 성과·수익 기여도**: 기여도 비율 반영(중복합산 방지), 목표 달성률
 - **대시보드·리포트**: 권한별 대시보드(Chart.js), 기간 리포트·CSV
 - **알림·감사로그**: 업무 누락 방지 알림, 중요 행동 감사 추적
@@ -101,9 +112,9 @@ scripts/         qa_smoke.sh, security_probe.sh
 모든 매출·원가·순이익·기여·달성률은 `AccountingService` 한 곳에서 계산한다(대시보드 4종·성과·리포트·프로젝트가 동일 메서드 사용 → 화면 간 수치 불일치 없음). 상세 정책은 `docs/superpowers/specs/2026-07-22-eden-crm-accounting-and-ui-audit-design.md`.
 
 - **두 축 분리** — 손익(매출·순이익·성과)은 **공급가액(VAT 제외)** `supply_amount`, 현금(입금·미수금)은 **계약총액(VAT 포함)** `contract_amount`. `supply_amount + vat_amount = contract_amount` 항상 성립(계약·프로젝트 저장 시 자동 분리, 견적 연결 시 견적 부가세 비례, 미연결 시 ÷(1+세율)).
-- **매출 인식 = 준공 기준** — 확정 매출/순이익은 `status='completed'` 프로젝트의 공급가액(기준일 `actual_end_date`). 미착공·진행중은 **예상 매출**로 분리. **수주액**은 계약일(`contract_date`) 기준 별도 지표.
+- **매출 인식 = 입금 완료(완납) 기준 (R7)** — 확정 매출은 유효 계약(취소·파기 제외) 중 **완납(환불 차감 순입금 ≥ 계약 총액)** 인 계약의 공급가액(기준일 = 마지막 정상 입금일). 프로젝트 완료 여부 무관. 확정 **순이익**·직원 확정 기여는 종전대로 준공(`completed/settled`·`actual_end_date`) 기준. 미착공·진행중은 **예상 매출**로 분리. **수주액**은 계약일(`contract_date`) 기준 별도 지표(취소·파기 제외). 상세: docs/ACCOUNTING_RULES.md
 - **직원 순이익 기여 = 완료 프로젝트만** — `(공급가액 − 실제원가) × 기여도`. 미착공·진행중은 확정 기여에 넣지 않음(과대계상 방지). **담당(영업 `sales_user`)과 참여(배정 `contribution_pct`)를 구분**해 한 프로젝트 매출·순이익을 여러 직원에게 반복 합산하지 않는다. 평균 순이익률은 **가중 평균**(귀속순이익÷귀속매출).
-- **미수금** = Σ 계약별 `max(0, 계약총액 − 입금완료액)`, 해지·취소·삭제 제외.
+- **미수금** = Σ 계약별 `max(0, 계약총액 − 순입금)`, 파기(terminated)·취소·삭제 계약 제외. **순입금** = 입금완료액(`kind='payment'`) − 환불(`kind='refund'`) — 환불·위약금·정산은 별도 축으로 표기.
 - **부가세** = 예수금(pass-through). 매출·순이익·성과 어디에도 포함하지 않음.
 - **예외 표기** — 분모 0/목표 미설정/데이터 부족은 0이 아니라 `-`·"목표 미설정"·"산출 불가"로 구분. 취소·삭제 데이터는 전 집계 제외.
 - **검증** — 산식 단위/대사 테스트 `php scripts/tests/run.php`(대사 A~G), 화면=DB 대사 `php scripts/reconcile_qa.php`.

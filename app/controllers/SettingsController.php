@@ -51,13 +51,20 @@ class SettingsController
         Response::redirect('settings.index', [], '설정이 저장되었습니다.');
     }
 
-    /** R8-A: 공정 마스터 관리의 유형 탭(도장/인테리어/공통) 화이트리스트. */
+    /** R8-A: 공정 마스터 관리의 페이지(도장/인테리어/공통) 화이트리스트 — R10: 탭이 아닌 독립 페이지로 분리. */
     private const PROCESS_TYPE_TABS = ['painting' => '도장', 'interior' => '인테리어', 'common' => '공통'];
 
-    /** 신규 공정 단계에 허용되는 stage_group(waiting/defect/complete 는 공통 예약). */
-    private const PROCESS_GROUP_OPTIONS = ['prep' => '착공 준비', 'build' => '시공', 'finish' => '마무리'];
+    /** 유형 단계에 허용되는 stage_group — R10: 6그룹 전체 허용(대기/하자/종결 그룹에도 유형 전용 세부 공정 배치 가능). */
+    private const PROCESS_GROUP_OPTIONS = [
+        'waiting' => '대기', 'prep' => '착공 준비', 'build' => '시공',
+        'finish' => '마무리', 'defect' => '하자보수', 'complete' => '종결',
+    ];
 
-    /** 영업단계 + 공정단계 관리 화면. R8-A: 공정 섹션은 도장/인테리어/공통 탭 구분. */
+    /**
+     * 영업단계 + 공정단계 관리 화면.
+     * R10: 도장/인테리어/공통이 독립 관리 페이지(상호 링크). 유형 페이지에는 공통 단계(대기중·하자보수·전체완료)를
+     * 해당 그룹 위치에 잠금 표시로 함께 노출하되 편집은 '공통 단계 관리' 페이지에서만 — 유형 간 교차 영향 원천 차단.
+     */
     public function stages(): void
     {
         $processType = Util::str('type', 'painting');
@@ -66,23 +73,29 @@ class SettingsController
         }
 
         $pipelineStages = Db::all("SELECT * FROM pipeline_stages ORDER BY sort_order");
-        $processStages  = Db::all(
-            "SELECT * FROM process_stages WHERE process_type = :t ORDER BY sort_order, id",
-            [':t' => $processType]
-        );
-        // 신규 추가 기본 sort_order = 해당 유형 내 최대+1 (공통 탭은 신규 추가 없음)
+        // 유형 페이지 = 유형 전용 + 공통(잠금 표시), 공통 페이지 = 공통 3행만
+        $processStages = $processType === 'common'
+            ? Db::all("SELECT * FROM process_stages WHERE process_type = 'common' ORDER BY sort_order, id")
+            : Db::all(
+                "SELECT * FROM process_stages WHERE process_type = :t OR process_type = 'common'
+                 ORDER BY sort_order, id",
+                [':t' => $processType]
+            );
+        // 신규 추가 기본 sort_order = 해당 유형 내 최대+1 (공통 페이지는 신규 추가 없음)
         $processNextSort = 1 + (int) Db::val(
             "SELECT COALESCE(MAX(sort_order), 0) FROM process_stages WHERE process_type = :t",
             [':t' => $processType]
         );
 
         View::render('settings/stages', [
-            'title'           => '영업/공정 단계 관리',
+            'title'           => $processType === 'common'
+                ? '공통 단계 관리' : self::PROCESS_TYPE_TABS[$processType] . ' 공정 단계 관리',
             'pipelineStages'  => $pipelineStages,
             'processStages'   => $processStages,
             'processType'     => $processType,
             'processTypeTabs' => self::PROCESS_TYPE_TABS,
             'processGroups'   => self::PROCESS_GROUP_OPTIONS,
+            'groupMeta'       => Stages::processGroupMeta(),
             'processNextSort' => $processNextSort,
             'scripts'         => ['vendor/Sortable.min.js'],
         ]);
@@ -196,7 +209,7 @@ class SettingsController
 
                 $sgroup = Util::postStr('stage_group', '');
                 if (!isset(self::PROCESS_GROUP_OPTIONS[$sgroup])) {
-                    // waiting/defect/complete 는 공통 예약 그룹 — 일반 단계에 지정 불가
+                    // R10: 6그룹 전체 허용 — 무효값이면 기존 값 유지, 신규는 build 기본
                     $sgroup = isset(self::PROCESS_GROUP_OPTIONS[$before['stage_group'] ?? '']) ? $before['stage_group'] : 'build';
                 }
                 $data['stage_group'] = $sgroup;

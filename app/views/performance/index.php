@@ -21,8 +21,8 @@ $wl = Settings::enabled('feature_worklog');
         <tr>
           <th>이름</th><th>부서</th><th>역할</th>
           <th class="num">담당</th><th class="num">완료</th><th class="num">진행</th><th class="num">지연</th>
-          <th class="num">총계약</th><th class="num">확정매출</th><th class="num">확정원가</th><th class="num">확정순이익</th><th class="num">순이익률(가중)</th>
-          <th class="num">목표매출</th><th class="num">매출달성률</th>
+          <th class="num" title="담당 프로젝트 계약 총액(VAT 포함) × 기여도 합 · 상태 무관 누적 · 기여율 없으면 미반영(T9)">계약 총액(VAT 포함)</th><th class="num" title="완료(정산 포함) 프로젝트 공급가액 × 기여도 합 · VAT 제외">확정 매출(공급가액)</th><th class="num" title="귀속 확정 매출 − 확정 기여 순이익">원가 총액(확정)</th><th class="num" title="완료 프로젝트 (공급가액 − 실제원가) × 기여도 합">확정 순이익</th><th class="num" title="확정 순이익 ÷ 확정 매출(공급가액) × 100">순이익률(가중)</th>
+          <th class="num" title="이번 달 개인 목표(공급가액 기준)">목표 매출(공급가액)</th><th class="num" title="이번 달 수주(공급가액) ÷ 목표 매출 × 100">매출 달성률</th>
           <th class="num">목표순이익</th><th class="num">순이익달성률</th>
           <th class="num">계약전환율</th><?php if ($wl): ?><th class="num">일지작성률</th><?php endif; ?>
           <th></th>
@@ -43,10 +43,11 @@ $wl = Settings::enabled('feature_worklog');
             <td class="num mono"><?= moneyCell($r['total_cost']) ?></td>
             <td class="num mono<?= $r['total_profit'] < 0 ? ' text-danger' : '' ?>"><?= moneyCell($r['total_profit']) ?></td>
             <td class="num mono"><?= pct($r['avg_profit_rate']) ?></td>
-            <td class="num mono"><?= moneyCell($r['target_revenue']) ?></td>
-            <td class="num mono"><?= pct($r['revenue_achieve_rate']) ?></td>
-            <td class="num mono"><?= moneyCell($r['target_profit']) ?></td>
-            <td class="num mono"><?= pct($r['profit_achieve_rate']) ?></td>
+            <?php /* 목표 0/미등록은 '0원·0%'가 아니라 '목표 미설정'으로 구분 표기(달성률 null → '-') */ ?>
+            <td class="num mono"><?= $r['target_revenue'] > 0 ? moneyCell($r['target_revenue']) : '<span class="muted" title="이번 달 개인 목표가 설정되지 않았습니다">목표 미설정</span>' ?></td>
+            <td class="num mono"><?= $r['target_revenue'] > 0 ? pct($r['revenue_achieve_rate']) : '<span class="muted">-</span>' ?></td>
+            <td class="num mono"><?= $r['target_profit'] > 0 ? moneyCell($r['target_profit']) : '<span class="muted" title="이번 달 개인 목표가 설정되지 않았습니다">목표 미설정</span>' ?></td>
+            <td class="num mono"><?= $r['target_profit'] > 0 ? pct($r['profit_achieve_rate']) : '<span class="muted">-</span>' ?></td>
             <td class="num mono"><?= pct($r['conversion_rate']) ?></td>
             <?php if ($wl): ?><td class="num mono"><?= pct($r['worklog_rate']) ?></td><?php endif; ?>
             <td><a href="<?= e(url('performance.user', ['id' => $r['user_id']])) ?>" class="btn btn-sm btn-outline">상세</a></td>

@@ -84,6 +84,28 @@
 - user_agent varchar(255)
 - created_at datetime NOT NULL [MUL]
 
+### contract_status_history
+- id int unsigned NOT NULL [PRI]
+- contract_id int unsigned NOT NULL [MUL]
+- from_status varchar(20)
+- to_status varchar(20) NOT NULL
+- changed_by int unsigned [MUL]
+- reason varchar(500)
+- changed_at datetime NOT NULL [MUL]
+
+### contract_terminations
+- id int unsigned NOT NULL [PRI]
+- contract_id int unsigned NOT NULL [MUL]
+- terminated_date date NOT NULL
+- reason varchar(500) NOT NULL
+- processed_by int unsigned [MUL]
+- refund_amount decimal(14,0) NOT NULL  (payments kind='refund' 행으로도 기록)
+- penalty_amount decimal(14,0) NOT NULL  (위약금 — 별도 축)
+- settlement_amount decimal(14,0) NOT NULL  (정산 — 별도 축)
+- project_action varchar(20)  (cancel/terminate/pause/keep)
+- memo text
+- created_at datetime NOT NULL
+
 ### contracts
 - id int unsigned NOT NULL [PRI]
 - contract_no varchar(30) NOT NULL [UNI]
@@ -91,6 +113,8 @@
 - customer_id int unsigned NOT NULL [MUL]
 - contract_date date
 - contract_amount decimal(14,0) NOT NULL
+- supply_amount decimal(14,0)
+- vat_amount decimal(14,0)
 - down_payment decimal(14,0) NOT NULL
 - middle_payment decimal(14,0) NOT NULL
 - balance_payment decimal(14,0) NOT NULL
@@ -108,10 +132,23 @@
 
 ### costs
 - id int unsigned NOT NULL [PRI]
-- project_id int unsigned NOT NULL [MUL]
+- project_id int unsigned NOT NULL [MUL]  (복합 idx_costs_project_status: project_id+cost_status)
 - type enum('estimate','actual') NOT NULL [MUL]
-- category varchar(30) NOT NULL [MUL]
+- cost_status varchar(20) NOT NULL [MUL]  (draft/pending/confirmed/cancelled — 원가 총액은 confirmed만)
+- category varchar(30) NOT NULL [MUL]  (material/labor/outsourcing/equipment/transport/meal/waste/etc)
+- item_name varchar(150)
+- spec varchar(100)
+- qty decimal(10,2)
+- unit varchar(20)
+- unit_price decimal(14,0)
 - amount decimal(14,0) NOT NULL
+- worker_id int unsigned [MUL]  (FK users)
+- worker_name varchar(50)
+- work_days decimal(5,2)
+- work_hours decimal(6,2)
+- vendor varchar(100)
+- receipt_file_id int unsigned [MUL]  (FK project_files)
+- adjust_reason varchar(255)
 - spent_date date [MUL]
 - memo varchar(255)
 - created_by int unsigned [MUL]
@@ -192,7 +229,6 @@
 - expected_cost decimal(14,0)
 - win_probability decimal(5,2)
 - expected_profit decimal(14,0)
-- importance varchar(10)
 - next_contact_date date [MUL]
 - last_activity_date date
 - stage_entered_at datetime
@@ -225,6 +261,7 @@
 - id int unsigned NOT NULL [PRI]
 - contract_id int unsigned NOT NULL [MUL]
 - pay_type varchar(20) NOT NULL
+- kind enum('payment','refund') NOT NULL  (순입금 = Σpayment − Σrefund)
 - amount decimal(14,0) NOT NULL
 - due_date date [MUL]
 - paid_date date
@@ -299,6 +336,16 @@
 - reason varchar(255)
 - changed_at datetime NOT NULL [MUL]
 
+### project_status_history
+- id int unsigned NOT NULL [PRI]
+- project_id int unsigned NOT NULL [MUL]
+- from_status varchar(20)
+- to_status varchar(20) NOT NULL
+- changed_by int unsigned [MUL]
+- reason varchar(500)
+- detail_json text  (파기·취소 부가정보 JSON)
+- changed_at datetime NOT NULL [MUL]
+
 ### projects
 - id int unsigned NOT NULL [PRI]
 - project_no varchar(30) NOT NULL [UNI]
@@ -308,6 +355,8 @@
 - site_address varchar(255)
 - work_type varchar(50)
 - contract_amount decimal(14,0) NOT NULL
+- supply_amount decimal(14,0)
+- vat_amount decimal(14,0)
 - estimated_cost decimal(14,0) NOT NULL
 - actual_cost decimal(14,0) NOT NULL
 - process_stage_id int unsigned [MUL]
@@ -320,7 +369,6 @@
 - sales_user_id int unsigned [MUL]
 - site_manager_id int unsigned [MUL]
 - progress tinyint unsigned NOT NULL
-- importance varchar(10)
 - contribution_mode varchar(10) NOT NULL
 - memo text
 - deleted_at datetime [MUL]

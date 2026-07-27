@@ -97,17 +97,54 @@ class NotificationsController
     }
 
     /**
+     * 오늘 생성된 알림의 (user_id|type) → dedup 엔티티 id 집합 — generateMissing 1회당 1쿼리로 프리로드.
+     * 후보 건수만큼 SELECT 를 날리던 N+1(대시보드 매 진입마다 수십~수백 쿼리)을 단일 조회로 대체한다.
+     * 판정은 link_params 의 `_eid`(정수)를 정확히 비교한다 — sargable 범위 조건으로
+     * idx_notifications_created_at 를 활용한다(원본 `DATE(created_at)=CURDATE()` 래핑 미사용).
+     */
+    private static ?array $todayEid = null;
+
+    private static function loadTodayDedup(): void
+    {
+        self::$todayEid = [];
+        $rows = Db::all(
+            "SELECT user_id, type, link_params FROM notifications
+             WHERE created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY"
+        );
+        foreach ($rows as $r) {
+            $eid = self::extractEid($r['link_params'] ?? null);
+            if ($eid === null) { continue; }
+            self::$todayEid[$r['user_id'] . '|' . $r['type']][$eid] = true;
+        }
+    }
+
+    /** link_params(JSON)에서 dedup 키 `_eid`(정수)를 정확히 추출. 키가 없거나 파싱 불가면 null. */
+    private static function extractEid(?string $lp): ?int
+    {
+        if ($lp === null || $lp === '') { return null; }
+        $d = json_decode($lp, true);
+        if (is_array($d) && isset($d['_eid']) && is_numeric($d['_eid'])) {
+            return (int) $d['_eid'];
+        }
+        return null;
+    }
+
+    /**
      * 같은 user+type+entity 알림이 오늘 이미 생성됐는지 판별.
      * link_params 에 항상 dedup 전용 키 `_eid`(원인이 되는 엔티티 id)를 심어두고 그 값으로 판별한다
      * — 화면 이동용 `id`(예: 계약 id)와 dedup 대상 엔티티(예: 결제 id)가 다를 수 있기 때문.
+     * `_eid` 정수를 **정확히** 비교한다: 원본 `link_params LIKE '%"_eid":<id>%'` 는 순서 의존
+     * 프리픽스 오탐(같은 user+type 에서 eid 5 가 같은 날 먼저 생성된 51 의 부분문자열로 억제되던 결함)이
+     * 있었고, 이를 제거한다. 이번 실행 중 생성분도 집합에 반영해 원본의 "push 즉시 DB 반영" 순서 의존
+     * (동일 eid 재등장 시 dedup)은 그대로 보존한다.
      */
     private static function notifiedToday(int $userId, string $type, int $entityId): bool
     {
-        return (bool) Db::val(
-            "SELECT 1 FROM notifications
-             WHERE user_id=:u AND type=:t AND DATE(created_at)=CURDATE() AND link_params LIKE :lp LIMIT 1",
-            [':u' => $userId, ':t' => $type, ':lp' => '%"_eid":' . $entityId . '%']
-        );
+        if (self::$todayEid === null) { self::loadTodayDedup(); }
+        $key = $userId . '|' . $type;
+        if (isset(self::$todayEid[$key][$entityId])) { return true; }
+        self::$todayEid[$key][$entityId] = true; // 곧 push 될 항목(원본의 즉시 DB 반영과 등가)
+        return false;
     }
 
     /** 다음연락예정일 도래(leads.next_contact_date<=오늘, 진행 중 상태만). */
@@ -134,14 +171,17 @@ class NotificationsController
         }
     }
 
-    /** 입금예정일 도래(payments.due_date=오늘 & pending). */
+    /** 입금예정일 도래(payments.due_date=오늘 & pending).
+     *  모집단 = 미수금 KPI 와 동일(AccountingService::RECEIVABLE_STATUSES) — 작성중·파기·취소 계약 오탐 알림 방지. */
     private static function genPaymentDue(): void
     {
+        $statusIn = "'" . implode("','", AccountingService::RECEIVABLE_STATUSES) . "'";
         $rows = Db::all(
             "SELECT p.id AS payment_id, p.amount, p.due_date, c.id AS contract_id, c.contract_no, c.sales_user_id
              FROM payments p
              JOIN contracts c ON c.id = p.contract_id
-             WHERE p.status='pending' AND p.due_date = CURDATE() AND c.deleted_at IS NULL"
+             WHERE p.status='pending' AND p.kind='payment' AND p.due_date = CURDATE()
+               AND c.deleted_at IS NULL AND c.status IN ($statusIn)"
         );
         foreach ($rows as $r) {
             $uid = (int) ($r['sales_user_id'] ?? 0);
@@ -156,14 +196,17 @@ class NotificationsController
         }
     }
 
-    /** 미수금 발생(payments.due_date<오늘 & pending — 입금예정일 경과). */
+    /** 미수금 발생(payments.due_date<오늘 & pending — 입금예정일 경과).
+     *  모집단 = 미수금 KPI 와 동일(AccountingService::RECEIVABLE_STATUSES) — KPI 에 없는 미수금 알림 발사 금지. */
     private static function genPaymentOverdue(): void
     {
+        $statusIn = "'" . implode("','", AccountingService::RECEIVABLE_STATUSES) . "'";
         $rows = Db::all(
             "SELECT p.id AS payment_id, p.amount, p.due_date, c.id AS contract_id, c.contract_no, c.sales_user_id
              FROM payments p
              JOIN contracts c ON c.id = p.contract_id
-             WHERE p.status='pending' AND p.due_date < CURDATE() AND c.deleted_at IS NULL"
+             WHERE p.status='pending' AND p.kind='payment' AND p.due_date < CURDATE()
+               AND c.deleted_at IS NULL AND c.status IN ($statusIn)"
         );
         foreach ($rows as $r) {
             $uid = (int) ($r['sales_user_id'] ?? 0);

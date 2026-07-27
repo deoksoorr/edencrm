@@ -17,7 +17,7 @@ $gclass = $rate === null ? 'low' : ($rate >= 90 ? 'ok' : ($rate >= 50 ? 'mid' : 
   <?php if ($set): ?>
     <div class="goal-meta">
       <div class="kv"><span class="kv-label">목표</span><span class="kv-value mono"><?= e(moneyShort($g['target'])) ?></span></div>
-      <div class="kv"><span class="kv-label">현재</span><span class="kv-value mono"><?= e(moneyShort($g['actual'])) ?></span></div>
+      <div class="kv"><span class="kv-label">실적</span><span class="kv-value mono"><?= e(moneyShort($g['actual'])) ?></span></div>
       <div class="kv"><span class="kv-label">남은 금액</span><span class="kv-value mono"><?= e(moneyShort($g['remaining'])) ?></span></div>
     </div>
   <?php else: ?>

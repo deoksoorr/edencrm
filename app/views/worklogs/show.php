@@ -39,7 +39,7 @@
       </div>
 
       <div class="section-title">작업 내용</div>
-      <p style="white-space:pre-wrap"><?= e($row['content']) ?></p>
+      <p class="prewrap"><?= e($row['content']) ?></p>
 
       <div class="grid-2">
         <div>

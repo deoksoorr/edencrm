@@ -176,10 +176,11 @@ else
   fail "work_logs 행수 불일치 (토글 전=$INITIAL_COUNT → 토글 후=$FINAL_COUNT)"
 fi
 
-if [ "$INITIAL_COUNT" = "17" ]; then
-  pass "work_logs 행수 = seed 기준값 17 과 일치"
+# R6 T2 빈 시드 재기준: seed_dev 는 작업일지를 시딩하지 않는다(기준값 0)
+if [ "$INITIAL_COUNT" = "0" ]; then
+  pass "work_logs 행수 = 빈 시드 기준값 0 과 일치"
 else
-  fail "work_logs 행수 = $INITIAL_COUNT (seed 기준값 17 과 불일치)"
+  fail "work_logs 행수 = $INITIAL_COUNT (빈 시드 기준값 0 과 불일치)"
 fi
 
 echo

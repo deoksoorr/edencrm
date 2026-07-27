@@ -111,9 +111,14 @@ return [
     'costs.cancel'      => ['CostsController', 'cancel', 'perm' => 'cost.manage', 'method' => 'POST'], // 물리 삭제 금지 — 상태 전환
     'costs.export'      => ['CostsController', 'export'], // 열람 권한(finance.view/cost.manage)은 컨트롤러가 검사
 
-    // ── 목표(KPI) 관리 ──
-    'targets.index'     => ['TargetsController', 'index',    'perm' => 'settings.manage'],
-    'targets.save'      => ['TargetsController', 'save',     'perm' => 'settings.manage', 'method' => 'POST'],
+    // ── 목표(KPI) 관리 — R9: 조회는 컨트롤러 스코프(직원=is_public 본인 관련만), 쓰기=settings.manage ──
+    'targets.index'         => ['TargetsController', 'index'],
+    'targets.save'          => ['TargetsController', 'save',         'perm' => 'settings.manage', 'method' => 'POST'],
+    'targets.goal.save'     => ['TargetsController', 'goalSave',     'perm' => 'settings.manage', 'method' => 'POST'],
+    'targets.goal.end'      => ['TargetsController', 'goalEnd',      'perm' => 'settings.manage', 'method' => 'POST'],
+    'targets.goal.delete'   => ['TargetsController', 'goalDelete',   'perm' => 'settings.manage', 'method' => 'POST'],
+    'targets.goal.history'  => ['TargetsController', 'goalHistory'],  // 스코프: 컨트롤러(visibleGoalOr404)
+    'targets.goal.progress' => ['TargetsController', 'goalProgress'], // 스코프: 컨트롤러(visibleGoalOr404)
 
     // ── 성과/리포트 (T8) ──
     'performance.index' => ['PerformanceController', 'index'],
@@ -125,6 +130,7 @@ return [
     'bonus.history'     => ['BonusController', 'history'],
     'bonus.save'        => ['BonusController', 'save',   'perm' => 'bonus.manage', 'method' => 'POST'],
     'bonus.delete'      => ['BonusController', 'delete', 'perm' => 'bonus.manage', 'method' => 'POST'],
+    'bonus.calc'        => ['BonusController', 'calcInfo', 'perm' => 'bonus.manage'], // 폼 자동 채움(R9-2)
     'reports.index'     => ['ReportsController', 'index',  'perm' => 'report.view'],
     'reports.data'      => ['ReportsController', 'data',   'perm' => 'report.view'],
     'reports.export'    => ['ReportsController', 'export', 'perm' => 'report.export'],

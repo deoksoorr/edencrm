@@ -7,6 +7,13 @@ class Auth
     private static ?array $cachedUser = null;
 
     /**
+     * 계정 열거(타이밍) 방어용 더미 bcrypt 해시(cost 12).
+     * 존재하지 않는 아이디로 로그인 시도해도 실제 계정과 동일하게 bcrypt 검증 1회를 수행해
+     * 응답 시간 차이로 아이디 유효 여부가 노출되는 것을 막는다. 어떤 비밀번호와도 일치하지 않는다.
+     */
+    private const DUMMY_HASH = '$2y$12$/ltgJBlkJHeB4AnSeQEsquhqzzjsZjIMPZfz9w24tQiRUCuyK8uQS';
+
+    /**
      * 로그인 시도. 성공 시 세션 설정 후 true.
      * 실패/잠금/비활성 사유는 $reason(참조)로 전달.
      */
@@ -28,9 +35,13 @@ class Auth
             return false;
         }
 
+        // 계정 열거 타이밍 방어: 사용자 부재 시에도 동일하게 bcrypt 검증 1회를 수행한다.
+        $verifyHash = ($user && !empty($user['password_hash'])) ? $user['password_hash'] : self::DUMMY_HASH;
+        $passwordOk = password_verify($password, $verifyHash);
+
         $ok = $user
             && $user['status'] === 'active'
-            && password_verify($password, $user['password_hash']);
+            && $passwordOk;
 
         if (!$ok) {
             self::recordAttempt($loginId, $ip, false);

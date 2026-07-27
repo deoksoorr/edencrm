@@ -20,8 +20,8 @@ check(){ # $1=desc $2=expected $3=actual
   else FAIL=$((FAIL+1)); RESULTS+="  ❌ $1 기대=$2 실제=$3\n"; fi
 }
 
-echo "== 로그인 (현 시드 계정) =="
-JADMIN=$(mktemp); login admin 'password123!' "$JADMIN"  # 김대표(super_admin)
+echo "== 로그인 (현 시드 계정 — R6 T2: admin/chays/maeng/chaws 4명) =="
+JADMIN=$(mktemp); login admin 'password123!' "$JADMIN"  # 김덕수(super_admin)
 JSTAFF=$(mktemp); login maeng 'password123!' "$JSTAFF"  # 맹기현(staff, id 3)
 
 echo "== admin GET 라우트(200 기대) =="

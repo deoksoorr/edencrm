@@ -21,6 +21,11 @@ class ProjectsController
         $managerId = (int) Util::int('manager_id', 0);
         $workType  = Util::str('work_type', '');
         $delayed   = Util::str('delayed', '') === '1';
+        // 등록 유형 필터: 전체 / 일반(계약 자동 생성) / 예외(수동 생성 — is_exception=1)
+        $regType   = Util::str('reg_type', 'all');
+        if (!in_array($regType, ['all', 'normal', 'exception'], true)) {
+            $regType = 'all';
+        }
         $page      = max(1, (int) Util::int('page', 1));
 
         $sortMap = [
@@ -42,10 +47,12 @@ class ProjectsController
 
         if ($q !== '') {
             $like = '%' . $q . '%';
-            $where[] = '(p.name LIKE :q1 OR c.name LIKE :q2 OR p.site_address LIKE :q3)';
+            // 예외 프로젝트(고객 미연결)는 스냅샷 고객명으로도 검색
+            $where[] = '(p.name LIKE :q1 OR c.name LIKE :q2 OR p.site_address LIKE :q3 OR p.customer_name_snapshot LIKE :q4)';
             $params[':q1'] = $like;
             $params[':q2'] = $like;
             $params[':q3'] = $like;
+            $params[':q4'] = $like;
         }
         if ($status !== '' && isset(self::STATUSES[$status])) {
             $where[] = 'p.status = :status';
@@ -63,19 +70,23 @@ class ProjectsController
             // 대시보드 delayedCond 와 동일 기준(완료·정산·취소·파기 제외, 준공 처리 전) — KPI 건수와 목록 일치
             $where[] = "p.end_date IS NOT NULL AND p.end_date < CURDATE() AND p.actual_end_date IS NULL AND p.status NOT IN ('completed','settled','cancelled','terminated')";
         }
+        if ($regType !== 'all') {
+            $where[] = 'p.is_exception = ' . ($regType === 'exception' ? 1 : 0);
+        }
         $whereSql = implode(' AND ', $where);
 
+        // 예외 프로젝트는 customer_id NULL 가능 — LEFT JOIN(누락 방지)
         $total = (int) Db::val(
-            "SELECT COUNT(*) FROM projects p JOIN customers c ON c.id = p.customer_id WHERE $whereSql",
+            "SELECT COUNT(*) FROM projects p LEFT JOIN customers c ON c.id = p.customer_id WHERE $whereSql",
             $params
         );
         $per = (int) setting('page_size', 20);
         $pg  = Util::paginate($total, $page, $per);
 
         $rows = Db::all(
-            "SELECT p.*, c.name AS customer_name, sm.name AS site_manager_name
+            "SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name, sm.name AS site_manager_name
              FROM projects p
-             JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users sm ON sm.id = p.site_manager_id
              WHERE $whereSql
              ORDER BY {$sortMap[$sortKey]} $dir
@@ -101,6 +112,7 @@ class ProjectsController
             'managerId' => $managerId,
             'workType'  => $workType,
             'delayed'   => $delayed,
+            'regType'   => $regType,
             'sort'      => $sortKey,
             'dir'       => strtolower($dir),
             'managers'  => $managers,
@@ -120,11 +132,11 @@ class ProjectsController
         }
 
         $project = Db::one(
-            "SELECT p.*, c.name AS customer_name, c.phone AS customer_phone, c.site_address AS customer_site_address,
+            "SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name, c.phone AS customer_phone, c.site_address AS customer_site_address,
                     sales.name AS sales_user_name, sm.name AS site_manager_name,
                     ps.name AS process_stage_name, ps.color AS process_stage_color, ps.sort_order AS process_stage_sort
              FROM projects p
-             JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users sales ON sales.id = p.sales_user_id
              LEFT JOIN users sm ON sm.id = p.site_manager_id
              LEFT JOIN process_stages ps ON ps.id = p.process_stage_id
@@ -477,6 +489,8 @@ class ProjectsController
         $id   = (int) Util::postInt('id', 0);
         $name = Util::postStr('name');
         $customerId = (int) Util::postInt('customer_id', 0);
+        // 예외 프로젝트: 기존 고객 미연결 시 고객명 직접 입력(스냅샷) 허용
+        $customerNameInput = Util::postStr('customer_name_snapshot');
 
         // 예외 프로젝트 생성: 최고 관리자 전용 + 생성 사유 필수
         $createReason = Util::postStr('create_reason');
@@ -496,17 +510,64 @@ class ProjectsController
             }
         }
 
-        if ($name === '' || $customerId <= 0) {
-            Response::redirect('projects.form', $id ? ['id' => $id] : [], '프로젝트명과 고객을 입력하세요.', 'error');
+        // 수정 시 기존 행 선로드 — 예외 여부(is_exception)에 따라 고객 검증이 달라진다
+        $before = null;
+        if ($id) {
+            $before = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $id]);
+            if (!$before) {
+                Response::redirect('projects.index', [], '프로젝트를 찾을 수 없습니다.', 'error');
+            }
         }
+        // 신규 등록 경로 = 항상 예외 프로젝트(일반 프로젝트는 계약 '진행' 전환 시 자동 생성)
+        $isException = $id ? ((int) $before['is_exception'] === 1) : true;
+
+        // 예외→일반 전환(수정 폼 체크박스): 예외 생성과 동일 게이트(최고 관리자) + 기존 고객 연결 필수
+        $convertToNormal = false;
+        if ($id && $isException && Util::postStr('convert_to_normal') === '1') {
+            if (!Rbac::isRole('super_admin')) {
+                Audit::log('access_denied', 'project', $id, null, ['action' => 'project_exception_convert']);
+                Response::error('예외 프로젝트의 일반 전환은 최고 관리자만 가능합니다.', 403);
+            }
+            $convertToNormal = true;
+        }
+
+        if ($name === '') {
+            Response::redirect('projects.form', $id ? ['id' => $id] : [], '프로젝트명을 입력하세요.', 'error');
+        }
+        if ($isException && !$convertToNormal) {
+            // 예외 프로젝트: 기존 고객 연결 또는 고객명 직접 입력 중 하나는 필수
+            if ($customerId <= 0 && $customerNameInput === '') {
+                Response::error('고객을 선택하거나 고객명을 입력하세요.', 422);
+            }
+        } elseif ($customerId <= 0) {
+            // 일반 프로젝트(예외→일반 전환 포함): 기존 고객 연결 필수
+            Response::redirect('projects.form', $id ? ['id' => $id] : [],
+                $convertToNormal ? '일반 프로젝트로 전환하려면 기존 고객을 선택하세요.' : '프로젝트명과 고객을 입력하세요.', 'error');
+        }
+
+        // 고객 스냅샷: 고객 연결 시 저장 시점 고객명으로 항상 채움, 미연결 예외는 직접 입력값 사용
+        $customerName = null;
+        if ($customerId > 0) {
+            $customerName = Db::val(
+                "SELECT name FROM customers WHERE id = :cid AND deleted_at IS NULL",
+                [':cid' => $customerId]
+            );
+            if (!$customerName) {
+                Response::error('선택한 고객을 찾을 수 없습니다.', 422);
+            }
+        }
+        $snapshot = $customerId > 0
+            ? mb_substr((string) $customerName, 0, 150)
+            : ($customerNameInput !== '' ? mb_substr($customerNameInput, 0, 150) : null);
 
         $status = Util::postStr('status', 'preparing');
         if (!in_array($status, self::FORM_STATUSES, true)) {
             $status = 'preparing';
         }
-        $contribMode = Util::postStr('contribution_mode', 'main');
+        // R10: 기본값을 스키마·계약 자동생성과 동일한 ratio 로 통일 — main 폴백이 기여도 100 강제의 유발 경로였음
+        $contribMode = Util::postStr('contribution_mode', 'ratio');
         if (!isset(self::CONTRIB_MODE[$contribMode])) {
-            $contribMode = 'main';
+            $contribMode = 'ratio';
         }
         $salesUserId    = Util::postInt('sales_user_id', 0);
         $siteManagerId  = Util::postInt('site_manager_id', 0);
@@ -517,7 +578,9 @@ class ProjectsController
 
         $data = [
             'name'               => $name,
-            'customer_id'        => $customerId,
+            'customer_id'        => $customerId > 0 ? $customerId : null, // 예외 프로젝트는 미연결(NULL) 허용
+            'is_exception'       => ($isException && !$convertToNormal) ? 1 : 0,
+            'customer_name_snapshot' => $snapshot,
             'site_address'       => Util::nullIfEmpty(Util::postStr('site_address')),
             'work_type'          => Util::nullIfEmpty(Util::postStr('work_type')),
             'construction_type'  => $constructionType, // R8-A: 도장/인테리어(미지정 NULL 은 양쪽 보드 노출)
@@ -542,10 +605,6 @@ class ProjectsController
         $data['vat_amount']    = $split['vat'];
 
         if ($id) {
-            $before = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $id]);
-            if (!$before) {
-                Response::redirect('projects.index', [], '프로젝트를 찾을 수 없습니다.', 'error');
-            }
             // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
             if ($constructionType === null) {
                 $data['construction_type'] = $before['construction_type'];
@@ -572,6 +631,22 @@ class ProjectsController
                 StatusService::logProjectStatus($id, $from, $status, '프로젝트 수정 화면에서 변경');
             }
             Audit::log('project_update', 'project', $id, $before, $data);
+            // 예외→일반 전환: 별도 감사 로그(전환 전/후 고객 연결 상태 보존)
+            if ($convertToNormal) {
+                Audit::log('project_exception_convert', 'project', $id,
+                    [
+                        'is_exception'           => 1,
+                        'customer_id'            => $before['customer_id'] !== null ? (int) $before['customer_id'] : null,
+                        'customer_name_snapshot' => $before['customer_name_snapshot'],
+                    ],
+                    [
+                        'is_exception'           => 0,
+                        'customer_id'            => $customerId,
+                        'customer_name_snapshot' => $snapshot,
+                        'converted_by'           => Auth::id(),
+                        'at'                     => date('Y-m-d H:i:s'),
+                    ]);
+            }
             // R8-A: 공사 유형 변경 시 스테이지 정합 — 현재 공정이 다른 유형 전용 단계면 '대기중' 재배치
             //       (process.settype 과 동일한 ProcessService 공통 헬퍼, 이력 is_auto=1 기록)
             if (($before['construction_type'] ?? null) !== $data['construction_type']) {

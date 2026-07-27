@@ -53,15 +53,15 @@ class ProcessController
         // 카드 정렬: 진입일 내림차순(신규·재진입 최상단). updated_at 정렬 금지(R3 커널).
         $projects = Db::all(
             "SELECT p.id, p.name, p.status, p.process_stage_id, p.process_entered_at, p.created_at, p.construction_type,
-                    p.site_address, p.work_type, p.start_date, p.end_date, p.actual_end_date, p.progress,
-                    c.name AS customer_name, su.name AS sales_name, sm.name AS site_manager_name,
+                    p.site_address, p.work_type, p.start_date, p.end_date, p.actual_end_date, p.progress, p.is_exception,
+                    COALESCE(c.name, p.customer_name_snapshot) AS customer_name, su.name AS sales_name, sm.name AS site_manager_name,
                     (SELECT COUNT(*) FROM project_assignments pa
                        WHERE pa.project_id = p.id AND pa.status = 'active') AS assign_count,
                     (SELECT GROUP_CONCAT(u.name ORDER BY u.name SEPARATOR ', ')
                        FROM project_assignments pa JOIN users u ON u.id = pa.user_id
                       WHERE pa.project_id = p.id AND pa.status = 'active') AS assignee_names
              FROM projects p
-             JOIN customers c ON c.id = p.customer_id
+             LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users su ON su.id = p.sales_user_id
              LEFT JOIN users sm ON sm.id = p.site_manager_id
              WHERE p.deleted_at IS NULL AND p.status IN ($cardStatusIn) AND $typeCond AND $scopeSql
@@ -131,34 +131,8 @@ class ProcessController
                 $confirmIds[(int) $st['id']] = true;
             }
         }
-        $today = date('Y-m-d');
-        $summary = ['total' => count($projects), 'active' => 0, 'waiting' => 0, 'stages' => 0, 'inspect' => 0, 'delayed' => 0, 'done' => 0];
-        $stageSet = [];
-        foreach ($projects as $p) {
-            $sid = (int) $p['process_stage_id'];
-            $isDone = in_array($p['status'], self::BOARD_DONE_STATUSES, true);
-            if ($isDone) {
-                // 완료·정산 카드는 노출 전용 — '진행 공정 수'·대기중 집계에서 제외
-                $summary['done']++;
-                continue;
-            }
-            if ($p['status'] === 'in_progress') {
-                $summary['active']++;
-            }
-            if ($sid === $waitingId) {
-                $summary['waiting']++;
-            } else {
-                $stageSet[$sid] = true;
-            }
-            if ($p['status'] === 'in_progress' && isset($confirmIds[$sid])) {
-                $summary['inspect']++;
-            }
-            // 지연 = 준공예정 경과 + 준공 미처리(대시보드 delayedCond 와 동일 기준)
-            if (!empty($p['end_date']) && $p['end_date'] < $today && empty($p['actual_end_date'])) {
-                $summary['delayed']++;
-            }
-        }
-        $summary['stages'] = count($stageSet);
+        // R10: 요약 정의 단일화 — 카드 이동 응답(move)과 동일 계산기를 사용해 화면·이동 후 숫자를 일치시킨다
+        $summary = self::computeSummary($projects, $confirmIds, $waitingId);
 
         View::render('process/board', [
             'title'         => '공정 보드',
@@ -302,6 +276,10 @@ class ProcessController
             ['from_stage_id' => $fromStageId],
             ['to_stage_id' => $toStageId, 'reason' => $reason, 'progress' => $progress]);
 
+        // R10: 이동 직후 화면 동기화 — 최신 상태·상단 요약을 응답에 포함(클라이언트가 서버 값으로 재동기화)
+        $after = Db::one('SELECT status FROM projects WHERE id = :id', [':id' => $projectId]);
+        $viewType = Stages::normalizeConstructionType(Util::postStr('board_type', '') ?: $projType);
+
         Response::json([
             'project_id'       => $projectId,
             'from_stage_id'    => $fromStageId,
@@ -311,7 +289,73 @@ class ProcessController
             'entered_at'       => date('Y-m-d H:i'),
             'requires_confirm' => (bool) $toStage['requires_confirm'],
             'skip_warn'        => $skipWarn,
+            'status'           => $after['status'] ?? $project['status'],
+            'is_done'          => in_array($after['status'] ?? '', self::BOARD_DONE_STATUSES, true),
+            'summary'          => $this->boardSummaryFor($viewType),
         ]);
+    }
+
+    /**
+     * 상단 요약 계산기(단일 정의) — board() 렌더와 move() 응답이 공유한다(R10).
+     * @param array $projects 보드 모집단 행(status/process_stage_id/end_date/actual_end_date 필요)
+     * @param array<int,bool> $confirmIds 검수 대기 집계 대상 스테이지 id
+     */
+    private static function computeSummary(array $projects, array $confirmIds, int $waitingId): array
+    {
+        $today = date('Y-m-d');
+        $summary = ['total' => count($projects), 'active' => 0, 'waiting' => 0, 'stages' => 0, 'inspect' => 0, 'delayed' => 0, 'done' => 0];
+        $stageSet = [];
+        foreach ($projects as $p) {
+            $sid = (int) $p['process_stage_id'];
+            $isDone = in_array($p['status'], self::BOARD_DONE_STATUSES, true);
+            if ($isDone) {
+                // 완료·정산 카드는 노출 전용 — '진행 공정 수'·대기중 집계에서 제외
+                $summary['done']++;
+                continue;
+            }
+            if ($p['status'] === 'in_progress') {
+                $summary['active']++;
+            }
+            if ($sid === $waitingId) {
+                $summary['waiting']++;
+            } else {
+                $stageSet[$sid] = true;
+            }
+            if ($p['status'] === 'in_progress' && isset($confirmIds[$sid])) {
+                $summary['inspect']++;
+            }
+            // 지연 = 준공예정 경과 + 준공 미처리(대시보드 delayedCond 와 동일 기준)
+            if (!empty($p['end_date']) && $p['end_date'] < $today && empty($p['actual_end_date'])) {
+                $summary['delayed']++;
+            }
+        }
+        $summary['stages'] = count($stageSet);
+        return $summary;
+    }
+
+    /** 유형 보드의 현재 요약(경량 재조회) — move() 응답용. board() 모집단 조건과 동일해야 한다. */
+    private function boardSummaryFor(string $boardType): array
+    {
+        [$scopeSql, $params] = Scope::projectWhere('p');
+        $cardStatusIn = "'" . implode("','", array_merge(self::BOARD_STATUSES, self::BOARD_DONE_STATUSES)) . "'";
+        $typeCond = "(p.construction_type = '" . $boardType . "' OR p.construction_type IS NULL)";
+        $projects = Db::all(
+            "SELECT p.status, p.process_stage_id, p.end_date, p.actual_end_date
+             FROM projects p
+             WHERE p.deleted_at IS NULL AND p.status IN ($cardStatusIn) AND $typeCond AND $scopeSql",
+            $params
+        );
+        $confirmIds = [];
+        foreach (Db::all(
+            "SELECT id, stage_key, requires_confirm FROM process_stages
+             WHERE (process_type = :t OR process_type = 'common') AND is_active = 1",
+            [':t' => $boardType]
+        ) as $st) {
+            if (!empty($st['requires_confirm']) && $st['stage_key'] !== 'full_complete') {
+                $confirmIds[(int) $st['id']] = true;
+            }
+        }
+        return self::computeSummary($projects, $confirmIds, ProcessService::waitingStageId());
     }
 
     /** 프로젝트 공정 변경 이력 (JSON). */
