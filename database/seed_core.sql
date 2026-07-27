@@ -58,7 +58,9 @@ INSERT INTO `permissions` (`perm_key`, `name`, `category`) VALUES
 ('staff.view',          '직원 목록 열람',        'staff'),
 ('staff.manage',        '직원 계정 관리',        'staff'),
 ('settings.manage',     '시스템 설정 관리',       'settings'),
-('audit.view',          '감사 로그 열람',        'audit');
+('audit.view',          '감사 로그 열람',        'audit'),
+('attendance.manage',   '근태 지각·무단결근 마킹', 'report'),
+('bonus.manage',        '현장 보너스 등록·지급 관리', 'finance');
 
 -- ----------------------------------------------------------------------------
 -- 역할별 권한 매핑 (ARCHITECTURE 6절 "역할별 부여" 그대로)
@@ -134,30 +136,53 @@ INSERT INTO `pipeline_stages` (`id`, `stage_key`, `name`, `sort_order`, `is_won`
 (12, 'cancelled',      '취소',       12, 0, 1, '#b91c1c');
 
 -- ----------------------------------------------------------------------------
--- 공정단계 18단계 (현장실측 ~ 하자보수)
+-- 공정단계: 대기중(0) + 19단계 (현장실측 ~ 전체완료)
 -- ----------------------------------------------------------------------------
 DELETE FROM `process_stages`;
 ALTER TABLE `process_stages` AUTO_INCREMENT = 1;
 
-INSERT INTO `process_stages` (`id`, `stage_key`, `name`, `sort_order`, `requires_confirm`, `color`) VALUES
-(1,  'site_survey',      '현장실측',       1,  0, '#94a3b8'),
-(2,  'drawing',          '도면작성',       2,  0, '#a1a1aa'),
-(3,  'material_order',   '자재발주',       3,  0, '#60a5fa'),
-(4,  'prep',             '착공준비',       4,  0, '#38bdf8'),
-(5,  'protection',       '양생/보양',      5,  0, '#22d3ee'),
-(6,  'pressure_wash',    '고압세척',       6,  0, '#2dd4bf'),
-(7,  'surface_prep',     '바탕처리(면처리)',7, 0, '#4ade80'),
-(8,  'crack_repair',     '크랙보수',       8,  1, '#facc15'),
-(9,  'putty',            '퍼티/퍼팅',      9,  0, '#fbbf24'),
-(10, 'waterproofing',    '방수처리',       10, 1, '#fb923c'),
-(11, 'primer',           '프라이머',       11, 0, '#f472b6'),
-(12, 'paint_1st',        '1차도장',        12, 0, '#c084fc'),
-(13, 'paint_2nd',        '2차도장',        13, 0, '#a78bfa'),
-(14, 'paint_3rd',        '3차도장(마감)',   14, 1, '#818cf8'),
-(15, 'drying',           '건조양생',       15, 0, '#60a5fa'),
-(16, 'site_cleanup',     '현장정리',       16, 0, '#34d399'),
-(17, 'final_inspection', '준공검사',       17, 1, '#22c55e'),
-(18, 'warranty_repair',  '하자보수',       18, 1, '#ef4444');
+INSERT INTO `process_stages`
+  (`id`, `stage_key`, `process_type`, `stage_group`, `name`, `sort_order`, `requires_confirm`, `is_active`, `color`) VALUES
+-- 공통(양 탭 노출): 대기중 / 하자보수 / 전체완료
+(20, 'waiting',          'common',   'waiting',  '대기중',         0,  0, 1, '#f59e0b'),
+(18, 'warranty_repair',  'common',   'defect',   '하자보수',       18, 1, 1, '#ef4444'),
+(19, 'full_complete',    'common',   'complete', '전체완료',       19, 1, 1, '#0d9488'),
+-- 도장 17단계
+(1,  'site_survey',      'painting', 'prep',   '현장실측',        1,  0, 1, '#94a3b8'),
+(2,  'drawing',          'painting', 'prep',   '도면작성',        2,  0, 1, '#a1a1aa'),
+(3,  'material_order',   'painting', 'prep',   '자재발주',        3,  0, 1, '#60a5fa'),
+(4,  'prep',             'painting', 'prep',   '착공준비',        4,  0, 1, '#38bdf8'),
+(5,  'protection',       'painting', 'build',  '양생/보양',       5,  0, 1, '#22d3ee'),
+(6,  'pressure_wash',    'painting', 'build',  '고압세척',        6,  0, 1, '#2dd4bf'),
+(7,  'surface_prep',     'painting', 'build',  '바탕처리(면처리)', 7,  0, 1, '#4ade80'),
+(8,  'crack_repair',     'painting', 'build',  '크랙보수',        8,  1, 1, '#facc15'),
+(9,  'putty',            'painting', 'build',  '퍼티/퍼팅',       9,  0, 1, '#fbbf24'),
+(10, 'waterproofing',    'painting', 'build',  '방수처리',        10, 1, 1, '#fb923c'),
+(11, 'primer',           'painting', 'build',  '프라이머',        11, 0, 1, '#f472b6'),
+(12, 'paint_1st',        'painting', 'build',  '1차도장',         12, 0, 1, '#c084fc'),
+(13, 'paint_2nd',        'painting', 'build',  '2차도장',         13, 0, 1, '#a78bfa'),
+(14, 'paint_3rd',        'painting', 'build',  '3차도장(마감)',    14, 1, 1, '#818cf8'),
+(15, 'drying',           'painting', 'build',  '건조양생',        15, 0, 1, '#60a5fa'),
+(16, 'site_cleanup',     'painting', 'finish', '현장정리',        16, 0, 1, '#34d399'),
+(17, 'final_inspection', 'painting', 'finish', '준공검사',        17, 1, 1, '#22c55e'),
+-- 인테리어 17단계 (id 21-37 고정)
+(21, 'int_survey',      'interior', 'prep',   '현장실측',   1,  0, 1, '#94a3b8'),
+(22, 'int_drawing',     'interior', 'prep',   '도면작성',   2,  0, 1, '#a1a1aa'),
+(23, 'int_material',    'interior', 'prep',   '자재발주',   3,  0, 1, '#60a5fa'),
+(24, 'int_prep',        'interior', 'prep',   '착공준비',   4,  0, 1, '#38bdf8'),
+(25, 'int_demolition',  'interior', 'build',  '철거',       5,  0, 1, '#f87171'),
+(26, 'int_facility',    'interior', 'build',  '설비',       6,  0, 1, '#fb923c'),
+(27, 'int_electric',    'interior', 'build',  '전기',       7,  1, 1, '#facc15'),
+(28, 'int_lightweight', 'interior', 'build',  '경량',       8,  0, 1, '#a3e635'),
+(29, 'int_carpentry',   'interior', 'build',  '목공',       9,  0, 1, '#4ade80'),
+(30, 'int_film',        'interior', 'build',  '필름',       10, 0, 1, '#2dd4bf'),
+(31, 'int_paint',       'interior', 'build',  '도장',       11, 0, 1, '#22d3ee'),
+(32, 'int_tile',        'interior', 'build',  '타일',       12, 0, 1, '#60a5fa'),
+(33, 'int_floor',       'interior', 'build',  '바닥',       13, 0, 1, '#818cf8'),
+(34, 'int_floor_demo',  'interior', 'build',  '바닥철거',   14, 0, 1, '#a78bfa'),
+(35, 'int_deco_tile',   'interior', 'build',  '데코타일',   15, 0, 1, '#c084fc'),
+(36, 'int_cleanup',     'interior', 'finish', '마무리 공정', 16, 0, 1, '#34d399'),
+(37, 'int_inspection',  'interior', 'finish', '준공검수',   17, 1, 1, '#22c55e');
 
 -- ----------------------------------------------------------------------------
 -- 기본 설정
@@ -175,7 +200,12 @@ INSERT INTO `settings` (`setting_key`, `value`, `group`, `label`) VALUES
 ('upload_max_size_mb',   '10',      'upload',  '업로드 최대 용량(MB)'),
 ('company_name',         '에덴도장', 'general', '회사명'),
 ('timezone',             'Asia/Seoul','general','시간대'),
-('feature_worklog',      '0',       '운영 기능','직원 작업일지 사용');
+('feature_worklog',      '0',       '운영 기능','직원 작업일지 사용'),
+('feature_attendance',   '1',       '운영 기능','근태 표시(대시보드 출근 현황·리포트 직원 출근 분석) — 작업일지 메뉴(feature_worklog)와 별개'),
+('attendance_work_start','09:00',   '운영 기능','근태 기준 출근 시각(HH:MM) — 첫 작업 기록이 이 시각보다 늦으면 지각'),
+('attendance_work_end',  '18:00',   '운영 기능','근태 기준 퇴근 시각(HH:MM) — 마지막 작업 기록이 이 시각보다 이르면 조퇴'),
+('feature_pipeline_quick_alerts', '0', '운영 기능','파이프라인 연락 빠른필터(오늘 연락·연락 지남·3일+ 미접촉·계약 임박) 노출'),
+('feature_dashboard_sales_alerts', '0', '운영 기능','대시보드 영업·계약 현황 주의 칩(계약 대기·계약 대기 지연·연락 예정일 경과·미접촉 고객) 노출');
 
 -- ----------------------------------------------------------------------------
 -- 2026년 대한민국 공휴일

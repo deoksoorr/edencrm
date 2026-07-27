@@ -31,14 +31,17 @@ return [
     'customers.delete'  => ['CustomersController', 'delete', 'perm' => 'customer.delete', 'method' => 'POST'],
     'customers.dupcheck'=> ['CustomersController', 'dupCheck', 'perm' => 'customer.manage'],
     'customers.merge'   => ['CustomersController', 'merge',  'perm' => 'customer.manage', 'method' => 'POST'],
+    // 사업자등록증 (R4 T2) — 업로드/교체/삭제=customer.manage, 열람=customer.view(+Scope)
+    'customers.license.upload'   => ['CustomersController', 'licenseUpload',   'perm' => 'customer.manage', 'method' => 'POST'],
+    'customers.license.delete'   => ['CustomersController', 'licenseDelete',   'perm' => 'customer.manage', 'method' => 'POST'],
+    'customers.license.download' => ['CustomersController', 'licenseDownload', 'perm' => 'customer.view'],
     'customers.export'  => ['CustomersController', 'export', 'perm' => 'customer.export'],
     'activities.save'   => ['ActivitiesController', 'save',  'perm' => 'customer.view', 'method' => 'POST'],
 
-    // ── 영업 파이프라인 (T4) ──
+    // ── 영업 파이프라인 (T4 → R4 T7 조회 전용 전환) ──
+    // 단계·상태 변경 쓰기 라우트(pipeline.move/patch)와 AJAX 보드(pipeline.board)는 기능 제거(→404).
+    // 표시 단계는 PipelineStageService 자동 산정 — 원본 리드 관리(form/save/delete)만 유지.
     'pipeline.index'    => ['PipelineController', 'index',  'perm' => 'pipeline.view'],
-    'pipeline.board'    => ['PipelineController', 'board',  'perm' => 'pipeline.view'],
-    'pipeline.move'     => ['PipelineController', 'move',   'perm' => 'pipeline.manage', 'method' => 'POST'],
-    'pipeline.patch'    => ['PipelineController', 'patch',  'perm' => 'pipeline.manage', 'method' => 'POST'],
     'pipeline.form'     => ['PipelineController', 'form',   'perm' => 'pipeline.manage'],
     'pipeline.save'     => ['PipelineController', 'save',   'perm' => 'pipeline.manage', 'method' => 'POST'],
     'pipeline.show'     => ['PipelineController', 'show',   'perm' => 'pipeline.view'],
@@ -48,6 +51,7 @@ return [
     'quotes.index'      => ['QuotesController', 'index',  'perm' => 'quote.view'],
     'quotes.show'       => ['QuotesController', 'show',   'perm' => 'quote.view'],
     'quotes.form'       => ['QuotesController', 'form',   'perm' => 'quote.manage'],
+    'quotes.leads'      => ['QuotesController', 'leadOptions', 'perm' => 'quote.manage'], // 고객별 영업기회 AJAX(견적 폼 — 서버 쿼리 단일 출처)
     'quotes.save'       => ['QuotesController', 'save',   'perm' => 'quote.manage', 'method' => 'POST'],
     'quotes.print'      => ['QuotesController', 'printView', 'perm' => 'quote.view'],
     'quotes.delete'     => ['QuotesController', 'delete', 'perm' => 'quote.manage', 'method' => 'POST'],
@@ -56,8 +60,10 @@ return [
     'contracts.index'   => ['ContractsController', 'index',  'perm' => 'contract.view'],
     'contracts.show'    => ['ContractsController', 'show',   'perm' => 'contract.view'],
     'contracts.form'    => ['ContractsController', 'form',   'perm' => 'contract.manage'],
+    'contracts.quotedata'=> ['ContractsController', 'quoteData', 'perm' => 'contract.manage'], // 견적→계약 자동 입력용 읽기전용 AJAX
     'contracts.save'    => ['ContractsController', 'save',   'perm' => 'contract.manage', 'method' => 'POST'],
     'contracts.toproject'=> ['ContractsController', 'toProject', 'perm' => 'project.manage', 'method' => 'POST'],
+    'contracts.terminate'=> ['ContractsController', 'terminate', 'perm' => 'contract.manage', 'method' => 'POST'],
     'payments.save'     => ['ContractsController', 'savePayment', 'perm' => 'payment.manage', 'method' => 'POST'],
     'payments.delete'   => ['ContractsController', 'deletePayment', 'perm' => 'payment.manage', 'method' => 'POST'],
 
@@ -67,6 +73,7 @@ return [
     'projects.form'     => ['ProjectsController', 'form',   'perm' => 'project.manage'],
     'projects.save'     => ['ProjectsController', 'save',   'perm' => 'project.manage', 'method' => 'POST'],
     'projects.delete'   => ['ProjectsController', 'delete', 'perm' => 'project.manage', 'method' => 'POST'],
+    'projects.transition'=> ['ProjectsController', 'transition', 'perm' => 'project.manage', 'method' => 'POST'],
     'projects.upload'   => ['ProjectsController', 'upload', 'method' => 'POST'],
     'files.download'    => ['ProjectsController', 'download'],
 
@@ -75,6 +82,12 @@ return [
     'process.move'      => ['ProcessController', 'move',   'perm' => 'process.move', 'method' => 'POST'],
     'process.history'   => ['ProcessController', 'history'],
     'process.history.update' => ['ProcessController', 'historyUpdate', 'perm' => 'process.move', 'method' => 'POST'],
+    // 하자보수 CRUD (R4 T3 — warranty_repairs, 사진은 project_files entity_type='warranty_repair' 재사용)
+    'process.warranty.save'   => ['ProcessController', 'warrantySave',   'perm' => 'project.manage', 'method' => 'POST'],
+    'process.warranty.delete' => ['ProcessController', 'warrantyDelete', 'perm' => 'project.manage', 'method' => 'POST'],
+    'process.warranty.photo'  => ['ProcessController', 'warrantyPhoto',  'perm' => 'project.manage', 'method' => 'POST'],
+    // R8: 공사 유형 미지정 프로젝트의 관리자 1회 지정(도장/인테리어)
+    'process.settype'   => ['ProcessController', 'setType', 'perm' => 'project.manage', 'method' => 'POST'],
 
     // ── 일정/배정 (T7) ──
     'schedule.index'    => ['ScheduleController', 'index'],
@@ -95,7 +108,8 @@ return [
 
     // ── 비용 (T8) ──
     'costs.save'        => ['CostsController', 'save',   'perm' => 'cost.manage', 'method' => 'POST'],
-    'costs.delete'      => ['CostsController', 'delete', 'perm' => 'cost.manage', 'method' => 'POST'],
+    'costs.cancel'      => ['CostsController', 'cancel', 'perm' => 'cost.manage', 'method' => 'POST'], // 물리 삭제 금지 — 상태 전환
+    'costs.export'      => ['CostsController', 'export'], // 열람 권한(finance.view/cost.manage)은 컨트롤러가 검사
 
     // ── 목표(KPI) 관리 ──
     'targets.index'     => ['TargetsController', 'index',    'perm' => 'settings.manage'],
@@ -104,9 +118,22 @@ return [
     // ── 성과/리포트 (T8) ──
     'performance.index' => ['PerformanceController', 'index'],
     'performance.user'  => ['PerformanceController', 'user'],
+    // ── R8: 반기 현황(매출·순이익·보너스) + 현장 보너스 원장 ──
+    //    조회 perm 없음 = 컨트롤러가 Scope(본인/performance.view_all) 강제, 쓰기 = bonus.manage
+    'halfyear.index'    => ['BonusController', 'overview'],
+    'bonus.index'       => ['BonusController', 'index'],
+    'bonus.history'     => ['BonusController', 'history'],
+    'bonus.save'        => ['BonusController', 'save',   'perm' => 'bonus.manage', 'method' => 'POST'],
+    'bonus.delete'      => ['BonusController', 'delete', 'perm' => 'bonus.manage', 'method' => 'POST'],
     'reports.index'     => ['ReportsController', 'index',  'perm' => 'report.view'],
     'reports.data'      => ['ReportsController', 'data',   'perm' => 'report.view'],
     'reports.export'    => ['ReportsController', 'export', 'perm' => 'report.export'],
+    // ── 직원 출근 분석 (R4 T4) — work_logs 기반, feature_attendance(기본 ON)로 작업일지 메뉴와 분리 게이트 ──
+    'reports.attendance'        => ['ReportsController', 'attendance',       'perm' => 'report.view',   'feature' => 'attendance'],
+    'reports.attendance_export' => ['ReportsController', 'attendanceExport', 'perm' => 'report.export', 'feature' => 'attendance'],
+    // ── 근태 수동 마킹 (R6 T1) — 지각·무단결근 등록·변경·해제. perm attendance.manage(신설, super_admin 기본) ──
+    'attendance.mark'           => ['AttendanceController', 'mark',   'perm' => 'attendance.manage', 'method' => 'POST', 'feature' => 'attendance'],
+    'attendance.unmark'         => ['AttendanceController', 'unmark', 'perm' => 'attendance.manage', 'method' => 'POST', 'feature' => 'attendance'],
 
     // ── 알림 (T8) ──
     'notifications.index' => ['NotificationsController', 'index'],

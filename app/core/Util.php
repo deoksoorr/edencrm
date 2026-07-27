@@ -81,6 +81,92 @@ class Util
         return $ts ? date($fmt, $ts) : '-';
     }
 
+    // ── 기간 필터 공통 (R4 T1 — 견적·계약·파이프라인 동일 프리셋=동일 날짜 경계) ──
+
+    /** 기간 프리셋 정의(키 => 라벨). 파셜 partials/period_filter.php 와 컨트롤러가 공유. */
+    public const PERIOD_PRESETS = [
+        'today'      => '오늘',
+        'this_week'  => '이번 주',
+        'this_month' => '이번 달',
+        'last_month' => '지난달',
+        'last_3m'    => '최근 3개월',
+        'this_year'  => '올해',
+        'custom'     => '직접 지정',
+    ];
+
+    /**
+     * 기간 프리셋 → 시작·종료일(YYYY-MM-DD) 계산 단일 출처.
+     *  - 주 시작 = 월요일 (this_week = 해당 주 월~일).
+     *  - last_3m = 당월 포함 최근 3개 캘린더 월 (전전월 1일 ~ 당월 말일).
+     *  - custom  = $from/$to 검증 후 사용(잘못된 날짜는 null, from>to 이면 교환).
+     *  - ''/알 수 없는 키 = ['from'=>null,'to'=>null] → 필터 미적용(전체).
+     *  - 프리셋(비 custom) 선택 시 $from/$to 는 무시한다.
+     * @param string|null $anchor 기준일(YYYY-MM-DD, 테스트용) — 생략 시 오늘.
+     * @return array{from: ?string, to: ?string}
+     */
+    public static function periodRange(string $period, ?string $from = null, ?string $to = null, ?string $anchor = null): array
+    {
+        if ($period === 'custom') {
+            $f = self::dateOrNull($from);
+            $t = self::dateOrNull($to);
+            if ($f !== null && $t !== null && $f > $t) {
+                [$f, $t] = [$t, $f];
+            }
+            return ['from' => $f, 'to' => $t];
+        }
+        $base = self::dateOrNull($anchor) ?? date('Y-m-d');
+        $d = new DateTimeImmutable($base);
+        switch ($period) {
+            case 'today':
+                return ['from' => $base, 'to' => $base];
+            case 'this_week': // 주 시작=월요일
+                $mon = $d->modify('-' . ((int) $d->format('N') - 1) . ' days');
+                return ['from' => $mon->format('Y-m-d'), 'to' => $mon->modify('+6 days')->format('Y-m-d')];
+            case 'this_month':
+                return ['from' => $d->format('Y-m-01'), 'to' => $d->format('Y-m-t')];
+            case 'last_month':
+                $p = $d->setDate((int) $d->format('Y'), (int) $d->format('n'), 1)->modify('-1 month');
+                return ['from' => $p->format('Y-m-01'), 'to' => $p->format('Y-m-t')];
+            case 'last_3m': // 당월 포함 3개 캘린더 월
+                $s = $d->setDate((int) $d->format('Y'), (int) $d->format('n'), 1)->modify('-2 months');
+                return ['from' => $s->format('Y-m-01'), 'to' => $d->format('Y-m-t')];
+            case 'this_year':
+                return ['from' => $d->format('Y-01-01'), 'to' => $d->format('Y-12-31')];
+        }
+        return ['from' => null, 'to' => null];
+    }
+
+    /**
+     * 반기 범위(R8): 상반기 1/1-6/30, 하반기 7/1-12/31.
+     * @return array{from: string, to: string}
+     */
+    public static function halfRange(int $year, int $half): array
+    {
+        return $half === 1
+            ? ['from' => sprintf('%04d-01-01', $year), 'to' => sprintf('%04d-06-30', $year)]
+            : ['from' => sprintf('%04d-07-01', $year), 'to' => sprintf('%04d-12-31', $year)];
+    }
+
+    /** 현재 날짜가 속한 반기. @return array{year: int, half: int} */
+    public static function currentHalf(?string $anchor = null): array
+    {
+        $base = self::dateOrNull($anchor) ?? date('Y-m-d');
+        return ['year' => (int) substr($base, 0, 4), 'half' => (int) substr($base, 5, 2) <= 6 ? 1 : 2];
+    }
+
+    /** 반기 라벨(예: 2026년 하반기). */
+    public static function halfLabel(int $year, int $half): string
+    {
+        return $year . '년 ' . ($half === 1 ? '상반기' : '하반기');
+    }
+
+    /** 해당 반기가 이미 종료(마감)됐는지 — 마감 반기 데이터 수정 시 사유 필수 게이트. */
+    public static function isHalfClosed(int $year, int $half, ?string $anchor = null): bool
+    {
+        $end = self::halfRange($year, $half)['to'];
+        return (self::dateOrNull($anchor) ?? date('Y-m-d')) > $end;
+    }
+
     /** 페이지네이션 계산. */
     public static function paginate(int $total, int $page, int $per = 20): array
     {

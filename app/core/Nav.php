@@ -26,6 +26,7 @@ class Nav
             ])),
             '분석' => [
                 ['performance.index', '직원 성과', null, 'trending'],
+                ['halfyear.index', '반기 현황', null, 'bar'],
                 ['reports.index', '리포트', 'report.view', 'bar'],
             ],
             '관리' => [
