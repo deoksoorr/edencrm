@@ -918,14 +918,21 @@ class ContractsController
             $paidDate = date('Y-m-d');
         }
 
+        // R11: 입금 방식·입금자명(선택) — 프로젝트 직접 입금과 동일 화이트리스트
+        $method = Util::postStr('method', '');
+        $method = array_key_exists($method, AccountingService::PAYMENT_METHODS) ? $method : null;
+        $payerName = Util::nullIfEmpty(mb_substr(Util::postStr('payer_name', ''), 0, 100));
+
         $data = [
             'contract_id' => $contractId,
             'pay_type'    => $payType,
+            'method'      => $method,
             'amount'      => $amount,
             'due_date'    => $dueDate,
             'paid_date'   => $status === 'paid' ? $paidDate : null,
             'status'      => $status,
             'memo'        => $memo !== '' ? $memo : null,
+            'payer_name'  => $payerName,
         ];
 
         $before = $id ? Db::one("SELECT * FROM payments WHERE id=:id", [':id' => $id]) : null;
@@ -939,6 +946,7 @@ class ContractsController
             Db::update('payments', $data, 'id = :id', [':id' => $id]);
             $paymentId = $id;
         } else {
+            $data['created_by'] = Auth::id() ?: null;
             $paymentId = Db::insert('payments', $data);
         }
 

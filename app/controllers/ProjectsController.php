@@ -26,7 +26,20 @@ class ProjectsController
         if (!in_array($regType, ['all', 'normal', 'exception'], true)) {
             $regType = 'all';
         }
+        // R11 입금·정산 필터: 미입금/일부 입금/완납/미수금 있음/정산 완료/정산 보류
+        $payFilter = Util::str('pay', '');
+        if (!in_array($payFilter, ['none', 'partial', 'paid', 'outstanding', 'settled', 'hold'], true)) {
+            $payFilter = '';
+        }
         $page      = max(1, (int) Util::int('page', 1));
+
+        // R11: 예정 금액(예외=직접 입력, 일반=계약 총액)·순입금(계약 입금 + 프로젝트 직접 입금) SQL 식 — 목록·필터 공용
+        $expectedExpr = "CASE WHEN p.is_exception = 1 AND p.contract_id IS NULL
+                              THEN COALESCE(p.expected_amount, 0) ELSE p.contract_amount END";
+        $paidExpr = "(COALESCE((SELECT SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+                        FROM payments pm WHERE pm.contract_id = p.contract_id AND pm.status='paid'),0)
+                    + COALESCE((SELECT SUM(CASE WHEN pm2.kind='refund' THEN -pm2.amount ELSE pm2.amount END)
+                        FROM payments pm2 WHERE pm2.project_id = p.id AND pm2.status='paid'),0))";
 
         $sortMap = [
             'project_no'      => 'p.project_no',
@@ -73,6 +86,15 @@ class ProjectsController
         if ($regType !== 'all') {
             $where[] = 'p.is_exception = ' . ($regType === 'exception' ? 1 : 0);
         }
+        // R11 입금·정산 필터 — 목록 표시 컬럼과 동일 식(단일 출처)
+        switch ($payFilter) {
+            case 'none':        $where[] = "$paidExpr <= 0"; break;
+            case 'partial':     $where[] = "$paidExpr > 0 AND $paidExpr < $expectedExpr"; break;
+            case 'paid':        $where[] = "$expectedExpr > 0 AND $paidExpr >= $expectedExpr"; break;
+            case 'outstanding': $where[] = "$expectedExpr - $paidExpr > 0"; break;
+            case 'settled':     $where[] = "p.settlement_status = 'settled'"; break;
+            case 'hold':        $where[] = "p.settlement_status = 'hold'"; break;
+        }
         $whereSql = implode(' AND ', $where);
 
         // 예외 프로젝트는 customer_id NULL 가능 — LEFT JOIN(누락 방지)
@@ -84,7 +106,8 @@ class ProjectsController
         $pg  = Util::paginate($total, $page, $per);
 
         $rows = Db::all(
-            "SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name, sm.name AS site_manager_name
+            "SELECT p.*, COALESCE(c.name, p.customer_name_snapshot) AS customer_name, sm.name AS site_manager_name,
+                    $expectedExpr AS pay_expected, $paidExpr AS pay_net
              FROM projects p
              LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users sm ON sm.id = p.site_manager_id
@@ -113,11 +136,13 @@ class ProjectsController
             'workType'  => $workType,
             'delayed'   => $delayed,
             'regType'   => $regType,
+            'payFilter' => $payFilter,
             'sort'      => $sortKey,
             'dir'       => strtolower($dir),
             'managers'  => $managers,
             'workTypes' => $workTypes,
             'statuses'  => self::STATUSES,
+            'canFinance' => Rbac::can('finance.view') || Rbac::can('cost.manage'),
         ]);
     }
 
@@ -246,6 +271,45 @@ class ProjectsController
                 $warrantyPhotos[(int) $r['entity_id']][] = $r;
             }
         }
+        // ── R11: '입금·정산' 탭 데이터 — 요약(공통 산식) + 입금 행 + 변경 이력(감사 발췌) ──
+        $paySummary = AccountingService::projectPaySummary($project);
+        $isExceptionLedger = (int) $project['is_exception'] === 1 && empty($project['contract_id']);
+        if ($isExceptionLedger) {
+            $projectPayments = Db::all(
+                "SELECT pm.*, u.name AS created_by_name FROM payments pm
+                 LEFT JOIN users u ON u.id = pm.created_by
+                 WHERE pm.project_id = :id
+                 ORDER BY (pm.paid_date IS NULL), pm.paid_date DESC, pm.id DESC",
+                [':id' => $id]
+            );
+        } elseif (!empty($project['contract_id'])) {
+            // 일반 프로젝트: 연결 계약 입금 내역 연동 표시(관리는 계약 화면)
+            $projectPayments = Db::all(
+                "SELECT pm.*, u.name AS created_by_name FROM payments pm
+                 LEFT JOIN users u ON u.id = pm.created_by
+                 WHERE pm.contract_id = :cid
+                 ORDER BY (pm.due_date IS NULL), pm.due_date ASC, pm.id ASC",
+                [':cid' => (int) $project['contract_id']]
+            );
+        } else {
+            $projectPayments = [];
+        }
+        // 변경 이력: 입금 생성·수정·취소 + 예정 금액·정산 상태 변경(이 화면에 이미 노출되는 범위의 감사 발췌)
+        $payIds = array_map(static fn($r) => (int) $r['id'], $projectPayments);
+        $auditCond = "(a.entity = 'project' AND a.entity_id = :pid
+                       AND a.action IN ('project_expected_amount_change','project_settlement_change'))";
+        $auditParams = [':pid' => $id];
+        if ($payIds) {
+            $auditCond .= ' OR (a.entity = \'payments\' AND a.entity_id IN (' . implode(',', $payIds) . '))';
+        }
+        $settleAudit = Db::all(
+            "SELECT a.action, a.entity, a.entity_id, a.before_json, a.after_json, a.created_at, u.name AS user_name
+             FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+             WHERE $auditCond
+             ORDER BY a.created_at DESC, a.id DESC LIMIT 30",
+            $auditParams
+        );
+
         // 이력 탭: 감사 로그 발췌(audit.view 권한자만, 최근 20건 — 전체는 감사 로그 화면)
         $auditRows = Rbac::can('audit.view') ? Db::all(
             "SELECT a.id, a.action, a.created_at, u.name AS user_name
@@ -343,6 +407,13 @@ class ProjectsController
             'warrantyPhotos'  => $warrantyPhotos,
             'auditRows'   => $auditRows,
             'canProcessMove' => Rbac::can('process.move'),
+            // R11: 입금·정산 탭
+            'paySummary'        => $paySummary,
+            'projectPayments'   => $projectPayments,
+            'isExceptionLedger' => $isExceptionLedger,
+            'settleAudit'       => $settleAudit,
+            'payMethods'        => AccountingService::PAYMENT_METHODS,
+            'canPayment'        => Rbac::can('payment.manage'),
         ]);
     }
 
@@ -380,6 +451,18 @@ class ProjectsController
             Response::error('이 전환은 처리 사유가 필요합니다.', 422);
         }
 
+        // R11: '정산 완료' 전환 가드 — 미수금 0 + 대기(pending) 건 0 일 때만(정산 상태 컨트롤과 동일 기준).
+        //      공정 종결·프로젝트 완료만으로 정산 완료가 되지 않는다.
+        if ($to === 'settled') {
+            $sum = AccountingService::projectPaySummary($project);
+            if ($sum['outstanding'] > 0) {
+                Response::error('미수금 ' . number_format($sum['outstanding']) . '원이 남아 있어 정산 완료 처리할 수 없습니다. 잔금 입금 또는 예정 금액 조정 후 처리하세요.', 422);
+            }
+            if ($sum['pendingCnt'] > 0) {
+                Response::error('대기 중(pending) 입금 예정 ' . $sum['pendingCnt'] . '건을 정리(입금 확정 또는 취소)한 뒤 정산 완료 처리하세요.', 422);
+            }
+        }
+
         // 파기·취소 부가정보(브리프: 처리일/사유/처리자/진행 공정·발생 원가(표시)/청구·환불/정산 여부/후속 조치/메모)
         $detail = null;
         $refund = 0;
@@ -411,6 +494,13 @@ class ProjectsController
                 'reason'         => $reason,
                 'detail'         => $detail,
             ]);
+            // R11: 프로젝트 상태 '정산 완료' = 정산 상태도 settled 동기(가드는 위에서 통과)
+            if ($to === 'settled' && ($project['settlement_status'] ?? '') !== 'settled') {
+                Db::update('projects', ['settlement_status' => 'settled'], 'id = :id', [':id' => (int) $project['id']]);
+                Audit::log('project_settlement_change', 'project', (int) $project['id'],
+                    ['settlement_status' => $project['settlement_status'] ?? null],
+                    ['settlement_status' => 'settled', 'action' => 'status_settled', 'changed_by' => Auth::id()]);
+            }
             if ($refund > 0 && $project['contract_id']) {
                 Db::insert('payments', [
                     'contract_id' => (int) $project['contract_id'],
@@ -576,6 +666,14 @@ class ProjectsController
         $constructionType = Util::postStr('construction_type', '');
         $constructionType = array_key_exists($constructionType, Stages::constructionTypes()) ? $constructionType : null;
 
+        // R11: 정산 예정 금액(예외 프로젝트 전용 입력) — 미전송 시 기존 값 유지, 빈값은 미설정(NULL)
+        $expectedPosted = array_key_exists('expected_amount', $_POST);
+        $expectedAmount = null;
+        if ($expectedPosted) {
+            $rawExpected = trim(Util::postStr('expected_amount', ''));
+            $expectedAmount = $rawExpected === '' ? null : max(0, (int) round((float) str_replace([',', ' '], '', $rawExpected)));
+        }
+
         $data = [
             'name'               => $name,
             'customer_id'        => $customerId > 0 ? $customerId : null, // 예외 프로젝트는 미연결(NULL) 허용
@@ -604,6 +702,11 @@ class ProjectsController
         $data['supply_amount'] = $split['supply'];
         $data['vat_amount']    = $split['vat'];
 
+        // R11: 예정 금액은 예외 프로젝트(전환 아님)에서만 저장 — 일반은 계약 총액이 예정 금액
+        if ($expectedPosted && $isException && !$convertToNormal) {
+            $data['expected_amount'] = $expectedAmount;
+        }
+
         if ($id) {
             // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
             if ($constructionType === null) {
@@ -625,6 +728,15 @@ class ProjectsController
             } elseif ($beforeSales !== $data['sales_user_id']) {
                 Audit::log('project_sales_user_change', 'project', $id,
                     ['sales_user_id' => $beforeSales], ['sales_user_id' => $data['sales_user_id']]);
+            }
+            // R11: 예정 금액 변경 이력 — 수정 전·후 금액과 수정자 보존
+            if (array_key_exists('expected_amount', $data)) {
+                $beforeExp = $before['expected_amount'] !== null ? (int) $before['expected_amount'] : null;
+                if ($beforeExp !== $data['expected_amount']) {
+                    Audit::log('project_expected_amount_change', 'project', $id,
+                        ['expected_amount' => $beforeExp],
+                        ['expected_amount' => $data['expected_amount'], 'changed_by' => Auth::id(), 'at' => date('Y-m-d H:i:s')]);
+                }
             }
             Db::update('projects', $data, 'id = :id', [':id' => $id]);
             if ($from !== $status) {

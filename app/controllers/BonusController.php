@@ -343,11 +343,18 @@ class BonusController
     //                    마지막 직원에게 배분해 Σ기여도적용매출 == 산정 대상 매출을 보장한다.
     //   산정 금액 = round(기여도 적용 매출 × 보너스율/100). 원 단위 반올림(round) 정책 — 전 구간 통일.
 
-    /** 프로젝트의 산정 대상 매출(실입금 기준). */
+    /** 프로젝트의 산정 대상 매출(실입금 기준).
+     *  R11: 예외 프로젝트(계약 미연결)는 프로젝트 직접 입금(순액) — 계약 입금과 동일 축(입금−환불, paid). */
     private static function projectBonusBase(array $p): int
     {
         $contractId = (int) ($p['contract_id'] ?? 0);
-        return $contractId > 0 ? max(0, AccountingService::contractNetPaid($contractId)) : 0;
+        if ($contractId > 0) {
+            return max(0, AccountingService::contractNetPaid($contractId));
+        }
+        if ((int) ($p['is_exception'] ?? 0) === 1) {
+            return max(0, AccountingService::projectNetPaid((int) $p['id']));
+        }
+        return 0;
     }
 
     /** 활성 배정 직원 목록(user_id/name/pct/user_status) — 이름순 고정(잔여 배분 순서의 단일 기준). */

@@ -71,7 +71,7 @@ class StatusService
         'paused'      => ['in_progress', 'cancelled', 'terminated'],
         'completed'   => ['warranty', 'settled', 'in_progress'],
         'warranty'    => ['completed'],
-        'settled'     => [],
+        'settled'     => ['in_progress'], // R11: 정산 완료 후 재개 허용(사유 필수) — 공정 보드 자유 이동 정책
         'cancelled'   => ['preparing'],
         'terminated'  => ['in_progress'],
     ];
@@ -81,6 +81,25 @@ class StatusService
         'preparing>cancelled', 'paused>cancelled',
         'in_progress>terminated', 'paused>terminated',
         'completed>in_progress', 'cancelled>preparing', 'terminated>in_progress',
+        'settled>in_progress',
+    ];
+
+    // ── R11: 정산 상태(projects.settlement_status) — 공정 상태와 분리된 축 ──
+    //    unsettled/partial 은 입금 이벤트 시 자동 재계산, settled 는 수동 전용(가드),
+    //    hold(정산 보류)/refunding(환불 진행)은 수동 토글 — 자동 재계산이 덮어쓰지 않는다.
+    public const SETTLEMENT_LABELS = [
+        'unsettled' => '미정산',
+        'partial'   => '일부 정산',
+        'settled'   => '정산 완료',
+        'refunding' => '환불 진행',
+        'hold'      => '정산 보류',
+    ];
+    public const SETTLEMENT_BADGE = [
+        'unsettled' => 'badge-muted',
+        'partial'   => 'badge-warn',
+        'settled'   => 'badge-ok',
+        'refunding' => 'badge-danger',
+        'hold'      => 'badge-warn',
     ];
 
     /** 집계 제외 상태(예상 매출·수주·진행 수·업무량·성과 제외 — 브리프 §2). */
@@ -167,6 +186,48 @@ class StatusService
             $status = 'partial';
         }
         Db::update('contracts', ['payment_status' => $status], 'id = :id', [':id' => $contractId]);
+
+        // R11: 연결 프로젝트 정산 상태도 동기 재계산(입금 이벤트 단일 훅)
+        $projectId = Db::val("SELECT id FROM projects WHERE contract_id = :c AND deleted_at IS NULL LIMIT 1", [':c' => $contractId]);
+        if ($projectId !== null) {
+            self::recalcProjectSettlement((int) $projectId);
+        }
+    }
+
+    /**
+     * R11: 프로젝트 정산 상태 자동 재계산 — 입금 등록/수정/취소/환불 이벤트 훅.
+     * 규칙(D5): hold(보류)·refunding(환불 진행)은 수동 상태 — 자동 재계산이 건드리지 않는다.
+     *   settled(정산 완료)는 수동 전용이나, 미수금이 재발생하면 partial 로 자동 강등(감사 기록).
+     *   그 외에는 순입금>0 → partial, 아니면 unsettled.
+     * 반환: 적용된 정산 상태.
+     */
+    public static function recalcProjectSettlement(int $projectId): string
+    {
+        $project = Db::one("SELECT id, contract_id, is_exception, expected_amount, settlement_status
+            FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
+        if (!$project) {
+            return 'unsettled';
+        }
+        $current = (string) $project['settlement_status'];
+        if (in_array($current, ['hold', 'refunding'], true)) {
+            return $current; // 수동 상태 유지(해제는 정산 상태 컨트롤에서만)
+        }
+        $sum = AccountingService::projectPaySummary($project);
+        if ($current === 'settled') {
+            if ($sum['outstanding'] > 0) {
+                Db::update('projects', ['settlement_status' => 'partial'], 'id = :id', [':id' => $projectId]);
+                Audit::log('project_settlement_change', 'project', $projectId,
+                    ['settlement_status' => 'settled'],
+                    ['settlement_status' => 'partial', 'reason' => '미수금 재발생 자동 강등', 'outstanding' => $sum['outstanding']]);
+                return 'partial';
+            }
+            return 'settled';
+        }
+        $next = $sum['paid'] > 0 ? 'partial' : 'unsettled';
+        if ($next !== $current) {
+            Db::update('projects', ['settlement_status' => $next], 'id = :id', [':id' => $projectId]);
+        }
+        return $next;
     }
 
     /**

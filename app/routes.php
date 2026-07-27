@@ -76,6 +76,11 @@ return [
     'projects.transition'=> ['ProjectsController', 'transition', 'perm' => 'project.manage', 'method' => 'POST'],
     'projects.upload'   => ['ProjectsController', 'upload', 'method' => 'POST'],
     'files.download'    => ['ProjectsController', 'download'],
+    // ── R11: 예외 프로젝트 입금·정산(프로젝트 상세 '입금·정산' 탭) — 입금 CRUD 는 계약 입금과 동일 perm ──
+    'projects.payment.save'     => ['SettlementController', 'paymentSave',      'perm' => 'payment.manage', 'method' => 'POST'],
+    'projects.payment.cancel'   => ['SettlementController', 'paymentCancel',    'perm' => 'payment.manage', 'method' => 'POST'],
+    'projects.expected.save'    => ['SettlementController', 'expectedSave',     'perm' => 'payment.manage', 'method' => 'POST'],
+    'projects.settlement.update'=> ['SettlementController', 'settlementUpdate', 'perm' => 'payment.manage', 'method' => 'POST'],
 
     // ── 공정 보드 (T6) ──
     'process.board'     => ['ProcessController', 'board'],

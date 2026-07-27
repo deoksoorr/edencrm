@@ -20,23 +20,25 @@ try {
     Db::insert('payments', ['contract_id' => $conId, 'pay_type' => 'middle', 'amount' => 60000000, 'status' => 'pending']);
     t_int('C 미수금 증분 60,000,000', 60000000, AccountingService::receivable() - $recvBefore);
 
-    // ── 대사 F: 확정매출(R7 완납 기준) — 완납 유효 계약만, 취소·파기 계약 제외 / 확정순이익은 완료 프로젝트 기준 ──
+    // ── 대사 F: 확정매출(R11 입금 기준) — 프로젝트 완료 여부 무관, 입금(순액)만 인식(VAT 포함 현금 축).
+    //    취소 계약이라도 미환불 입금은 현금으로 남아 있으므로 확정 매출에 포함(환불 시 차감). ──
     $revBefore = AccountingService::confirmedRevenue();
     $profitBefore = AccountingService::confirmedProfit();
     Db::insert('projects', ['project_no' => 'TP-DONE', 'customer_id' => $cid, 'name' => '완료', 'contract_amount' => 55000000,
         'supply_amount' => 50000000, 'vat_amount' => 5000000, 'actual_cost' => 30000000, 'status' => 'completed', 'actual_end_date' => date('Y-m-d')]);
     Db::insert('projects', ['project_no' => 'TP-CANCEL', 'customer_id' => $cid, 'name' => '취소', 'contract_amount' => 22000000,
         'supply_amount' => 20000000, 'vat_amount' => 2000000, 'actual_cost' => 0, 'status' => 'cancelled', 'actual_end_date' => date('Y-m-d')]);
-    // 완납 유효 계약 → 확정매출 +50,000,000 / 완납이어도 취소 계약은 제외
+    t_int('F 프로젝트 완료만으로는 확정매출 증분 0 (입금 없음)', 0, AccountingService::confirmedRevenue() - $revBefore);
     $fCon = Db::insert('contracts', ['contract_no' => 'TC-FDONE', 'customer_id' => $cid, 'contract_amount' => 55000000,
         'supply_amount' => 50000000, 'vat_amount' => 5000000, 'status' => 'active', 'payment_status' => 'paid']);
     Db::insert('payments', ['contract_id' => $fCon, 'pay_type' => 'down', 'amount' => 55000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
     $fCanCon = Db::insert('contracts', ['contract_no' => 'TC-FCANCEL', 'customer_id' => $cid, 'contract_amount' => 22000000,
         'supply_amount' => 20000000, 'vat_amount' => 2000000, 'status' => 'cancelled', 'payment_status' => 'paid']);
     Db::insert('payments', ['contract_id' => $fCanCon, 'pay_type' => 'down', 'amount' => 22000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('F 확정매출 증분=완납 유효 계약(50,000,000)만 — 취소 제외·프로젝트 완료 무관', 50000000,
+    t_int('F 확정매출 증분=입금 합 77,000,000 (55M 유효 + 22M 취소계약 미환불 입금)', 77000000,
         AccountingService::confirmedRevenue() - $revBefore);
-    t_int('F 확정순이익 +20,000,000', 20000000, AccountingService::confirmedProfit() - $profitBefore);
+    t_int('F 확정순이익 = 확정매출(입금) − 원가 총액 = +77,000,000 (지출 0)', 77000000,
+        AccountingService::confirmedProfit() - $profitBefore);
 
     // ── 대사 G: 계약1·입금3·비용5·직원2 → 계약액 중복 합산 안 됨 ──
     $revG = AccountingService::confirmedRevenue();
@@ -47,22 +49,27 @@ try {
     $recvGBefore = AccountingService::receivable();
     $gCon = Db::insert('contracts', ['contract_no' => 'TC-JOIN', 'customer_id' => $cid, 'contract_amount' => 110000000,
         'supply_amount' => 100000000, 'vat_amount' => 10000000, 'status' => 'completed', 'payment_status' => 'paid']);
+    Db::update('projects', ['contract_id' => $gCon], 'id = :id', [':id' => $gPid]); // 실제 흐름과 동일한 계약↔프로젝트 연결(직원 귀속 경로)
     for ($i = 0; $i < 3; $i++) { Db::insert('payments', ['contract_id' => $gCon, 'pay_type' => 'etc', 'amount' => 10000000, 'status' => 'paid']); }
     t_int('G 미수금 +80,000,000 (3입금 중복없음)', 80000000, AccountingService::receivable() - $recvGBefore);
 
     for ($i = 0; $i < 5; $i++) { Db::insert('costs', ['project_id' => $gPid, 'type' => 'actual', 'category' => 'material', 'amount' => 14000000]); }
-    t_int('G 미완납(30/110M) 계약 확정매출 증분 0 (R7 완납 기준)', 0, AccountingService::confirmedRevenue() - $revG);
-    // 잔액 80,000,000 입금 → 완납: 입금 4건이 공급가 100,000,000 으로 1회만 합산(원가5건·직원2 중복 없음)
+    t_int('G 일부 입금(30/110M) → 확정매출 증분 30,000,000 (R11 입금 기준 즉시 인식)', 30000000,
+        AccountingService::confirmedRevenue() - $revG);
+    // 잔액 80,000,000 입금 → 입금 4건 합 110,000,000 그대로 1회 합산(원가5건·직원2 중복 없음)
     Db::insert('payments', ['contract_id' => $gCon, 'pay_type' => 'etc', 'amount' => 80000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('G 완납 → 확정매출 증분=공급 100,000,000(1회·중복 없음)', 100000000, AccountingService::confirmedRevenue() - $revG);
+    t_int('G 완납 → 확정매출 증분=입금 총액 110,000,000(1회·중복 없음)', 110000000, AccountingService::confirmedRevenue() - $revG);
 
-    // G 기여액: 직원2 = (100,000,000-70,000,000)*70% = 21,000,000, 직원3 = 30% = 9,000,000 (정확 델타)
+    // G 기여액(R11): 직원2 = 입금 110M×70% − 원가 70M×70% = 77M − 49M = 28,000,000
+    //               직원3 = 33M − 21M = 12,000,000 (정확 델타)
     $c2Before = AccountingService::employeeConfirmedContribution(2);
     $c3Before = AccountingService::employeeConfirmedContribution(3);
     Db::insert('project_assignments', ['project_id' => $gPid, 'user_id' => 2, 'role' => '현장책임자', 'contribution_pct' => 70]);
     Db::insert('project_assignments', ['project_id' => $gPid, 'user_id' => 3, 'role' => '도장작업자', 'contribution_pct' => 30]);
-    t_int('G 직원2 확정기여 정확히 +21,000,000', 21000000, AccountingService::employeeConfirmedContribution(2) - $c2Before);
-    t_int('G 직원3 확정기여 정확히 +9,000,000', 9000000, AccountingService::employeeConfirmedContribution(3) - $c3Before);
+    t_int('G 직원2 확정기여 정확히 +28,000,000 (입금 77M − 원가 49M)', 28000000,
+        AccountingService::employeeConfirmedContribution(2) - $c2Before);
+    t_int('G 직원3 확정기여 정확히 +12,000,000 (입금 33M − 원가 21M)', 12000000,
+        AccountingService::employeeConfirmedContribution(3) - $c3Before);
 
     // ── 예상매출: preparing/in_progress 프로젝트 공급가액 합 ──
     $expBefore = AccountingService::expectedRevenue();
@@ -104,14 +111,13 @@ try {
     t_int('B 부분입금 → 미수금 +15,400,000', 15400000, AccountingService::receivable() - $recvBBefore);
     t_int('B 입금 총액 +6,600,000 (pending 제외)', 6600000, AccountingService::paidTotal() - $paidBBefore);
 
-    // ══ settled(정산 완료) — 확정순이익 축은 status IN ('completed','settled') 선반영 유지,
-    //    확정매출 축은 R7 완납 기준이라 프로젝트 상태만으로는 불변 ══
+    // ══ settled(정산 완료) — R11: 상태만으로는 어떤 확정 축도 움직이지 않는다(입금·지출 없음 = 증분 0) ══
     $revSBefore = AccountingService::confirmedRevenue();
     $profitSBefore = AccountingService::confirmedProfit();
     Db::insert('projects', ['project_no' => 'TP-SETTLED', 'customer_id' => $cid, 'name' => '정산완료', 'contract_amount' => 33000000,
         'supply_amount' => 30000000, 'vat_amount' => 3000000, 'actual_cost' => 18000000, 'status' => 'settled', 'actual_end_date' => date('Y-m-d')]);
-    t_int('settled 프로젝트만으로는 확정매출 증분 0 (R7 완납 기준)', 0, AccountingService::confirmedRevenue() - $revSBefore);
-    t_int('settled → 확정순이익 +12,000,000 포함', 12000000, AccountingService::confirmedProfit() - $profitSBefore);
+    t_int('settled 프로젝트만으로는 확정매출 증분 0 (R11 입금 기준)', 0, AccountingService::confirmedRevenue() - $revSBefore);
+    t_int('settled 프로젝트만으로는 확정순이익 증분 0 (입금·지출 없음)', 0, AccountingService::confirmedProfit() - $profitSBefore);
 
     // ══ CostService::recalcProject — 원가 총액 = 확정(confirmed)·actual 만 합산 (브리프 §3) ══
     //   confirmed 자재 850,000 + confirmed 인건 500,000 = 1,350,000.
@@ -149,7 +155,8 @@ try {
     t_int('C 순입금 = 11,000,000 − 3,300,000 = +7,700,000', 7700000, AccountingService::paidTotal() - $paidCBefore);
     t_int('C 환불 후 미수금 +3,300,000 (환불분 재미수)', 3300000, AccountingService::receivable() - $recvCBefore);
     t_int('C 환불 총액(별도 축) +3,300,000', 3300000, AccountingService::refundTotal() - $refCBefore);
-    t_int('C 확정 매출 증분 0 (환불은 현금 축 — 공급가액 축 무관)', 0, AccountingService::confirmedRevenue() - $revCBefore);
+    t_int('C 확정 매출 증분 +7,700,000 (R11 입금 기준 — 환불 차감 후 순입금)', 7700000,
+        AccountingService::confirmedRevenue() - $revCBefore);
 
     // ══ 사용자 시나리오 D: 계약 파기(terminated) — 계약 22,000,000, 입금 6,600,000 후 파기 ══
     $recvDBefore = AccountingService::receivable();
@@ -165,7 +172,8 @@ try {
         'contract_date' => date('Y-m-d')]);
     t_int('D 파기 프로젝트 → 수주액 증분 0', 0, AccountingService::contractedAmount() - $ctrDBefore);
     t_int('D 파기 프로젝트 → 예상 매출 증분 0', 0, AccountingService::expectedRevenue() - $expDBefore);
-    t_int('D 파기 프로젝트 → 확정 매출 증분 0', 0, AccountingService::confirmedRevenue() - $revDBefore);
+    t_int('D 파기 계약 미환불 입금 6,600,000 → 확정 매출 유지(R11 현금 기준 — 환불 시에만 차감)', 6600000,
+        AccountingService::confirmedRevenue() - $revDBefore);
     // 성과 제외: 파기 프로젝트 배정은 확정 기여에 포함되지 않는다
     $dC4Before = AccountingService::employeeConfirmedContribution(4);
     Db::insert('project_assignments', ['project_id' => $dPid, 'user_id' => 4, 'role' => '도장작업자', 'contribution_pct' => 100]);
@@ -173,7 +181,7 @@ try {
     // 위약금·정산은 별도 축(contract_terminations) — 기록해도 확정 매출 불변
     Db::insert('contract_terminations', ['contract_id' => $dCon, 'terminated_date' => date('Y-m-d'),
         'reason' => '테스트 파기', 'refund_amount' => 0, 'penalty_amount' => 1000000, 'settlement_amount' => 500000]);
-    t_int('D 위약금·정산 기록 후에도 확정 매출 불변(별도 축)', 0, AccountingService::confirmedRevenue() - $revDBefore);
+    t_int('D 위약금·정산 기록 후에도 확정 매출 불변(별도 축)', 6600000, AccountingService::confirmedRevenue() - $revDBefore);
 
 } finally {
     $pdo->rollBack();

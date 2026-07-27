@@ -88,8 +88,8 @@ try {
     t_true('기존 준공일 보유 시 그 날짜로 세팅(처리일 아님)',
         Db::val("SELECT due_date FROM payments WHERE id=:id", [':id' => $bal2]) === '2026-07-01');
 
-    // ── 4) 확정 매출 = 입금 완료(완납) 기준(R7) + 이중 집계 부재 ──
-    //     프로젝트 완료만으로는 확정 매출 0, 완납(순입금 ≥ 계약 총액) 시 계약 공급가 1회만.
+    // ── 4) 확정 매출 = 입금 기준(R11 통일 — 순입금 즉시 인식, VAT 포함 현금 축) + 이중 집계 부재 ──
+    //     프로젝트 완료만으로는 확정 매출 0, 입금 시 입금액 그대로 1회만(환불은 즉시 차감).
     $revBefore = AccountingService::confirmedRevenue();
     $ctrBefore = AccountingService::contractedAmount();
     $dupCon = Db::insert('contracts', ['contract_no' => 'TAV-DUP', 'customer_id' => $cid, 'contract_amount' => 44000000,
@@ -99,23 +99,23 @@ try {
         'name' => '이중집계', 'contract_amount' => 44000000, 'supply_amount' => 40000000, 'vat_amount' => 4000000,
         'actual_cost' => 25000000, 'status' => 'completed', 'actual_end_date' => date('Y-m-d'),
         'contract_date' => date('Y-m-d')]);
-    t_int('프로젝트 완료만으로는 확정 매출 증분 0(R7 완납 기준)', 0,
+    t_int('프로젝트 완료만으로는 확정 매출 증분 0(입금 없음 — R11 입금 기준)', 0,
         AccountingService::confirmedRevenue() - $revBefore);
     t_int('수주액 증분 = 공급가 40,000,000 정확히 1회(projects 축)', 40000000,
         AccountingService::contractedAmount() - $ctrBefore);
-    // 완납(정상 입금 합 = 계약 총액) → 확정 매출 = 계약 공급가 1회(계약·프로젝트 이중 미합산)
+    // 입금(계약 총액 44,000,000) → 확정 매출 = 입금액 그대로 1회(계약·프로젝트 이중 미합산, VAT 포함)
     Db::insert('payments', ['contract_id' => $dupCon, 'pay_type' => 'balance', 'amount' => 44000000,
         'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('완납 → 확정 매출 증분 = 공급가 40,000,000 정확히 1회', 40000000,
+    t_int('완납 → 확정 매출 증분 = 입금액 44,000,000 정확히 1회(R11 입금 기준)', 44000000,
         AccountingService::confirmedRevenue() - $revBefore);
     // 계약 상태를 completed 로 바꿔도 확정 매출 불변(이중 집계 없음)
     Db::update('contracts', ['status' => 'completed'], 'id = :id', [':id' => $dupCon]);
-    t_int('계약 완료 전환 후에도 확정 매출 증분 불변(이중 집계 없음)', 40000000,
+    t_int('계약 완료 전환 후에도 확정 매출 증분 불변(이중 집계 없음)', 44000000,
         AccountingService::confirmedRevenue() - $revBefore);
-    // 환불로 순입금 < 계약 총액 → 확정 매출 소급 제외(R7 순입금 기준)
+    // 환불 → 확정 매출에서 환불액만 즉시 차감(R11 — 완납 여부 소급 제외 없음)
     $refundRow = Db::insert('payments', ['contract_id' => $dupCon, 'pay_type' => 'etc', 'kind' => 'refund',
         'amount' => 1000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
-    t_int('환불로 순입금 미달 → 확정 매출 증분 0(소급 제외)', 0,
+    t_int('환불 1,000,000 → 확정 매출 증분 43,000,000(환불 차감)', 43000000,
         AccountingService::confirmedRevenue() - $revBefore);
     Db::run("DELETE FROM payments WHERE id = :id", [':id' => $refundRow]);
 
