@@ -54,15 +54,15 @@
       <div class="kpi-label">견적→계약 전환율</div>
       <div class="kpi-value" id="stQuoteRate">-</div>
     </div>
-    <div class="kpi accent-warn" title="Σ 계약별 max(0, 계약 총액(VAT 포함) − 입금 총액(VAT 포함)) · 체결 이후 계약만(작성중·파기/취소 제외) · 현재 스냅샷">
+    <div class="kpi accent-warn" title="Σ 계약별 max(0, 계약 총액 − 순입금) + Σ 예외 프로젝트 max(0, 예정 금액 − 직접 입금) · 현재 스냅샷(VAT 포함)">
       <div class="kpi-label">미수금</div>
       <div class="kpi-value" id="stReceivable">-</div>
     </div>
-    <div class="kpi" title="확정 매출 = 완납(순입금 ≥ 계약 총액) 계약 공급가액 합 · 완납일(마지막 입금일) 기준 · VAT 제외">
-      <div class="kpi-label">확정 매출(공급가액) 목표달성률</div>
+    <div class="kpi" title="확정 매출 = 실제 입금된 금액(순입금 = 입금 − 환불, 예외 프로젝트 직접 입금 포함) · 입금일 기준 · VAT 포함(R11 통일)">
+      <div class="kpi-label">확정 매출(입금 기준) 목표달성률</div>
       <div class="kpi-value" id="stRevenueRate">-</div>
     </div>
-    <div class="kpi" title="확정 순이익 = 확정 매출(공급가액) − 원가 총액(실제)">
+    <div class="kpi" title="확정 순이익 = 확정 매출(입금 기준) − 확정 지출(발생일 기준)">
       <div class="kpi-label">확정 순이익 목표달성률</div>
       <div class="kpi-value" id="stProfitRate">-</div>
     </div>
@@ -70,7 +70,7 @@
 
   <div class="grid-2 mb-14">
     <div class="card pad">
-      <div class="section-head"><div class="st"><h2>월별 확정 매출(공급가액)·확정 순이익 추이</h2><span class="section-desc" title="확정 매출=완납 계약 공급가액 합(완납월) · 확정 순이익=완료 공사 기준(준공월) · VAT 제외">최근 6개월 · 매출=완납월·순이익=준공월</span></div></div>
+      <div class="section-head"><div class="st"><h2>월별 확정 매출(입금 기준)·확정 순이익 추이</h2><span class="section-desc" title="확정 매출=순입금(입금월 귀속, 예외 포함) · 확정 순이익=매출 − 확정 지출(발생월) · VAT 포함(R11)">최근 6개월 · 입금월 기준</span></div></div>
       <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
     </div>
     <div class="card pad">

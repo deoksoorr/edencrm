@@ -137,13 +137,15 @@ $recentEvents = array_slice($recentEvents, 0, 5);
       <div class="ps-money">
         <div class="kv" data-sum="amount" title="부가세를 포함한 계약 금액 — 현금(입금) 기준 축">
           <div class="kv-label">계약 총액(VAT 포함)</div><div class="kv-value"><?= moneyCell($calc['contract_amount']) ?></div></div>
-        <div class="kv" data-sum="supply" title="공급가액(VAT 제외) — 손익 계산 기준. 프로젝트 완료·정산 시 이 금액이 확정 매출로 집계됩니다.">
-          <div class="kv-label">확정 매출(공급가액)</div><div class="kv-value"><?= moneyCell($calc['supply_amount']) ?></div></div>
+        <?php // R11: 확정 매출·순이익은 입금 기준(실제 입금액만 반영 — '입금·정산' 탭과 동일 산식)
+          $realProfit = (int) $paySummary['paid'] - (int) $calc['actual_cost']; ?>
+        <div class="kv" data-sum="supply" title="확정 매출(입금 기준) = 누적 순입금(입금 − 환불, 취소·대기 제외) — 실제 입금된 금액만 매출로 인식(R11)">
+          <div class="kv-label">확정 매출(입금 기준)</div><div class="kv-value"><?= moneyCell($paySummary['paid']) ?></div></div>
         <div class="kv" data-sum="cost" title="지출 총액 = 확정 상태 실제 비용 합계 (임시 저장·확인 대기·취소 제외) — 회계 지표의 '원가 총액'과 동일 값">
           <div class="kv-label">지출 총액</div><div class="kv-value"><?= $costEntered ? moneyCell($calc['actual_cost']) : '<span class="muted">미입력</span>' ?></div></div>
-        <div class="kv" data-sum="profit" title="실제 순이익 = 확정 매출(공급가액) − 지출 총액<?= $costEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
+        <div class="kv" data-sum="profit" title="실제 순이익 = 확정 매출(입금 기준) − 지출 총액<?= $costEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
           <div class="kv-label">실제 순이익</div>
-          <div class="kv-value <?= $costEntered && $calc['actual_profit'] < 0 ? 'text-danger' : '' ?>"><?= $costEntered ? moneyCell($calc['actual_profit']) : '<span class="muted">-</span>' ?></div></div>
+          <div class="kv-value <?= $costEntered && $realProfit < 0 ? 'text-danger' : '' ?>"><?= $costEntered ? moneyCell($realProfit) : '<span class="muted">-</span>' ?></div></div>
       </div>
       <?php endif; ?>
     </div>
@@ -155,6 +157,7 @@ $recentEvents = array_slice($recentEvents, 0, 5);
     <div class="tab" data-tab="staff">직원·일정</div>
     <div class="tab" data-tab="process">공정</div>
     <?php if ($canFinance): ?><div class="tab" data-tab="costs">지출</div><?php endif; ?>
+    <?php if ($canFinance): ?><div class="tab" data-tab="settlement">입금·정산</div><?php endif; ?>
     <div class="tab" data-tab="files">사진·문서</div>
     <div class="tab" data-tab="history">이력</div>
   </div>
@@ -173,6 +176,9 @@ $recentEvents = array_slice($recentEvents, 0, 5);
   <?php if ($canFinance): ?>
     <div class="tab-panel" data-panel="costs">
       <?php include __DIR__ . '/_tab_costs.php'; ?>
+    </div>
+    <div class="tab-panel" data-panel="settlement">
+      <?php include __DIR__ . '/_tab_settlement.php'; ?>
     </div>
   <?php endif; ?>
 

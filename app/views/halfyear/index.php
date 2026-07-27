@@ -82,11 +82,11 @@ foreach ($users as $u) {
         <div class="kpi-label">기간 입금액</div>
         <div class="kpi-value"><?= moneyCell($revenueKpi['paid']) ?></div>
       </div>
-      <div class="kpi accent-brand" title="<?= $scoped ? '완료·정산 프로젝트 공급가 × 기여율' : '완납(순입금 ≥ 계약총액) 계약 공급가액 합 · 완납일 기준' ?>">
-        <div class="kpi-label">확정매출(공급가)</div>
+      <div class="kpi accent-brand" title="<?= $scoped ? '프로젝트 순입금 × 기여율(예외 직접 입금 포함) · 입금일 기준' : '순입금(입금−환불, 예외 프로젝트 포함) · 입금일 기준 · VAT 포함(R11 통일)' ?>">
+        <div class="kpi-label">확정매출(입금 기준)</div>
         <div class="kpi-value"><?= moneyCell($revenueKpi['revenue']) ?></div>
       </div>
-      <div class="kpi accent-warn" title="Σ 계약별 max(0, 계약총액 − 순입금) · 체결 이후 계약만">
+      <div class="kpi accent-warn" title="Σ 계약별 max(0, 계약총액 − 순입금) + Σ 예외 프로젝트 max(0, 예정 금액 − 직접 입금)">
         <div class="kpi-label">미수금</div>
         <div class="kpi-value"><?= moneyCell($revenueKpi['receivable']) ?></div>
         <div class="kpi-note">현재 시점 스냅샷(기간 무관)</div>

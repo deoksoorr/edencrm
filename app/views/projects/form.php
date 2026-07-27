@@ -135,6 +135,14 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
             <label class="field-label">계약금액</label>
             <input type="number" name="contract_amount" class="input" min="0" value="<?= $val('contract_amount', '0') ?>">
           </div>
+          <?php if ($exMode): ?>
+          <div class="field">
+            <label class="field-label">정산 예정 금액</label>
+            <input type="number" name="expected_amount" class="input" min="0" value="<?= $val('expected_amount') ?>"
+                   placeholder="계약이 없을 때 입금·미수금 판정 기준"
+                   title="예외 프로젝트 전용 — 입금 상태(미입금/일부/완납)·미수금 계산의 기준 금액. 수정 시 전·후 금액과 수정자가 이력으로 남습니다.">
+          </div>
+          <?php endif; ?>
           <div class="field">
             <label class="field-label">예상원가</label>
             <input type="number" name="estimated_cost" class="input" min="0" value="<?= $val('estimated_cost', '0') ?>">

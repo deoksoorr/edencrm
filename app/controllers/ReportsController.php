@@ -209,11 +209,17 @@ class ReportsController
         return ['total_quotes' => $total, 'converted' => $converted, 'rate' => Calc::rate($converted, $total)];
     }
 
-    /** 프로젝트별 손익(기간 내 계약일, 취소·파기 제외 — 브리프 §2). 매출=공급가액, 순이익(률)=AccountingService::projectActualProfit/Rate(공급가 기준). */
+    /** 프로젝트별 손익(기간 내 계약일, 취소·파기 제외 — 브리프 §2).
+     *  R11: 매출 = 프로젝트 순입금(계약 입금 + 예외 직접 입금, 입금−환불) — 일반·예외 동일 공통 산식.
+     *  순이익 = 순입금 − 지출 총액(확정 actual 캐시). 배치 서브쿼리 1쿼리(N+1 없음). */
     private function projectPl(string $from, string $to, string $projWhere, array $projParams): array
     {
         $rows = Db::all(
-            "SELECT p.id, p.project_no, p.name, p.contract_amount, p.supply_amount, p.vat_amount, p.actual_cost, p.status
+            "SELECT p.id, p.project_no, p.name, p.actual_cost, p.status, p.is_exception,
+                    (COALESCE((SELECT SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
+                        FROM payments pm WHERE pm.contract_id = p.contract_id AND pm.status='paid'),0)
+                   + COALESCE((SELECT SUM(CASE WHEN pm2.kind='refund' THEN -pm2.amount ELSE pm2.amount END)
+                        FROM payments pm2 WHERE pm2.project_id = p.id AND pm2.status='paid'),0)) AS net_paid
              FROM projects p
              WHERE $projWhere AND p.deleted_at IS NULL AND p.status NOT IN ('cancelled','terminated')
                AND p.contract_date BETWEEN :f AND :t
@@ -222,11 +228,13 @@ class ReportsController
         );
         $out = [];
         foreach ($rows as $r) {
+            $paid = (float) $r['net_paid'];
+            $cost = (float) $r['actual_cost'];
             $out[] = [
                 'project_no' => $r['project_no'], 'name' => $r['name'], 'status' => $r['status'],
                 'status_label' => StatusService::PROJECT_LABELS[$r['status']] ?? $r['status'],
-                'revenue' => (float) AccountingService::supplyOf($r), 'cost' => (float) $r['actual_cost'],
-                'profit' => AccountingService::projectActualProfit($r), 'profit_rate' => AccountingService::projectActualProfitRate($r),
+                'revenue' => $paid, 'cost' => $cost,
+                'profit' => (int) Calc::profit($paid, $cost), 'profit_rate' => Calc::profitRate($paid, $cost),
             ];
         }
         return $out;

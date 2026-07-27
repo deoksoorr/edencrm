@@ -1,12 +1,18 @@
 <?php
 /** @var array $rows @var array $pg @var string $q @var string $status @var int $managerId
- *  @var string $workType @var bool $delayed @var string $regType @var string $sort @var string $dir
- *  @var array $managers @var array $workTypes @var array $statuses
+ *  @var string $workType @var bool $delayed @var string $regType @var string $payFilter @var string $sort @var string $dir
+ *  @var array $managers @var array $workTypes @var array $statuses @var bool $canFinance
  */
 $today = date('Y-m-d');
 $base = [
     'q' => $q, 'status' => $status, 'manager_id' => $managerId ?: '', 'work_type' => $workType,
-    'delayed' => $delayed ? '1' : '', 'reg_type' => $regType !== 'all' ? $regType : '', 'sort' => $sort, 'dir' => $dir,
+    'delayed' => $delayed ? '1' : '', 'reg_type' => $regType !== 'all' ? $regType : '',
+    'pay' => $payFilter, 'sort' => $sort, 'dir' => $dir,
+];
+// R11 입금·정산 필터 라벨(컨트롤러 화이트리스트와 동일 키)
+$payFilterLabels = [
+    'none' => '미입금', 'partial' => '일부 입금', 'paid' => '완납',
+    'outstanding' => '미수금 있음', 'settled' => '정산 완료', 'hold' => '정산 보류',
 ];
 function projSortUrl(string $key, string $sort, string $dir, array $base): string
 {
@@ -60,11 +66,19 @@ function projSortArrow(string $key, string $sort, string $dir): string
       <option value="normal" <?= $regType === 'normal' ? 'selected' : '' ?>>일반</option>
       <option value="exception" <?= $regType === 'exception' ? 'selected' : '' ?>>예외</option>
     </select>
+    <?php if ($canFinance): ?>
+    <select name="pay" class="select" title="입금·정산 상태 필터 — 예정 금액(예외=직접 입력, 일반=계약 총액) 대비 순입금 기준">
+      <option value="">전체 입금·정산</option>
+      <?php foreach ($payFilterLabels as $k => $label): ?>
+        <option value="<?= e($k) ?>" <?= $payFilter === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <label class="check">
       <input type="checkbox" name="delayed" value="1" <?= $delayed ? 'checked' : '' ?>> 지연만 보기
     </label>
     <button type="submit" class="btn btn-outline">검색</button>
-    <?php if ($q || $status || $managerId || $workType || $delayed || $regType !== 'all'): ?>
+    <?php if ($q || $status || $managerId || $workType || $delayed || $regType !== 'all' || $payFilter !== ''): ?>
       <a href="<?= e(url('projects.index')) ?>" class="btn btn-ghost">초기화</a>
     <?php endif; ?>
   </form>
@@ -91,7 +105,12 @@ function projSortArrow(string $key, string $sort, string $dir): string
             <th>현장관리자</th>
             <th><a href="<?= e(projSortUrl('start_date', $sort, $dir, $base)) ?>">착공<?= projSortArrow('start_date', $sort, $dir) ?></a></th>
             <th><a href="<?= e(projSortUrl('end_date', $sort, $dir, $base)) ?>">준공예정<?= projSortArrow('end_date', $sort, $dir) ?></a></th>
-            <th class="num" title="공급가액 + 부가세 · VAT 포함"><a href="<?= e(projSortUrl('contract_amount', $sort, $dir, $base)) ?>">계약 총액(VAT 포함)<?= projSortArrow('contract_amount', $sort, $dir) ?></a></th>
+            <?php if ($canFinance): ?>
+            <th class="num" title="예외 프로젝트 = 정산 예정 금액(직접 입력) · 일반 = 계약 총액(VAT 포함)">예정 금액</th>
+            <th class="num" title="확정(paid) 입금 − 환불">누적 입금</th>
+            <th class="num" title="예정 금액 − 누적 입금 (0 미만은 0)">미수금</th>
+            <th title="입금 상태(예정 대비 순입금) · 정산 상태(공정과 분리된 정산 축)">입금·정산</th>
+            <?php endif; ?>
           </tr>
         </thead>
         <tbody>
@@ -116,7 +135,27 @@ function projSortArrow(string $key, string $sort, string $dir): string
               <td><?= e($p['site_manager_name'] ?? '-') ?></td>
               <td class="nowrap"><?= fmtdate($p['start_date']) ?></td>
               <td class="nowrap <?= $isDelayed ? 'text-danger' : '' ?>"><?= fmtdate($p['end_date']) ?><?= $isDelayed ? ' (지연)' : '' ?></td>
-              <td class="num"><?= money((float) $p['contract_amount']) ?></td>
+              <?php if ($canFinance):
+                // R11: 입금 상태(파생 — projectPaySummary 와 동일 규칙) + 정산 상태 배지
+                $exp = (int) $p['pay_expected'];
+                $net = (int) $p['pay_net'];
+                $outstanding = max(0, $exp - $net);
+                $isExcLedger = !empty($p['is_exception']) && empty($p['contract_id']);
+                if ($exp > 0) {
+                    $pstat = $net <= 0 ? 'none' : ($net < $exp ? 'partial' : ($net === $exp ? 'paid' : 'over'));
+                } else {
+                    $pstat = $net > 0 ? 'partial' : 'none';
+                }
+                $sstat = (string) ($p['settlement_status'] ?? 'unsettled');
+              ?>
+              <td class="num"><?php if ($exp > 0 || !$isExcLedger): ?><?= money((float) $exp) ?><?php else: ?><span class="muted" title="정산 예정 금액 미입력(예외 프로젝트)">미설정</span><?php endif; ?></td>
+              <td class="num"><?= money((float) $net) ?></td>
+              <td class="num<?= $outstanding > 0 ? ' text-danger' : '' ?>"><?= money((float) $outstanding) ?></td>
+              <td class="nowrap">
+                <span class="badge <?= e(AccountingService::PAY_STATUS_BADGE[$pstat]) ?> fs-11"><?= e(AccountingService::PAY_STATUS_LABELS[$pstat]) ?></span>
+                <span class="badge <?= e(StatusService::SETTLEMENT_BADGE[$sstat] ?? 'badge-muted') ?> fs-11"><?= e(StatusService::SETTLEMENT_LABELS[$sstat] ?? $sstat) ?></span>
+              </td>
+              <?php endif; ?>
             </tr>
           <?php endforeach; ?>
         </tbody>

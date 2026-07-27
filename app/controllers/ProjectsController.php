@@ -272,6 +272,8 @@ class ProjectsController
             }
         }
         // ── R11: '입금·정산' 탭 데이터 — 요약(공통 산식) + 입금 행 + 변경 이력(감사 발췌) ──
+        load_controller('ContractsController'); // pay_type 라벨 단일 출처 재사용(대시보드와 동일 패턴)
+        $payTypeLabels = ContractsController::PAY_TYPE_LABELS;
         $paySummary = AccountingService::projectPaySummary($project);
         $isExceptionLedger = (int) $project['is_exception'] === 1 && empty($project['contract_id']);
         if ($isExceptionLedger) {
@@ -413,6 +415,7 @@ class ProjectsController
             'isExceptionLedger' => $isExceptionLedger,
             'settleAudit'       => $settleAudit,
             'payMethods'        => AccountingService::PAYMENT_METHODS,
+            'payTypeLabels'     => $payTypeLabels,
             'canPayment'        => Rbac::can('payment.manage'),
         ]);
     }
