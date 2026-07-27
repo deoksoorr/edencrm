@@ -137,13 +137,14 @@ $recentEvents = array_slice($recentEvents, 0, 5);
       <div class="ps-money">
         <div class="kv" data-sum="amount" title="부가세를 포함한 계약 금액 — 현금(입금) 기준 축">
           <div class="kv-label">계약 총액(VAT 포함)</div><div class="kv-value"><?= moneyCell($calc['contract_amount']) ?></div></div>
-        <?php // R11: 확정 매출·순이익은 입금 기준(실제 입금액만 반영 — '입금·정산' 탭과 동일 산식)
-          $realProfit = (int) $paySummary['paid'] - (int) $calc['actual_cost']; ?>
-        <div class="kv" data-sum="supply" title="확정 매출(입금 기준) = 누적 순입금(입금 − 환불, 취소·대기 제외) — 실제 입금된 금액만 매출로 인식(R11)">
-          <div class="kv-label">확정 매출(입금 기준)</div><div class="kv-value"><?= moneyCell($paySummary['paid']) ?></div></div>
+        <?php // R12: 확정 매출 = 공급가액(VAT 제외), 입금 시점 인식. 순이익 = 확정 매출 − 지출.
+          $projConfirmedRev = AccountingService::projectConfirmedRevenue($p);
+          $realProfit = $projConfirmedRev - (int) $calc['actual_cost']; ?>
+        <div class="kv" data-sum="supply" title="확정 매출(공급가액·VAT 제외) = 누적 순입금의 공급가 부분 — 실제 입금된 금액을 부가세 제외로 인식(R12). 부가세 포함 현금은 '입금·정산' 탭의 누적 입금액">
+          <div class="kv-label">확정 매출(공급가액)</div><div class="kv-value"><?= moneyCell($projConfirmedRev) ?></div></div>
         <div class="kv" data-sum="cost" title="지출 총액 = 확정 상태 실제 비용 합계 (임시 저장·확인 대기·취소 제외) — 회계 지표의 '원가 총액'과 동일 값">
           <div class="kv-label">지출 총액</div><div class="kv-value"><?= $costEntered ? moneyCell($calc['actual_cost']) : '<span class="muted">미입력</span>' ?></div></div>
-        <div class="kv" data-sum="profit" title="실제 순이익 = 확정 매출(입금 기준) − 지출 총액<?= $costEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
+        <div class="kv" data-sum="profit" title="실제 순이익 = 확정 매출(공급가액) − 지출 총액<?= $costEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
           <div class="kv-label">실제 순이익</div>
           <div class="kv-value <?= $costEntered && $realProfit < 0 ? 'text-danger' : '' ?>"><?= $costEntered ? moneyCell($realProfit) : '<span class="muted">-</span>' ?></div></div>
       </div>

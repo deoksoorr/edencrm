@@ -21,7 +21,7 @@ $wl = Settings::enabled('feature_worklog');
         <tr>
           <th>이름</th><th>부서</th><th>역할</th>
           <th class="num">담당</th><th class="num">완료</th><th class="num">진행</th><th class="num">지연</th>
-          <th class="num" title="담당 프로젝트 계약 총액(VAT 포함) × 기여도 합 · 상태 무관 누적 · 기여율 없으면 미반영(T9)">계약 총액(VAT 포함)</th><th class="num" title="프로젝트 순입금 × 기여도 합(예외 직접 입금 포함) · 입금일 기준 · VAT 포함(R11)">확정 매출(입금 기준)</th><th class="num" title="확정 지출 × 기여도 합 · 발생일 기준">원가 총액(확정)</th><th class="num" title="귀속 확정 매출(입금) − 귀속 확정 지출">확정 순이익</th><th class="num" title="확정 순이익 ÷ 확정 매출(입금 기준) × 100">순이익률(가중)</th>
+          <th class="num" title="담당 프로젝트 계약 총액(VAT 포함) × 기여도 합 · 상태 무관 누적 · 기여율 없으면 미반영(T9)">계약 총액(VAT 포함)</th><th class="num" title="프로젝트 순입금의 공급가액 × 기여도 합(예외 포함) · 입금일 기준 · VAT 제외(R12)">확정 매출(공급가액)</th><th class="num" title="확정 지출 × 기여도 합 · 발생일 기준">원가 총액(확정)</th><th class="num" title="귀속 확정 매출(공급가) − 귀속 확정 지출">확정 순이익</th><th class="num" title="확정 순이익 ÷ 확정 매출(공급가액) × 100">순이익률(가중)</th>
           <th class="num" title="이번 달 개인 목표(공급가액 기준)">목표 매출(공급가액)</th><th class="num" title="이번 달 수주(공급가액) ÷ 목표 매출 × 100">매출 달성률</th>
           <th class="num">목표순이익</th><th class="num">순이익달성률</th>
           <th class="num">계약전환율</th><?php if ($wl): ?><th class="num">일지작성률</th><?php endif; ?>

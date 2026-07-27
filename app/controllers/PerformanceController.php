@@ -101,11 +101,8 @@ class PerformanceController
 
         $assignments = Db::all(
             "SELECT pa.project_id, pa.role AS assign_role, pa.contribution_pct,
-                    p.project_no, p.name, p.status, p.contract_amount, p.actual_cost, p.supply_amount, p.actual_end_date,
-                    (COALESCE((SELECT SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
-                        FROM payments pm WHERE pm.contract_id = p.contract_id AND pm.status='paid'),0)
-                   + COALESCE((SELECT SUM(CASE WHEN pm2.kind='refund' THEN -pm2.amount ELSE pm2.amount END)
-                        FROM payments pm2 WHERE pm2.project_id = p.id AND pm2.status='paid'),0)) AS net_paid
+                    p.id, p.project_no, p.name, p.status, p.contract_id, p.is_exception,
+                    p.contract_amount, p.actual_cost, p.supply_amount, p.actual_end_date
              FROM project_assignments pa
              JOIN projects p ON p.id = pa.project_id
              WHERE pa.user_id = :u AND p.deleted_at IS NULL
@@ -116,8 +113,9 @@ class PerformanceController
         $contributionRows = [];
         $totalContribution = 0.0;
         foreach ($assignments as $a) {
-            // R11: 실현 손익 = 프로젝트 순입금(계약 + 예외 직접 입금) − 지출 총액 — 완료 여부 무관(입금 기준)
-            $profit      = (int) Calc::profit((float) $a['net_paid'], (float) $a['actual_cost']);
+            // R12: 실현 손익 = 프로젝트 확정 매출(공급가액·VAT 제외) − 지출 총액 — 완료 여부 무관
+            $confRev     = AccountingService::projectConfirmedRevenue($a);
+            $profit      = (int) Calc::profit((float) $confRev, (float) $a['actual_cost']);
             $confirmed   = (in_array($a['status'], ['completed', 'settled'], true) && $a['actual_end_date'] !== null);
             $excluded    = in_array($a['status'], ['cancelled', 'terminated'], true); // 취소·파기 — 예상 기여 제외(실현분은 반영)
             $myConfirmed = AccountingService::contribution($profit, (float) $a['contribution_pct']);

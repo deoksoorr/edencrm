@@ -46,15 +46,15 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
     <div class="section-head"><div class="st"><h2>핵심 현황</h2><span class="section-desc">금액은 이번 달(<?= date('n') ?>월) · 건수는 현재 기준 · 각 카드를 누르면 근거 화면으로 이동합니다</span></div></div>
     <div class="dash-hero">
       <?php
-      $kpiCard(url('reports.index'), '이번 달 확정 매출(입금 기준)', moneyCell($kpi['revenue']['value']), 'brand', $kpi['revenue']['delta'], '전월 대비 · 입금일 기준 · 환불 차감',
-        'R11 통일 산식: 실제 입금된 금액(순입금 = 입금 − 환불, 예외 프로젝트 직접 입금 포함)만 확정 매출로 인식 · 입금일 기준 · VAT 포함 — 미입금·대기·취소 금액은 포함되지 않습니다');
+      $kpiCard(url('reports.index'), '이번 달 확정 매출(공급가액)', moneyCell($kpi['revenue']['value']), 'brand', $kpi['revenue']['delta'], '전월 대비 · 입금일 기준 · VAT 제외',
+        'R12: 확정 매출 = 실제 입금된 금액의 공급가액(부가세 제외) — 입금 시점 인식(입금일 기준). 부가세(예수금)는 매출이 아니므로 제외. 미입금·취소 금액 제외, 환불 차감. 현금 축(부가세 포함)은 아래 입금 총액입니다');
       $kpiCard(url('contracts.index'), '이번 달 입금 총액(VAT 포함)', moneyCell($kpi['paid']['value']), 'ok', $kpi['paid']['delta'], '전월 대비 · 입금일 기준 · 환불 차감',
-        '이번 달 입금 완료된 금액 합(환불 차감) · 입금일 기준 · 현금 기준 · VAT 포함 — 확정 매출(입금 기준)과 동일 산식');
+        '이번 달 실제 입금된 현금 합(환불 차감) · 입금일 기준 · VAT 포함 — 확정 매출(공급가액)은 여기서 부가세를 제외한 값입니다');
       $kpiCard(url('reports.index'), '이번 달 원가 총액', moneyCell($kpi['cost']['value']), 'warn', $kpi['cost']['delta'], '전월 대비 · 발생일 기준',
         '확정된 실제 비용(costs) 합 · 지출 발생일 기준 · 입력 금액 그대로(부가세 구분 없음)');
       $kpiCard(url('reports.index'), '이번 달 실제 순이익', moneyCell($kpi['profit']['value']), $kpi['profit']['value'] < 0 ? 'danger' : 'ok', null,
         $kpi['profit']['value'] < 0 ? '적자 주의 · 입금 − 지출' : '입금 − 지출 기준',
-        '이번 달 확정 매출(입금 기준) − 이번 달 확정 지출(발생일 기준) — 프로젝트 완료 여부와 무관(R11)');
+        '이번 달 확정 매출(공급가액·VAT 제외) − 이번 달 확정 지출(발생일 기준) — 프로젝트 완료 여부와 무관');
       ?>
     </div>
     <div class="dash-sub">
@@ -218,7 +218,7 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
 
   <!-- ⑤ 재무 현황·추이 (미수금 흡수, 전체 폭) -->
   <div class="section">
-    <div class="section-head"><div class="st"><h2>재무 현황·추이</h2><span class="section-desc">이번 달 · 손익·현금 모두 입금 기준(VAT 포함) — R11 통일</span></div>
+    <div class="section-head"><div class="st"><h2>재무 현황·추이</h2><span class="section-desc">이번 달 · 확정 매출·순이익 = 공급가액(VAT 제외) · 입금 총액 = 현금(VAT 포함)</span></div>
       <a class="section-link" href="<?= e(url('reports.index')) ?>">상세 리포트 →</a></div>
     <div class="card pad">
       <div class="fin-flex">
@@ -227,15 +227,15 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
             <a class="kv" href="<?= e(url('contracts.index')) ?>" title="이번 달 계약일 기준 공급가액 합 · 취소/파기 제외 · VAT 제외"><span class="kv-label">이번 달 수주액(공급가액)</span><span class="kv-value mono"><?= e(moneyShort($finance['contracted'])) ?></span></a>
             <a class="kv" href="<?= e(url('projects.index')) ?>" title="진행·착공 전 공사의 공급가액 합 · 현재 · VAT 제외"><span class="kv-label">예상 매출(공급가액)</span><span class="kv-value mono"><?= e(moneyShort($finance['expected_rev'])) ?></span></a>
             <a class="kv" href="<?= e(url('reports.index')) ?>" title="이번 달 확정 지출(costs) 합 · 지출 발생일 기준 — 상단 '이번 달 원가 총액'과 동일 산식(R11 통일)"><span class="kv-label">확정 지출(발생일)</span><span class="kv-value mono"><?= e(moneyShort($finance['actual_cost'])) ?></span></a>
-            <a class="kv" href="<?= e(url('reports.index')) ?>" title="(확정 매출(입금 기준) − 확정 지출) ÷ 확정 매출 × 100 · 이번 달"><span class="kv-label">확정 순이익률</span><span class="kv-value mono"><?= e(pct($finance['profit_rate'])) ?></span></a>
+            <a class="kv" href="<?= e(url('reports.index')) ?>" title="(확정 매출(공급가액) − 확정 지출) ÷ 확정 매출 × 100 · 이번 달"><span class="kv-label">확정 순이익률</span><span class="kv-value mono"><?= e(pct($finance['profit_rate'])) ?></span></a>
             <a class="kv" href="<?= e(url('contracts.index')) ?>" title="Σ 계약별 max(0, 계약 총액 − 순입금) + Σ 예외 프로젝트 max(0, 예정 금액 − 직접 입금) · 현재(VAT 포함)"><span class="kv-label">미수금(VAT 포함)</span><span class="kv-value mono <?= $finance['receivable'] > 0 ? 'text-warn' : '' ?>" title="<?= e(number_format($finance['receivable']) . '원') ?>"><?= e(moneyShort($finance['receivable'])) ?><?php if ($finance['receivable_count'] > 0): ?> <span class="u"><?= number_format($finance['receivable_count']) ?>건</span><?php endif; ?></span></a>
           </div>
-          <div class="section-desc mb-14">확정 매출은 <b>실제 입금된 금액(순입금 = 입금 − 환불, VAT 포함)</b>만 반영합니다(R11 통일 산식 — 예외 프로젝트 직접 입금 포함). 미입금·대기 금액은 제외되고, 환불·입금 취소는 즉시 차감됩니다.</div>
-          <?php View::partial('partials/goal', ['g' => $g, 'title' => '이번 달 확정 매출(입금 기준) 목표 달성률']); ?>
+          <div class="section-desc mb-14">확정 매출은 <b>실제 입금된 금액의 공급가액(부가세 제외)</b>입니다 — 입금 시점 인식(예외 프로젝트 직접 입금 포함). 입금 총액은 부가세 포함 현금이라 확정 매출보다 부가세만큼 큽니다. 미입금·대기 제외, 환불·취소 즉시 차감.</div>
+          <?php View::partial('partials/goal', ['g' => $g, 'title' => '이번 달 확정 매출(공급가액) 목표 달성률']); ?>
         </div>
         <div>
           <div class="chart-box" data-chart="trend"><canvas id="chartTrend"></canvas></div>
-          <div class="section-desc tc mt-8">최근 6개월 확정 매출(입금 기준·막대)·확정 순이익(선, 매출 − 지출) · VAT 포함</div>
+          <div class="section-desc tc mt-8">최근 6개월 확정 매출(공급가액·막대)·확정 순이익(선, 매출 − 지출) · VAT 제외</div>
         </div>
       </div>
     </div>

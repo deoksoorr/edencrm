@@ -83,22 +83,23 @@
     <?php endif; ?>
 
     <?php if ($canFinance): ?>
-      <?php // R11: 손익은 입금 기준(누적 순입금 − 지출 총액) — 상단 요약·'입금·정산' 탭과 동일 산식
+      <?php // R12: 확정 매출 = 공급가액(VAT 제외, 입금 시점). 순이익 = 확정 매출 − 지출. 현금(누적 입금)은 '입금·정산' 탭.
         $ovCostEntered = !empty($costSub['has_entries']);
-        $ovRealProfit = (int) $paySummary['paid'] - (int) $calc['actual_cost'];
-        $ovRealRate = (int) $paySummary['paid'] > 0 ? round($ovRealProfit / (int) $paySummary['paid'] * 100, 1) : null; ?>
+        $ovConfirmedRev = AccountingService::projectConfirmedRevenue($p);
+        $ovRealProfit = $ovConfirmedRev - (int) $calc['actual_cost'];
+        $ovRealRate = $ovConfirmedRev > 0 ? round($ovRealProfit / $ovConfirmedRev * 100, 1) : null; ?>
       <div class="section-head mt-14"><div class="st"><h2>지출·손익 요약</h2><span class="section-desc">상세는 '지출'·'입금·정산' 탭</span></div></div>
       <div class="kv-row">
-        <div class="kv" title="누적 순입금(입금 − 환불) — 실제 입금된 금액만 확정 매출로 인식(R11)">
-          <div class="kv-label">누적 입금(순)</div>
-          <div class="kv-value"><?= moneyCell($paySummary['paid']) ?></div></div>
+        <div class="kv" title="확정 매출(공급가액·VAT 제외) = 누적 순입금의 공급가 부분 — 부가세 포함 현금은 '입금·정산' 탭(R12)">
+          <div class="kv-label">확정 매출(공급가)</div>
+          <div class="kv-value"><?= moneyCell($ovConfirmedRev) ?></div></div>
         <div class="kv" title="지출 총액 = 확정 상태 실제 비용 합계 (임시 저장·확인 대기·취소 제외) — 회계 지표의 '원가 총액'과 동일 값">
           <div class="kv-label">지출 총액</div>
           <div class="kv-value"><?= $ovCostEntered ? moneyCell($calc['actual_cost']) : '<span class="muted">미입력</span>' ?></div></div>
-        <div class="kv" title="실제 순이익 = 누적 입금(순) − 지출 총액<?= $ovCostEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
+        <div class="kv" title="실제 순이익 = 확정 매출(공급가액) − 지출 총액<?= $ovCostEntered ? '' : ' — 지출 미입력 시 계산하지 않음' ?>">
           <div class="kv-label">실제 순이익</div>
           <div class="kv-value <?= $ovCostEntered && $ovRealProfit < 0 ? 'text-danger' : '' ?>"><?= $ovCostEntered ? moneyCell($ovRealProfit) : '<span class="muted">-</span>' ?></div></div>
-        <div class="kv" title="실제 순이익률 = 실제 순이익 ÷ 누적 입금(순) × 100">
+        <div class="kv" title="실제 순이익률 = 실제 순이익 ÷ 확정 매출(공급가액) × 100">
           <div class="kv-label">실제 순이익률</div>
           <div class="kv-value"><?= $ovCostEntered ? pct($ovRealRate) : '-' ?></div></div>
         <?php if ($calc['estimated_cost'] > 0): ?>

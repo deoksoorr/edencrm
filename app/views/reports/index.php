@@ -58,11 +58,11 @@
       <div class="kpi-label">미수금</div>
       <div class="kpi-value" id="stReceivable">-</div>
     </div>
-    <div class="kpi" title="확정 매출 = 실제 입금된 금액(순입금 = 입금 − 환불, 예외 프로젝트 직접 입금 포함) · 입금일 기준 · VAT 포함(R11 통일)">
-      <div class="kpi-label">확정 매출(입금 기준) 목표달성률</div>
+    <div class="kpi" title="확정 매출 = 순입금의 공급가액(부가세 제외) · 입금 시점 인식 · 예외 프로젝트 직접 입금 포함(R12)">
+      <div class="kpi-label">확정 매출(공급가액) 목표달성률</div>
       <div class="kpi-value" id="stRevenueRate">-</div>
     </div>
-    <div class="kpi" title="확정 순이익 = 확정 매출(입금 기준) − 확정 지출(발생일 기준)">
+    <div class="kpi" title="확정 순이익 = 확정 매출(공급가액·VAT 제외) − 확정 지출(발생일 기준)">
       <div class="kpi-label">확정 순이익 목표달성률</div>
       <div class="kpi-value" id="stProfitRate">-</div>
     </div>
@@ -70,7 +70,7 @@
 
   <div class="grid-2 mb-14">
     <div class="card pad">
-      <div class="section-head"><div class="st"><h2>월별 확정 매출(입금 기준)·확정 순이익 추이</h2><span class="section-desc" title="확정 매출=순입금(입금월 귀속, 예외 포함) · 확정 순이익=매출 − 확정 지출(발생월) · VAT 포함(R11)">최근 6개월 · 입금월 기준</span></div></div>
+      <div class="section-head"><div class="st"><h2>월별 확정 매출(공급가액)·확정 순이익 추이</h2><span class="section-desc" title="확정 매출=순입금의 공급가액(입금월 귀속, 예외 포함) · 확정 순이익=매출 − 확정 지출(발생월) · VAT 제외(R12)">최근 6개월 · 입금월 기준</span></div></div>
       <div class="chart-box"><canvas id="chartMonthly"></canvas></div>
     </div>
     <div class="card pad">
