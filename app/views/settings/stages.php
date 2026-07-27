@@ -194,7 +194,6 @@ $isCommonTab = $processType === 'common';
             <?php else: ?>
               <span class="muted nowrap stage-fixed-meta" title="공통 예약 — 유형·그룹 변경 불가">공통 · <?= e(['waiting' => '대기중', 'defect' => '하자보수', 'complete' => '종결'][$s['stage_group'] ?? ''] ?? ($s['stage_group'] ?? '-')) ?></span>
             <?php endif; ?>
-            <label class="check"><input type="checkbox" name="requires_confirm" value="1" <?= $s['requires_confirm'] ? 'checked' : '' ?>> 이동 시 확인 필요</label>
             <input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>">
             <input type="text" name="description" class="input stage-desc-input" placeholder="설명(선택)" maxlength="255" value="<?= e($s['description'] ?? '') ?>">
             <button type="submit" class="btn btn-outline btn-sm">저장</button>
@@ -229,7 +228,6 @@ $isCommonTab = $processType === 'common';
             <?php endforeach; ?>
           </select>
           <label class="check"><input type="checkbox" name="is_active" value="1" checked> 사용</label>
-          <label class="check"><input type="checkbox" name="requires_confirm" value="1"> 이동 시 확인 필요</label>
           <input type="text" name="color" class="input stage-color-input" placeholder="#색상">
           <input type="text" name="description" class="input stage-desc-input" placeholder="설명(선택)" maxlength="255">
           <button type="submit" class="btn btn-primary btn-sm">+ 추가</button>

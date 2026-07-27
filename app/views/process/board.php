@@ -14,7 +14,7 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
   <div class="page-head">
     <div>
       <div class="page-title">공정 보드</div>
-      <div class="page-sub"><?= e($boardTypeLabel) ?> 보드 <?= number_format($totalCount) ?>건(유형 미지정 포함) · 진행 예정·진행 중·일시 중단·하자보수 + 완료·정산(종결 컬럼, 이동 불가) 표시 · 취소·파기 제외<?= $canMove ? '' : ' · 이동 권한이 없어 조회만 가능합니다.' ?></div>
+      <div class="page-sub"><?= e($boardTypeLabel) ?> 보드 <?= number_format($totalCount) ?>건(유형 미지정 포함) · 진행 예정·진행 중·일시 중단·하자보수 + 완료·정산 표시(이동 시 자동 재개) · 취소·파기 제외<?= $canMove ? '' : ' · 이동 권한이 없어 조회만 가능합니다.' ?></div>
     </div>
     <?php if (can('settings.manage')): ?>
       <div class="page-actions">
@@ -40,19 +40,15 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
       <div class="kpi-label">대기중</div>
       <div class="kpi-value"><span data-summary="waiting"><?= number_format($summary["waiting"]) ?></span><span class="u">건</span></div>
     </div>
-    <div class="kpi" title="카드가 1건 이상 있는 실공정(1~18단계) 수">
+    <div class="kpi" title="카드가 1건 이상 있는 실공정(1~<?= (int) $positions['total'] ?>단계) 수 — 공정 마스터 기준">
       <div class="kpi-label">진행 공정 수</div>
       <div class="kpi-value"><span data-summary="stages"><?= number_format($summary["stages"]) ?></span><span class="u">개</span></div>
-    </div>
-    <div class="kpi accent-warn" title="진행 중 프로젝트가 확인 필요 공정(🔒)에 있는 수 — 대시보드 '검수 대기'와 동일 정의">
-      <div class="kpi-label">검수 대기</div>
-      <div class="kpi-value"><span data-summary="inspect"><?= number_format($summary["inspect"]) ?></span><span class="u">건</span></div>
     </div>
     <div class="kpi accent-danger" title="준공예정일 경과 + 준공 미처리 — 대시보드·프로젝트 목록 '지연'과 동일 정의">
       <div class="kpi-label">지연 프로젝트</div>
       <div class="kpi-value"><span data-summary="delayed"><?= number_format($summary["delayed"]) ?></span><span class="u">건</span></div>
     </div>
-    <div class="kpi accent-ok" title="완료·정산 프로젝트 — 종결(전체완료) 컬럼에 노출되며 이동은 불가(상태 재개 후 이동 가능)">
+    <div class="kpi accent-ok" title="완료·정산 프로젝트 — 종결(전체완료) 컬럼에 노출되며, 다른 공정으로 이동하면 '진행 중'으로 자동 재개됩니다">
       <div class="kpi-label">완료·정산</div>
       <div class="kpi-value"><span data-summary="done"><?= number_format($summary["done"]) ?></span><span class="u">건</span></div>
     </div>
@@ -78,9 +74,23 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
       <?php
         $groupCount = 0;
         foreach ($cols as $stage) { $groupCount += count($byStage[(int) $stage['id']] ?? []); }
-        $rangeLabel = $gkey === 'waiting' ? '착공 전 대기' : (count($cols) > 1
-            ? (int) $cols[0]['sort_order'] . '~' . (int) $cols[count($cols) - 1]['sort_order'] . '단계'
-            : (int) $cols[0]['sort_order'] . '단계');
+        // R11: 그룹 범위 = 위치 번호(유형별 1..N, 공정 마스터 기준 동적) — sort_order 원값 표시 금지.
+        //      그룹 내 위치가 비연속(사이에 다른 그룹 공정 존재)이면 범위 대신 개수로 표기.
+        $gPos = [];
+        foreach ($cols as $stage) {
+            $gPos[] = (int) ($positions['pos'][(int) $stage['id']] ?? 0);
+        }
+        sort($gPos);
+        $contiguous = !$gPos || ($gPos[count($gPos) - 1] - $gPos[0] === count($gPos) - 1);
+        if ($gkey === 'waiting') {
+            $rangeLabel = '착공 전 대기';
+        } elseif (!$contiguous) {
+            $rangeLabel = count($gPos) . '개 공정';
+        } elseif (count($gPos) > 1) {
+            $rangeLabel = $gPos[0] . '~' . $gPos[count($gPos) - 1] . '단계';
+        } else {
+            $rangeLabel = ($gPos[0] ?? 0) . '단계';
+        }
       ?>
       <section class="pb-group" data-group="<?= e($gkey) ?>" style="--gc:<?= e($g['color']) ?>">
         <div class="pb-group-head">
@@ -96,21 +106,20 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
                 <span class="kanban-caret" title="접기/펼치기">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </span>
-                <span><?= e($stage['name']) ?></span>
-                <?php if ($stage['requires_confirm']): ?><span title="이동 시 확인 필요" class="muted">🔒</span><?php endif; ?>
+                <span><?php $stagePos = (int) ($positions['pos'][(int) $stage['id']] ?? 0); ?><?= $stagePos > 0 ? $stagePos . '. ' : '' ?><?= e($stage['name']) ?></span>
                 <span class="kanban-count"><?= count($list) ?></span>
               </div>
             </div>
-            <div class="kanban-list" data-stage-id="<?= (int) $stage['id'] ?>" data-requires-confirm="<?= (int) $stage['requires_confirm'] ?>">
+            <div class="kanban-list" data-stage-id="<?= (int) $stage['id'] ?>">
               <?php if (!$list): ?><div class="kanban-empty">프로젝트 없음</div><?php endif; ?>
               <?php foreach ($list as $p):
                 $pid = (int) $p['id'];
                 $daysLeft = !empty($p['end_date']) ? (int) floor((strtotime($p['end_date']) - strtotime($today)) / 86400) : null;
                 // 지연 = 준공예정 경과 + 준공 미처리(대시보드 delayedCond 와 동일 기준)
-                $isDone = in_array($p['status'], ['completed', 'settled'], true); // R7-F1: 노출 전용 카드
+                $isDone = in_array($p['status'], ['completed', 'settled'], true); // R11: 완료·정산 카드도 이동 가능(자동 재개)
                 $isDelayed = !$isDone && $daysLeft !== null && $daysLeft < 0 && empty($p['actual_end_date']);
                 $isWarn = !$isDone && !$isDelayed && $daysLeft !== null && $daysLeft <= 7;
-                $statusCls = $isDone ? 'st-won locked pb-done' : ($isDelayed ? 'st-delayed' : ($isWarn ? 'st-warn' : 'st-normal'));
+                $statusCls = $isDone ? 'st-won pb-done' : ($isDelayed ? 'st-delayed' : ($isWarn ? 'st-warn' : 'st-normal'));
                 $ns = $nextSchedules[$pid] ?? null;
                 $isWaitingCol = (int) $stage['id'] === (int) $waitingId;
               ?>

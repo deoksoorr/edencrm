@@ -201,16 +201,13 @@ $g = $finance['goal']; // 목표 진행바는 partials/goal 이 렌더
         <a class="chip-stat <?= $board['waiting'] > 0 ? 'warn' : 'zero' ?>" href="<?= e(url('process.board')) ?>" title="공정 보드 '대기중' 컬럼의 공사 수 · 진행 예정 포함 — 보드 요약과 동일 기준">
           <span class="cn"><?= number_format($board['waiting']) ?></span><span>대기중</span>
         </a>
-        <a class="chip-stat <?= $board['doing'] === 0 ? 'zero' : '' ?>" href="<?= e(url('process.board')) ?>" title="진행 중 공사 중 대기중·검수 외 공정 단계에 있는 공사 수">
+        <a class="chip-stat <?= $board['doing'] === 0 ? 'zero' : '' ?>" href="<?= e(url('process.board')) ?>" title="진행 중 공사 중 대기중 외 공정 단계에 있는 공사 수">
           <span class="cn"><?= number_format($board['doing']) ?></span><span>공정 진행</span>
-        </a>
-        <a class="chip-stat <?= $board['inspect'] > 0 ? 'warn' : 'zero' ?>" href="<?= e(url('process.board')) ?>" title="진행 중 공사 중 확인(검수) 필요 공정 단계에 있는 공사 수 — 보드 '검수 대기'와 동일 기준">
-          <span class="cn"><?= number_format($board['inspect']) ?></span><span>검수 대기</span>
         </a>
       </div>
       <div class="section-title">프로젝트 상태 <span class="basis-note">현재 · 지연은 기한 경과·미준공</span></div>
       <div class="chip-grid">
-        <?php foreach ($process as $c): if ($c['label'] === '검수 대기') { continue; } ?>
+        <?php foreach ($process as $c): ?>
           <a class="chip-stat <?= ($c['n'] > 0 && !empty($c['sev'])) ? e($c['sev']) : ($c['n'] === 0 ? 'zero' : '') ?>" href="<?= e(url($c['route'], $c['params'])) ?>">
             <span class="cn"><?= number_format($c['n']) ?></span><span><?= e($c['label']) ?></span>
           </a>

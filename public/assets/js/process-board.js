@@ -116,35 +116,10 @@
         return;
       }
 
-      var requiresConfirm = toList.dataset.requiresConfirm === '1';
-
       (async function () {
         try {
-          if (requiresConfirm) {
-            var ok = await EDEN.confirm('확인이 필요한 공정 단계입니다. 이동하시겠습니까?', { okLabel: '이동' });
-            if (!ok) {
-              revertCard(item, fromList, oldIndex);
-              return;
-            }
-          }
+          // R11: 잠금·확인·전체완료 게이트 제거 — 권한(process.move)만 있으면 자유 이동
           var data = await api('process.move', { project_id: projectId, to_stage_id: toStageId, board_type: boardType });
-          // 전체완료 게이트(R4): 미충족 항목 경고 → 확인+사유 입력 시에만 예외 진행(차단 아님)
-          if (data && data.gate && data.gate.warnings) {
-            var goOn = await EDEN.confirm(
-              '전체완료 조건 미충족:<br> · ' + data.gate.warnings.map(escapeHtml).join('<br> · ')
-              + '<br><br>그래도 전체완료로 이동하시겠습니까? (예외 진행 사유 입력 필요)',
-              { okLabel: '예외 진행' });
-            var gateReason = goOn ? window.prompt('전체완료 예외 진행 사유를 입력하세요. (이력에 기록됩니다)', '') : null;
-            if (!goOn || gateReason === null || !gateReason.trim()) {
-              toast('전체완료 이동을 취소했습니다.', 'warn');
-              revertCard(item, fromList, oldIndex);
-              return;
-            }
-            data = await api('process.move', {
-              project_id: projectId, to_stage_id: toStageId, board_type: boardType,
-              gate_confirm: 1, gate_reason: gateReason.trim()
-            });
-          }
           if (data && data.skip_warn) {
             toast('공정 단계를 건너뛰었습니다. 필요 시 확인하세요.', 'warn');
           } else {
@@ -158,12 +133,17 @@
             enteredEl.textContent = ('0' + (d.getMonth() + 1)).slice(-2) + '.' + ('0' + d.getDate()).slice(-2);
           }
           if (data && typeof data.progress !== 'undefined') updateCardProgress(item, data.progress);
-          // R10: 카드 상태·잠금 동기화 — 전체완료 자동 완료 시 즉시 잠금(.locked → 재드래그 차단, R7-F1 #4 필터와 일치)
+          // R11: 카드 상태 동기화 — 전체완료 자동 완료 시 완료 스타일 적용, 재개 시 일반 스타일 복귀(잠금 없음)
           if (data && data.status) {
             item.dataset.status = data.status;
             if (data.is_done) {
               item.classList.remove('st-delayed', 'st-warn', 'st-normal');
-              item.classList.add('st-won', 'locked', 'pb-done');
+              item.classList.add('st-won', 'pb-done');
+            } else {
+              item.classList.remove('st-won', 'locked', 'pb-done');
+              if (!item.classList.contains('st-delayed') && !item.classList.contains('st-warn')) {
+                item.classList.add('st-normal');
+              }
             }
           }
           if (data && data.summary) updateSummary(data.summary);
@@ -182,8 +162,6 @@
           animation: 150,
           ghostClass: 'sortable-ghost',
           chosenClass: 'sortable-chosen',
-          filter: '.locked',
-          preventOnFilter: true,
           onStart: function () { lastDragAt = Date.now(); },
           onEnd: handleDrop,
         });

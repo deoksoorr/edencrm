@@ -260,8 +260,8 @@ class StatusService
                 );
             }
         }
-        // 완료 → 재개: 확정 집계(준공일 기준)에서 빠지도록 준공일 해제
-        if ($from === 'completed' && $to === 'in_progress') {
+        // 완료·정산 → 재개: 준공일 기준 집계(완료 건수 등)에서 빠지도록 준공일 해제 (R11: settled 재개 포함)
+        if (in_array($from, ['completed', 'settled'], true) && $to === 'in_progress') {
             $data['actual_end_date'] = null;
         }
         Db::update('projects', $data, 'id = :id', [':id' => (int) $project['id']]);

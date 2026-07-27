@@ -166,6 +166,43 @@ class Stages
         return $cache[$type] = $groups;
     }
 
+    /**
+     * R11: 유형별 공정 위치 번호 — 활성 단계(유형+공통)를 sort_order·id 순으로 나열해
+     * '대기중'(waiting)=0, 실공정 1..N 의 표시 번호를 부여한다.
+     * sort_order 원값(구멍·유형별 오프셋·중복 가능)을 화면에 노출하지 않기 위한 단일 출처 —
+     * 보드 그룹 범위 라벨·진행률 분모·단계 건너뜀 판정이 모두 이 번호를 쓴다.
+     * 새 공정을 추가·정렬·비활성화해도 재조회 시 자동 재부여(하드코딩 금지).
+     * @return array{pos: array<int,int>, total: int} pos=stage_id⇒표시 번호, total=실공정 수(N)
+     */
+    public static function processStagePositions(?string $type = 'painting'): array
+    {
+        static $cache = [];
+        $type = self::normalizeConstructionType($type);
+        if (isset($cache[$type])) {
+            return $cache[$type];
+        }
+        $pos = [];
+        $n = 0;
+        try {
+            $rows = Db::all(
+                "SELECT id, stage_key FROM process_stages
+                 WHERE (process_type = :t OR process_type = 'common') AND is_active = 1
+                 ORDER BY sort_order, id",
+                [':t' => $type]
+            );
+            foreach ($rows as $r) {
+                if ($r['stage_key'] === 'waiting') {
+                    $pos[(int) $r['id']] = 0;
+                    continue;
+                }
+                $pos[(int) $r['id']] = ++$n;
+            }
+        } catch (\Throwable $e) {
+            // DB 실패 시 빈 매핑 — 호출부는 pos 미존재 시 0 취급
+        }
+        return $cache[$type] = ['pos' => $pos, 'total' => max(1, $n)];
+    }
+
     /** 상단 그룹 필터 탭 — 구성(그룹 묶음)은 유형과 무관하게 동일(시그니처만 유형 전파, R8-A 호환). */
     public static function processTabs(?string $type = 'painting'): array
     {

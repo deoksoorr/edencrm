@@ -188,7 +188,7 @@ class SettingsController
             $data['is_lost'] = Util::postInt('is_lost', 0) ? 1 : 0;
             $data['color']   = Util::nullIfEmpty(Util::postStr('color', ''));
         } else {
-            $data['requires_confirm'] = Util::postInt('requires_confirm', 0) ? 1 : 0;
+            // R11: 공정 이동 잠금(requires_confirm) 기능 제거 — 저장하지 않음(컬럼은 이력 보존용으로만 잔존)
             $data['color']            = Util::nullIfEmpty(Util::postStr('color', ''));
             $data['description']      = Util::nullIfEmpty(mb_substr(Util::postStr('description', ''), 0, 255));
 

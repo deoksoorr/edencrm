@@ -122,21 +122,17 @@ class ProcessController
         }
         unset($st);
 
-        // 상단 요약 — 대시보드와 동일 정의(delayedCond·검수 대기) 를 보드 모집단에서 계산
+        // 상단 요약 — 대시보드와 동일 정의(delayedCond)를 보드 모집단에서 계산 (R11: 검수 대기 제거)
         $waitingId = ProcessService::waitingStageId();
-        $confirmIds = [];
-        foreach ($stages as $st) {
-            // full_complete(전체완료)는 requires_confirm=1 이지만 종결 단계이므로 '검수 대기' 집계 제외(R4 T3)
-            if (!empty($st['requires_confirm']) && $st['stage_key'] !== 'full_complete') {
-                $confirmIds[(int) $st['id']] = true;
-            }
-        }
         // R10: 요약 정의 단일화 — 카드 이동 응답(move)과 동일 계산기를 사용해 화면·이동 후 숫자를 일치시킨다
-        $summary = self::computeSummary($projects, $confirmIds, $waitingId);
+        $summary = self::computeSummary($projects, $waitingId);
+        // R11: 유형별 위치 번호(1..N) — 그룹 범위 라벨·진행률 분모의 단일 출처(공정 마스터 기준 동적)
+        $positions = Stages::processStagePositions($boardType);
 
         View::render('process/board', [
             'title'         => '공정 보드',
             'stages'        => $stages,
+            'positions'     => $positions,
             'byStage'       => $byStage,
             'photos'        => $photos,
             'nextSchedules' => $nextSchedules,
@@ -172,8 +168,9 @@ class ProcessController
         if (!$project) {
             Response::error('프로젝트를 찾을 수 없습니다.', 404);
         }
-        if (in_array($project['status'], ['completed', 'settled', 'cancelled', 'terminated'], true)) {
-            Response::error('완료·정산·취소·파기된 프로젝트는 공정을 이동할 수 없습니다.', 400);
+        // R11: 잠금 제거 — 완료·정산 카드도 자유 이동(이동 시 자동 재개). 취소·파기만 차단(보드 비노출 상태).
+        if (in_array($project['status'], ['cancelled', 'terminated'], true)) {
+            Response::error('취소·파기된 프로젝트는 공정을 이동할 수 없습니다.', 400);
         }
 
         $toStage = Db::one("SELECT * FROM process_stages WHERE id = :id", [':id' => $toStageId]);
@@ -204,59 +201,30 @@ class ProcessController
         }
         $fromStage = $fromStageId ? Db::one("SELECT * FROM process_stages WHERE id = :id", [':id' => $fromStageId]) : null;
 
-        // ── 전체완료(full_complete) 게이트(R4 T3) — 경고 후 진행(차단 아님).
-        //    미충족 항목(미완료 하자·미수금·확정 원가 0건·준공일 누락·최종 사진 없음)이 있으면
-        //    project.manage 권한자만 확인+사유 입력으로 예외 진행, 사유는 공정 이력 reason 에 기록.
-        //    미충족 항목이 없으면(하자 없는 프로젝트 포함) 준공검사·하자보수 등에서 직행 허용.
-        if ($toStage['stage_key'] === 'full_complete') {
-            $gateIssues = $this->fullCompleteGateIssues($project);
-            if ($gateIssues) {
-                if (!Rbac::can('project.manage')) {
-                    Response::error('전체완료 조건 미충족(' . implode(' · ', $gateIssues) . ') — 예외 진행은 프로젝트 관리 권한(project.manage)이 필요합니다.', 403);
-                }
-                if (Util::postStr('gate_confirm') !== '1') {
-                    // 1차 응답: 경고 목록 반환 → 클라이언트가 확인·사유 입력 후 gate_confirm=1 로 재요청
-                    Response::json([
-                        'project_id'  => $projectId,
-                        'to_stage_id' => $toStageId,
-                        'moved'       => false,
-                        'gate'        => ['warnings' => $gateIssues, 'reason_required' => true],
-                    ]);
-                }
-                $gateReason = trim(Util::postStr('gate_reason', ''));
-                if ($gateReason === '') {
-                    Response::error('전체완료 예외 진행 사유를 입력하세요.', 422);
-                }
-                $reason = mb_substr(trim(($reason !== null ? $reason . ' · ' : '')
-                    . '예외 완료: ' . $gateReason . ' [미충족: ' . implode(', ', $gateIssues) . ']'), 0, 255);
-            }
-        }
+        // R11: 위치 번호(유형별 1..N, 대기중 0) 단일 출처 — sort_order 원값(구멍·오프셋) 사용 금지.
+        $positions = Stages::processStagePositions($projType);
+        $toPos = $positions['pos'][$toStageId] ?? 0;
 
         $skipWarn = false;
         if ($fromStage) {
-            $diff = (int) $toStage['sort_order'] - (int) $fromStage['sort_order'];
-            if ($diff >= 2) {
+            $fromPos = $positions['pos'][$fromStageId] ?? 0;
+            if ($toPos - $fromPos >= 2) {
                 $skipWarn = true;
             }
-            // 준공검사(17)·하자보수(18) → 전체완료(19)는 권장 직행 흐름 — 건너뜀 경고 제외(R4 T3)
-            if ($toStage['stage_key'] === 'full_complete' && (int) $fromStage['sort_order'] >= 17) {
+            // 마무리(finish)·하자보수(defect) 그룹 → 전체완료는 권장 직행 흐름 — 건너뜀 경고 제외(그룹 기준, R11)
+            if ($toStage['stage_key'] === 'full_complete'
+                && in_array($fromStage['stage_group'] ?? '', ['finish', 'defect'], true)) {
                 $skipWarn = false;
             }
         }
 
-        // 공정 단계 이동 시 진행률 자동 산정(실공정 순서 비율 — 대기중 sort 0 은 0%).
-        // R8-A: 분모는 해당 공사 유형 집합(유형+공통, 활성) 내 MAX(sort_order).
-        $maxSort = (int) (Db::val(
-            "SELECT MAX(sort_order) FROM process_stages
-             WHERE (process_type = :t OR process_type = 'common') AND is_active = 1",
-            [':t' => $projType]
-        ) ?: 18);
-        $progress = max(0, min(100, (int) round((int) $toStage['sort_order'] / $maxSort * 100)));
+        // 진행률 자동 산정 = 위치 번호 ÷ 실공정 수(대기중 0%) — 유형별 독립, 새 공정 추가 시 자동 반영.
+        $progress = max(0, min(100, (int) round($toPos / $positions['total'] * 100)));
 
         // 공정 이동은 반드시 ProcessService 경유(직접 UPDATE 금지) — 수동 이동 is_auto=0,
         // process_entered_at 갱신으로 재진입 카드가 컬럼 최상단에 온다.
-        // T8 상태=공정 연동(대기/공정/완료): 공정 시작(대기중 이탈) → '진행 중',
-        // 종결(full_complete) → '완료' 자동 전환(StatusService 경유 — 준공일·잔금 예정일 훅·이력 포함).
+        // T8 상태=공정 연동: 공정 시작(대기중 이탈) → '진행 중', 종결(full_complete) → '완료' 자동 전환.
+        // R11: 완료·정산 카드를 실공정으로 되돌리면 '진행 중'으로 자동 재개(잠금 제거 — 이력·사유 기록).
         Db::transaction(function () use ($projectId, $toStageId, $reason, $progress, $toStage, $project) {
             ProcessService::moveStage($projectId, $toStageId, Auth::id(), $reason, false);
             Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
@@ -264,6 +232,10 @@ class ProcessController
                 && !in_array($project['status'], ['completed', 'settled'], true)) {
                 StatusService::applyProjectStatus($project, 'completed',
                     ['reason' => '공정 보드 종결(전체완료) 자동 완료']);
+            } elseif ($toStage['stage_key'] !== 'full_complete'
+                && in_array($project['status'], ['completed', 'settled'], true)) {
+                StatusService::applyProjectStatus($project, 'in_progress',
+                    ['reason' => '공정 보드 이동 재개(종결 해제)']);
             } elseif ($toStage['stage_key'] !== ProcessService::WAITING_KEY
                 && $toStage['stage_key'] !== 'full_complete'
                 && $project['status'] === 'preparing') {
@@ -287,7 +259,6 @@ class ProcessController
             'moved'            => true,
             'progress'         => $progress,
             'entered_at'       => date('Y-m-d H:i'),
-            'requires_confirm' => (bool) $toStage['requires_confirm'],
             'skip_warn'        => $skipWarn,
             'status'           => $after['status'] ?? $project['status'],
             'is_done'          => in_array($after['status'] ?? '', self::BOARD_DONE_STATUSES, true),
@@ -297,19 +268,19 @@ class ProcessController
 
     /**
      * 상단 요약 계산기(단일 정의) — board() 렌더와 move() 응답이 공유한다(R10).
+     * R11: '검수 대기'(requires_confirm) 지표 제거 — 공정 잠금·확인 기능 폐지.
      * @param array $projects 보드 모집단 행(status/process_stage_id/end_date/actual_end_date 필요)
-     * @param array<int,bool> $confirmIds 검수 대기 집계 대상 스테이지 id
      */
-    private static function computeSummary(array $projects, array $confirmIds, int $waitingId): array
+    private static function computeSummary(array $projects, int $waitingId): array
     {
         $today = date('Y-m-d');
-        $summary = ['total' => count($projects), 'active' => 0, 'waiting' => 0, 'stages' => 0, 'inspect' => 0, 'delayed' => 0, 'done' => 0];
+        $summary = ['total' => count($projects), 'active' => 0, 'waiting' => 0, 'stages' => 0, 'delayed' => 0, 'done' => 0];
         $stageSet = [];
         foreach ($projects as $p) {
             $sid = (int) $p['process_stage_id'];
             $isDone = in_array($p['status'], self::BOARD_DONE_STATUSES, true);
             if ($isDone) {
-                // 완료·정산 카드는 노출 전용 — '진행 공정 수'·대기중 집계에서 제외
+                // 완료·정산 카드는 '진행 공정 수'·대기중 집계에서 제외(이동 시 자동 재개되어 재집계)
                 $summary['done']++;
                 continue;
             }
@@ -320,9 +291,6 @@ class ProcessController
                 $summary['waiting']++;
             } else {
                 $stageSet[$sid] = true;
-            }
-            if ($p['status'] === 'in_progress' && isset($confirmIds[$sid])) {
-                $summary['inspect']++;
             }
             // 지연 = 준공예정 경과 + 준공 미처리(대시보드 delayedCond 와 동일 기준)
             if (!empty($p['end_date']) && $p['end_date'] < $today && empty($p['actual_end_date'])) {
@@ -345,17 +313,7 @@ class ProcessController
              WHERE p.deleted_at IS NULL AND p.status IN ($cardStatusIn) AND $typeCond AND $scopeSql",
             $params
         );
-        $confirmIds = [];
-        foreach (Db::all(
-            "SELECT id, stage_key, requires_confirm FROM process_stages
-             WHERE (process_type = :t OR process_type = 'common') AND is_active = 1",
-            [':t' => $boardType]
-        ) as $st) {
-            if (!empty($st['requires_confirm']) && $st['stage_key'] !== 'full_complete') {
-                $confirmIds[(int) $st['id']] = true;
-            }
-        }
-        return self::computeSummary($projects, $confirmIds, ProcessService::waitingStageId());
+        return self::computeSummary($projects, ProcessService::waitingStageId());
     }
 
     /** 프로젝트 공정 변경 이력 (JSON). */
@@ -431,46 +389,8 @@ class ProcessController
         Response::json(['ok' => true, 'construction_type' => $type, 'moved_to_waiting' => $moved]);
     }
 
-    // ── R4 T3: 전체완료 게이트 + 하자보수(warranty_repairs) CRUD ──
-
-    /**
-     * 전체완료 전환 게이트 미충족 항목 수집(경고용 — 차단 아님).
-     * 항목: 미완료 하자·미수금>0·확정 원가 0건·준공일(실제 준공일) NULL·최종 사진 없음.
-     */
-    private function fullCompleteGateIssues(array $project): array
-    {
-        $pid = (int) $project['id'];
-        $issues = [];
-
-        $openWr = (int) Db::val(
-            "SELECT COUNT(*) FROM warranty_repairs WHERE project_id = :p AND status <> 'done'", [':p' => $pid]);
-        if ($openWr > 0) {
-            $issues[] = "미완료 하자 {$openWr}건";
-        }
-        if (!empty($project['contract_id'])) {
-            // 미수금 = 계약 총액 − 순입금(payment−refund, paid) — AccountingService 단일 산식
-            $cid = (int) $project['contract_id'];
-            $ca = (int) Db::val("SELECT contract_amount FROM contracts WHERE id = :c AND deleted_at IS NULL", [':c' => $cid]);
-            $out = max(0, $ca - AccountingService::contractNetPaid($cid));
-            if ($out > 0) {
-                $issues[] = '미수금 ' . number_format($out) . '원';
-            }
-        }
-        $confirmedCosts = (int) Db::val(
-            "SELECT COUNT(*) FROM costs WHERE project_id = :p AND type = 'actual' AND cost_status = 'confirmed'", [':p' => $pid]);
-        if ($confirmedCosts === 0) {
-            $issues[] = '확정 원가 0건';
-        }
-        if (empty($project['actual_end_date'])) {
-            $issues[] = '준공일(실제 준공일) 미입력';
-        }
-        $photoCnt = (int) Db::val(
-            "SELECT COUNT(*) FROM project_files WHERE project_id = :p AND entity_type = 'project' AND mime LIKE 'image/%'", [':p' => $pid]);
-        if ($photoCnt === 0) {
-            $issues[] = '최종 사진 없음';
-        }
-        return $issues;
-    }
+    // ── R4 T3: 하자보수(warranty_repairs) CRUD ──
+    //    (전체완료 게이트는 R11 에서 제거 — 공정 이동 잠금·확인 기능 폐지, 미수금은 정산 상태 축이 관리)
 
     /** 하자보수 상태 enum(라벨은 뷰 공용). */
     public const WARRANTY_STATUSES = ['open' => '접수', 'in_progress' => '처리 중', 'done' => '완료'];

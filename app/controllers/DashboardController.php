@@ -197,18 +197,15 @@ class DashboardController
     }
 
     /**
-     * 공정 보드 요약(대기중/진행 공정/검수 대기) — projects.process_stage_id + process_stages 기준.
+     * 공정 보드 요약(대기중/진행 공정) — projects.process_stage_id + process_stages 기준.
      * 화면=보드 일치(acctverify): '대기중'은 공정 보드 대기중 컬럼과 동일 모집단
      * (preparing/in_progress/paused/warranty — ProcessController::BOARD_STATUSES 와 동일, 진행 예정 포함).
-     * '공정 진행'·'검수 대기'는 진행 중(in_progress) 공사 기준 — 보드 상단 '검수 대기'와 동일 정의.
+     * R11: '검수 대기'(requires_confirm) 지표 제거 — 공정 잠금·확인 기능 폐지.
      */
     private function processBoardCounts(): array
     {
         $rows = Db::all(
-            "SELECT CASE WHEN ps.stage_key='waiting' THEN 'waiting'
-                         WHEN ps.stage_key='full_complete' THEN 'doing'
-                         WHEN ps.requires_confirm=1 THEN 'inspect'
-                         ELSE 'doing' END AS bucket, COUNT(*) cnt
+            "SELECT CASE WHEN ps.stage_key='waiting' THEN 'waiting' ELSE 'doing' END AS bucket, COUNT(*) cnt
              FROM projects p JOIN process_stages ps ON ps.id=p.process_stage_id
              WHERE p.deleted_at IS NULL
                AND (p.status='in_progress'
@@ -219,7 +216,6 @@ class DashboardController
         return [
             'waiting' => (int) ($by['waiting'] ?? 0),
             'doing'   => (int) ($by['doing'] ?? 0),
-            'inspect' => (int) ($by['inspect'] ?? 0),
         ];
     }
 
@@ -373,7 +369,6 @@ class DashboardController
             'active'    => ['value' => $this->countProjects("status='in_progress'", $scope, $p)],
             'preparing' => ['value' => $this->countProjects("status='preparing'", $scope, $p)],
             'delayed'   => ['value' => $this->countProjects($this->delayedCond(), $scope, $p)],
-            'inspect'   => ['value' => $this->inspectionPending($uid)],
             'unassigned'=> ['value' => $this->unassignedProjects($uid)],
         ];
         if (Settings::enabled('feature_worklog')) {
@@ -451,7 +446,6 @@ class DashboardController
             'delayed'         => ['n' => $this->countProjects($this->delayedCond(), $pscope, $pparams), 'label' => '공정 지연 프로젝트', 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'],
             'receivable'      => ['n' => $this->receivableCount(), 'label' => '미수금 발생 건',  'route' => 'contracts.index', 'params' => [], 'sev' => 'warn'],
             'unassigned'      => ['n' => $this->unassignedProjects($uid), 'label' => '직원 미배정 공사', 'route' => 'projects.index', 'params' => ['assign' => 'none'], 'sev' => 'warn'],
-            'inspect'         => ['n' => $this->inspectionPending($uid), 'label' => '검수 대기',      'route' => 'process.board', 'params' => [], 'sev' => 'warn'],
         ];
         if (Settings::enabled('feature_worklog')) {
             $out['worklog'] = ['n' => $this->worklogMissing($uid), 'label' => '오늘 작업일지 미작성', 'route' => 'worklogs.index', 'params' => [], 'sev' => 'warn'];
@@ -542,7 +536,6 @@ class DashboardController
             ['label' => StatusService::SIMPLE_LABELS['working'], 'n' => $this->countProjects($in('working'), $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'in_progress']],
             ['label' => StatusService::SIMPLE_LABELS['done'],    'n' => $this->countProjects($in('done'), $scope, $p),    'route' => 'projects.index', 'params' => ['status' => 'completed']],
             ['label' => '지연',      'n' => $this->countProjects($this->delayedCond(), $scope, $p), 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'],
-            ['label' => '검수 대기', 'n' => $this->inspectionPending($uid), 'route' => 'process.board', 'params' => [], 'sev' => 'warn'],
             ['label' => '준공 임박', 'n' => $this->countProjects("status='in_progress' AND end_date IS NOT NULL AND end_date BETWEEN CURDATE() AND '$soon'", $scope, $p), 'route' => 'projects.index', 'params' => []],
         ];
     }
@@ -777,16 +770,6 @@ class DashboardController
         return (int) Db::val(
             "SELECT COUNT(*) FROM projects p WHERE p.deleted_at IS NULL AND p.status='in_progress'
                AND NOT EXISTS(SELECT 1 FROM work_logs w WHERE w.project_id=p.id AND w.work_date=CURDATE()) AND ($scope)", $p
-        );
-    }
-
-    private function inspectionPending(?int $uid): int
-    {
-        [$scope, $p] = $this->siteScope($uid);
-        return (int) Db::val(
-            "SELECT COUNT(*) FROM projects p JOIN process_stages ps ON ps.id=p.process_stage_id
-             WHERE p.deleted_at IS NULL AND p.status='in_progress' AND ps.requires_confirm=1
-               AND ps.stage_key<>'full_complete' AND ($scope)", $p
         );
     }
 
