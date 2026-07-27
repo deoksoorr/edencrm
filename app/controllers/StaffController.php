@@ -4,7 +4,7 @@
  */
 class StaffController
 {
-    /** 목록: 검색/부서/역할/재직상태 필터 + 페이지네이션. */
+    /** 목록: 검색/부서/역할/재직상태 필터 + 반기 실적 요약 3컬럼(R8-B) + 페이지네이션. */
     public function index(): void
     {
         $q      = Util::str('q');
@@ -12,6 +12,7 @@ class StaffController
         $roleId = Util::int('role_id', 0) ?: 0;
         $status = Util::str('status');
         $page   = max(1, Util::int('page', 1) ?: 1);
+        [$vy, $vh] = $this->halfParams();
 
         $where  = ['u.deleted_at IS NULL'];
         $params = [];
@@ -51,6 +52,26 @@ class StaffController
             $params
         );
 
+        // 반기 요약(현장 매출·순이익·보너스 지급) — performance.view_all 없으면
+        // 금액 데이터 자체를 조회·전달하지 않는다(백엔드 방어 — 화면은 '-' 표시).
+        $halfPerf  = null;
+        $bonusPaid = null;
+        if (Rbac::can('performance.view_all')) {
+            $range    = Util::halfRange($vy, $vh);
+            $halfPerf = AccountingService::employeeConfirmedByUser($range['from'], $range['to']); // GROUP BY user 배치(N+1 금지)
+            $bonusPaid = [];
+            foreach (Db::all(
+                "SELECT user_id, COALESCE(SUM(paid_amount),0) AS s FROM site_bonuses
+                 WHERE deleted_at IS NULL AND pay_status <> 'cancelled' AND year = :y AND half = :h
+                 GROUP BY user_id",
+                [':y' => $vy, ':h' => $vh]
+            ) as $b) {
+                $bonusPaid[(int) $b['user_id']] = (int) $b['s'];
+            }
+        }
+
+        load_controller('BonusController'); // yearOptions 재사용(연도 선택지 단일 출처)
+
         View::render('staff/index', [
             'title'       => '직원 관리',
             'rows'        => $rows,
@@ -61,10 +82,30 @@ class StaffController
             'status'      => $status,
             'departments' => Db::all('SELECT id, name FROM departments ORDER BY sort_order'),
             'roles'       => Db::all('SELECT id, role_key, name FROM roles ORDER BY id'),
+            'vy'          => $vy,
+            'vh'          => $vh,
+            'years'       => BonusController::yearOptions(),
+            'halfPerf'    => $halfPerf,
+            'bonusPaid'   => $bonusPaid,
         ]);
     }
 
-    /** 상세: 정보 + 담당 프로젝트 요약 + 성과 링크. */
+    /** GET year/half 파라미터(기본 현재 반기, 범위 검증). @return array{0:int,1:int} */
+    private function halfParams(): array
+    {
+        $cur = Util::currentHalf();
+        $vy  = Util::int('year', $cur['year']) ?: $cur['year'];
+        if ($vy < 2020 || $vy > 2100) {
+            $vy = $cur['year'];
+        }
+        $vh = Util::int('half', $cur['half']);
+        if (!in_array($vh, [1, 2], true)) {
+            $vh = $cur['half'];
+        }
+        return [$vy, $vh];
+    }
+
+    /** 상세: 정보 + 담당 프로젝트 요약 + 반기 실적 패널(본인 또는 performance.view_all) + 성과 링크. */
     public function show(): void
     {
         $id = Util::int('id', 0) ?: 0;
@@ -99,12 +140,73 @@ class StaffController
             $projectParams
         );
 
+        // 반기 실적 상세 패널 — 본인 또는 performance.view_all(Scope 패턴)만 조회·전달(백엔드 방어)
+        $canViewPerf = Scope::canViewUserPerformance((int) $id);
+        [$vy, $vh]   = $this->halfParams();
+        $siteRows    = [];
+        $bonuses     = [];
+        $years       = [];
+        if ($canViewPerf) {
+            $range = Util::halfRange($vy, $vh);
+            // (a) 현장별 실적: 해당 기간과 겹치는 배정 또는 프로젝트 계약일 기준.
+            //     기여율은 상관 서브쿼리 합(중복 배정 대비), 입금은 계약별 순입금(PAID_SUM_SQL 재사용).
+            $raw = Db::all(
+                "SELECT p.id, p.project_no, p.name, p.status, p.contract_amount, p.supply_amount,
+                        p.vat_amount, p.actual_cost, p.contract_date, p.actual_end_date,
+                        (SELECT COALESCE(SUM(pa2.contribution_pct),0) FROM project_assignments pa2
+                          WHERE pa2.project_id = p.id AND pa2.user_id = :pu) AS my_pct,
+                        " . AccountingService::PAID_SUM_SQL . " AS net_paid
+                 FROM projects p
+                 LEFT JOIN contracts c ON c.id = p.contract_id AND c.deleted_at IS NULL
+                 WHERE p.deleted_at IS NULL
+                   AND EXISTS (SELECT 1 FROM project_assignments pa
+                        WHERE pa.project_id = p.id AND pa.user_id = :eu
+                          AND ((pa.start_date IS NOT NULL AND pa.start_date <= :t1
+                                AND COALESCE(pa.end_date, '9999-12-31') >= :f1)
+                            OR (p.contract_date BETWEEN :f2 AND :t2)))
+                 ORDER BY p.contract_date DESC, p.id DESC",
+                [':pu' => $id, ':eu' => $id, ':f1' => $range['from'], ':t1' => $range['to'],
+                 ':f2' => $range['from'], ':t2' => $range['to']]
+            );
+            foreach ($raw as $p) {
+                $profit = AccountingService::projectActualProfit($p); // 공급가 − 실제원가(공통 산식)
+                $siteRows[] = [
+                    'id'          => (int) $p['id'],
+                    'project_no'  => $p['project_no'],
+                    'name'        => $p['name'],
+                    'status'      => $p['status'],
+                    'contract'    => (int) $p['contract_amount'],
+                    'net_paid'    => (int) $p['net_paid'],
+                    'actual_cost' => (int) $p['actual_cost'],
+                    'profit'      => $profit,
+                    'pct'         => (float) $p['my_pct'],
+                    'my_profit'   => AccountingService::contribution($profit, (float) $p['my_pct']),
+                    'done'        => in_array($p['status'], ['completed', 'settled'], true),
+                ];
+            }
+            // (b) 해당 반기 보너스 내역
+            $bonuses = Db::all(
+                "SELECT b.*, p.name AS project_name
+                 FROM site_bonuses b LEFT JOIN projects p ON p.id = b.project_id
+                 WHERE b.deleted_at IS NULL AND b.user_id = :u AND b.year = :y AND b.half = :h
+                 ORDER BY b.id DESC",
+                [':u' => $id, ':y' => $vy, ':h' => $vh]
+            );
+            load_controller('BonusController');
+            $years = BonusController::yearOptions();
+        }
+
         View::render('staff/show', [
             'title'        => '직원 상세',
             'staff'        => $staff,
             'projects'     => $projects,
             'projectCount' => $projectCount,
-            'canViewPerf'  => Scope::canViewUserPerformance((int) $id),
+            'canViewPerf'  => $canViewPerf,
+            'vy'           => $vy,
+            'vh'           => $vh,
+            'years'        => $years,
+            'siteRows'     => $siteRows,
+            'bonuses'      => $bonuses,
         ]);
     }
 
