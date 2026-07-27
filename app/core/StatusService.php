@@ -69,9 +69,11 @@ class StatusService
         'preparing'   => ['in_progress', 'paused', 'cancelled'],
         'in_progress' => ['paused', 'completed', 'terminated'],
         'paused'      => ['in_progress', 'cancelled', 'terminated'],
-        'completed'   => ['warranty', 'settled', 'in_progress'],
+        // R12: 프로젝트 상태 '정산 완료(settled)' 전환 제거 — 정산 완료는 '입금·정산' 탭의 정산 상태로 일원화(버튼 중복 해소).
+        //      공정/진행 축은 완료·하자보수까지만. 레거시 settled 프로젝트는 재개(in_progress)만 허용.
+        'completed'   => ['warranty', 'in_progress'],
         'warranty'    => ['completed'],
-        'settled'     => ['in_progress'], // R11: 정산 완료 후 재개 허용(사유 필수) — 공정 보드 자유 이동 정책
+        'settled'     => ['in_progress'], // (레거시 데이터) 정산 완료 상태 프로젝트의 재개 — 신규 진입 경로 없음
         'cancelled'   => ['preparing'],
         'terminated'  => ['in_progress'],
     ];

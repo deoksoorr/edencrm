@@ -454,17 +454,8 @@ class ProjectsController
             Response::error('이 전환은 처리 사유가 필요합니다.', 422);
         }
 
-        // R11: '정산 완료' 전환 가드 — 미수금 0 + 대기(pending) 건 0 일 때만(정산 상태 컨트롤과 동일 기준).
-        //      공정 종결·프로젝트 완료만으로 정산 완료가 되지 않는다.
-        if ($to === 'settled') {
-            $sum = AccountingService::projectPaySummary($project);
-            if ($sum['outstanding'] > 0) {
-                Response::error('미수금 ' . number_format($sum['outstanding']) . '원이 남아 있어 정산 완료 처리할 수 없습니다. 잔금 입금 또는 예정 금액 조정 후 처리하세요.', 422);
-            }
-            if ($sum['pendingCnt'] > 0) {
-                Response::error('대기 중(pending) 입금 예정 ' . $sum['pendingCnt'] . '건을 정리(입금 확정 또는 취소)한 뒤 정산 완료 처리하세요.', 422);
-            }
-        }
+        // R12: 프로젝트 상태 '정산 완료(settled)' 전환은 UI에서 제거(정산 완료는 '입금·정산' 탭으로 일원화).
+        //      혹시 직접 POST 되어도 projectTransitionAllowed 가 거부하므로 여기서 별도 처리하지 않는다.
 
         // 파기·취소 부가정보(브리프: 처리일/사유/처리자/진행 공정·발생 원가(표시)/청구·환불/정산 여부/후속 조치/메모)
         $detail = null;
@@ -497,13 +488,6 @@ class ProjectsController
                 'reason'         => $reason,
                 'detail'         => $detail,
             ]);
-            // R11: 프로젝트 상태 '정산 완료' = 정산 상태도 settled 동기(가드는 위에서 통과)
-            if ($to === 'settled' && ($project['settlement_status'] ?? '') !== 'settled') {
-                Db::update('projects', ['settlement_status' => 'settled'], 'id = :id', [':id' => (int) $project['id']]);
-                Audit::log('project_settlement_change', 'project', (int) $project['id'],
-                    ['settlement_status' => $project['settlement_status'] ?? null],
-                    ['settlement_status' => 'settled', 'action' => 'status_settled', 'changed_by' => Auth::id()]);
-            }
             if ($refund > 0 && $project['contract_id']) {
                 Db::insert('payments', [
                     'contract_id' => (int) $project['contract_id'],
