@@ -377,21 +377,27 @@ CREATE TABLE `contracts` (
 DROP TABLE IF EXISTS `payments`;
 CREATE TABLE `payments` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `contract_id` INT UNSIGNED NOT NULL,
+  `contract_id` INT UNSIGNED NULL COMMENT '계약 입금(일반) — project_id 와 택1(R11)',
+  `project_id` INT UNSIGNED NULL COMMENT '예외 프로젝트 직접 입금 — contract_id 와 택1(R11)',
   `pay_type` VARCHAR(20) NOT NULL COMMENT 'down/middle/balance/etc',
+  `method` VARCHAR(20) NULL COMMENT '입금 방식: transfer/cash/card/etc(R11)',
   `kind` ENUM('payment','refund') NOT NULL DEFAULT 'payment' COMMENT '입금 구분: payment=정상 입금 / refund=환불(양수 금액, 합산 시 차감)',
   `amount` DECIMAL(14,0) NOT NULL DEFAULT 0,
   `due_date` DATE NULL,
   `paid_date` DATE NULL,
   `status` VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/paid/cancelled — cancelled=취소(물리 삭제 대체, 집계 제외·기록 보존)',
   `memo` VARCHAR(255) NULL,
+  `payer_name` VARCHAR(100) NULL COMMENT '입금자명(R11)',
+  `created_by` INT UNSIGNED NULL COMMENT '등록자(로그인 사용자, R11)',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_payments_contract` (`contract_id`),
+  KEY `idx_payments_project` (`project_id`),
   KEY `idx_payments_status` (`status`),
   KEY `idx_payments_due_date` (`due_date`),
-  CONSTRAINT `fk_payments_contract` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE RESTRICT
+  CONSTRAINT `fk_payments_contract` FOREIGN KEY (`contract_id`) REFERENCES `contracts` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_payments_project` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 계약 파기 상세 — 단순 삭제 금지, 파기 정보 별도 보관.
@@ -470,6 +476,7 @@ CREATE TABLE `projects` (
   `work_type` VARCHAR(50) NULL,
   `construction_type` VARCHAR(20) NULL COMMENT 'painting(도장)/interior(인테리어)/NULL(미지정—관리자 1회 지정)',
   `contract_amount` DECIMAL(14,0) NOT NULL DEFAULT 0,
+  `expected_amount` DECIMAL(14,0) NULL COMMENT '정산 예정 금액 — 예외 프로젝트 직접 입력, 수정 시 audit 이력(R11)',
   `supply_amount` DECIMAL(14,0) NULL COMMENT '공급가액(VAT 제외, 매출 인식 기준)',
   `vat_amount` DECIMAL(14,0) NULL COMMENT '부가세(예수금)',
   `estimated_cost` DECIMAL(14,0) NOT NULL DEFAULT 0,
@@ -477,6 +484,7 @@ CREATE TABLE `projects` (
   `process_stage_id` INT UNSIGNED NULL,
   `process_entered_at` DATETIME NULL COMMENT '현재 공정 진입 일시(보드 정렬 기준, 수정일 정렬 금지)',
   `status` VARCHAR(20) NOT NULL DEFAULT 'preparing' COMMENT 'preparing(진행 예정)/in_progress(진행 중)/paused(일시 중단)/cancelled(취소=착공 전 철회)/terminated(파기=진행 중 계약관계 종료)/completed(완료)/warranty(하자보수)/settled(정산 완료)',
+  `settlement_status` VARCHAR(20) NOT NULL DEFAULT 'unsettled' COMMENT '정산 상태: unsettled/partial/settled/refunding/hold — 공정 상태와 분리(R11)',
   `contract_date` DATE NULL,
   `start_date` DATE NULL,
   `end_date` DATE NULL,
@@ -498,6 +506,7 @@ CREATE TABLE `projects` (
   KEY `idx_projects_process_stage` (`process_stage_id`),
   KEY `idx_projects_construction_type` (`construction_type`),
   KEY `idx_projects_status` (`status`),
+  KEY `idx_projects_settlement` (`settlement_status`),
   KEY `idx_projects_sales_user` (`sales_user_id`),
   KEY `idx_projects_site_manager` (`site_manager_id`),
   KEY `idx_projects_end_date` (`end_date`),
