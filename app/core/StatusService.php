@@ -92,7 +92,7 @@ class StatusService
     public const SETTLEMENT_LABELS = [
         'unsettled' => '미정산',
         'partial'   => '일부 정산',
-        'settled'   => '정산 완료',
+        'settled'   => '전액 입금 완료',
         'refunding' => '환불 진행',
         'hold'      => '정산 보류',
     ];
@@ -215,15 +215,23 @@ class StatusService
             return $current; // 수동 상태 유지(해제는 정산 상태 컨트롤에서만)
         }
         $sum = AccountingService::projectPaySummary($project);
-        if ($current === 'settled') {
-            if ($sum['outstanding'] > 0) {
-                Db::update('projects', ['settlement_status' => 'partial'], 'id = :id', [':id' => $projectId]);
+        // R13: 전액 입금(계약총액 설정·미수금 0·대기 0·입금>0) → '전액 입금 완료'(settled) 자동 승격.
+        if ($sum['expected_set'] && $sum['outstanding'] <= 0 && $sum['pendingCnt'] === 0 && $sum['paid'] > 0) {
+            if ($current !== 'settled') {
+                Db::update('projects', ['settlement_status' => 'settled'], 'id = :id', [':id' => $projectId]);
                 Audit::log('project_settlement_change', 'project', $projectId,
-                    ['settlement_status' => 'settled'],
-                    ['settlement_status' => 'partial', 'reason' => '미수금 재발생 자동 강등', 'outstanding' => $sum['outstanding']]);
-                return 'partial';
+                    ['settlement_status' => $current],
+                    ['settlement_status' => 'settled', 'reason' => '전액 입금 자동 완료']);
             }
             return 'settled';
+        }
+        // 전액이 아닌데 settled 였으면 → 미수금 재발생/대기 발생으로 partial 자동 강등(감사 기록).
+        if ($current === 'settled') {
+            Db::update('projects', ['settlement_status' => 'partial'], 'id = :id', [':id' => $projectId]);
+            Audit::log('project_settlement_change', 'project', $projectId,
+                ['settlement_status' => 'settled'],
+                ['settlement_status' => 'partial', 'reason' => '미수금 재발생 자동 강등', 'outstanding' => $sum['outstanding']]);
+            return 'partial';
         }
         $next = $sum['paid'] > 0 ? 'partial' : 'unsettled';
         if ($next !== $current) {
