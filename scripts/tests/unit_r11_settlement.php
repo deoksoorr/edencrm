@@ -13,6 +13,7 @@
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/lib.php';
 require_once APP_PATH . '/core/StatusService.php';
+require_once APP_PATH . '/core/BonusService.php';
 require_once APP_PATH . '/core/Audit.php';
 require_once APP_PATH . '/core/Auth.php';
 require_once APP_PATH . '/core/Stages.php';

@@ -55,6 +55,15 @@ try {
     t_int('confirmed_bonus 보존(100,000)', 100000, (int) $b['confirmed_bonus']);
     t_int('contribution_pct_at_calc 보존(100)', 100, (int) $b['contribution_pct_at_calc']);
 
+    // ── Task 5: recalcProjectSettlement 훅이 보너스까지 재계산 ──
+    // 위 $bp 는 환불 반영됐지만, 훅 경로로도 동일 결과가 나오는지 재입금으로 검증.
+    Db::insert('payments', ['project_id' => $bp, 'pay_type' => 'balance', 'amount' => 550000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    StatusService::recalcProjectSettlement($bp); // 훅 안에서 BonusService 호출되어야 함
+    $b2 = Db::one("SELECT * FROM site_bonuses WHERE id = :id", [':id' => $bid]);
+    t_int('훅 경로 재계산: 재입금 후 base = 1,000,000', 1000000, (int) $b2['base_amount']);
+    t_int('훅 경로 재계산: calc = 100,000', 100000, (int) $b2['calc_amount']);
+    t_int('훅 경로 재계산: contrib_profit(손실/적용순이익) = 1,000,000', 1000000, (int) $b2['contrib_profit']);
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

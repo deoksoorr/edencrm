@@ -215,6 +215,7 @@ class StatusService
             return $current; // 수동 상태 유지(해제는 정산 상태 컨트롤에서만)
         }
         $sum = AccountingService::projectPaySummary($project);
+        BonusService::recalcForProject($projectId); // R13: 입금 이벤트 단일 훅 — 보너스/손실 실시간 재계산
         // R13: 전액 입금(계약총액 설정·미수금 0·대기 0·입금>0) → '전액 입금 완료'(settled) 자동 승격.
         if ($sum['expected_set'] && $sum['outstanding'] <= 0 && $sum['pendingCnt'] === 0 && $sum['paid'] > 0) {
             if ($current !== 'settled') {
