@@ -1,0 +1,21 @@
+{
+    "at": "2026-07-28T22:48:56+00:00",
+    "counts": {
+        "users": 7,
+        "customers": 6,
+        "leads": 2,
+        "quotes": 4,
+        "quote_versions": 4,
+        "quote_items": 4,
+        "contracts": 5,
+        "payments": 13,
+        "projects": 11,
+        "costs": 4,
+        "schedules": 2,
+        "work_logs": 0,
+        "site_bonuses": 5,
+        "goals": 0,
+        "audit_logs": 377,
+        "project_assignments": 11
+    }
+}
