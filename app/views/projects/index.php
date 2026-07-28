@@ -41,7 +41,7 @@ function projSortArrow(string $key, string $sort, string $dir): string
         <?php /* r3-contractflow: 프로젝트는 계약 '진행' 전환 시 자동 생성 — 예외 생성은 최고 관리자 전용(라우트도 서버측 차단) */ ?>
         <?php if (is_role('super_admin')): ?>
           <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline"
-             title="프로젝트는 계약 '진행' 전환 시 자동 생성됩니다 — 계약 연결 없는 예외 프로젝트(하자보수·내부 작업)만 직접 생성">+ 예외 프로젝트 생성</a>
+             title="프로젝트는 계약 '진행' 전환 시 자동 생성됩니다 — 계약 연결 없는 예외 프로젝트(하자보수·내부 작업)만 직접 생성">+ 예외 프로젝트 등록</a>
         <?php endif; ?>
       <?php endif; ?>
     </div>
@@ -98,7 +98,7 @@ function projSortArrow(string $key, string $sort, string $dir): string
       <?php if (!$trash): ?>
         <div class="muted fs-13">프로젝트는 계약을 '진행(계약 진행)' 상태로 전환하면 자동 생성됩니다.</div>
         <?php if (is_role('super_admin')): ?>
-          <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline">예외 프로젝트 생성</a>
+          <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline">예외 프로젝트 등록</a>
         <?php endif; ?>
       <?php endif; ?>
     </div>

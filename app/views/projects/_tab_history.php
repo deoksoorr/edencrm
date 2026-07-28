@@ -7,7 +7,7 @@
 $histLimit = 5;
 $auditActionLabels = [
     'project_update'           => '프로젝트 수정',
-    'project_exception_create' => '예외 프로젝트 생성',
+    'project_exception_create' => '예외 프로젝트 등록',
     'project_exception_convert' => '예외→일반 전환',
     'project_auto_create'      => '프로젝트 자동 생성',
     'project_auto_create_failed' => '프로젝트 자동 생성 실패',

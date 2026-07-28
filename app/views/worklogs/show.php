@@ -8,7 +8,7 @@
       <div class="page-sub"><?= e($row['project_no']) ?> · <?= e($row['project_name']) ?></div>
     </div>
     <div class="page-actions">
-      <a class="btn btn-outline" href="<?= e(url('worklogs.index')) ?>">목록</a>
+      <a class="btn btn-outline" href="<?= e(url('worklogs.index')) ?>">목록으로</a>
       <?php if ($canConfirm && !$row['confirmed_by']): ?>
         <button class="btn btn-primary" id="btnConfirm" type="button">관리자 확인</button>
       <?php endif; ?>

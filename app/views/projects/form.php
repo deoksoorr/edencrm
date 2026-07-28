@@ -7,7 +7,7 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
 ?>
 <div class="page page-narrow">
   <div class="page-head">
-    <h1 class="page-title"><?= $project ? '프로젝트 수정' : '예외 프로젝트 생성' ?></h1>
+    <h1 class="page-title"><?= $project ? '프로젝트 수정' : '예외 프로젝트 등록' ?></h1>
     <div class="page-actions">
       <a href="<?= e(url($project ? 'projects.show' : 'projects.index', $project ? ['id' => $project['id']] : [])) ?>" class="btn btn-outline">취소</a>
     </div>

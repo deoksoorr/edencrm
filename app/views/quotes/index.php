@@ -44,7 +44,7 @@
       <div class="empty-icon">▤</div>
       <div class="empty-title"><?= $filters['trash'] ? '휴지통이 비어 있습니다.' : '등록된 견적이 없습니다.' ?></div>
       <?php if (!$filters['trash'] && can('quote.manage')): ?>
-        <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">첫 견적 등록하기</a>
+        <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">견적 등록</a>
       <?php endif; ?>
     </div>
   <?php else: ?>

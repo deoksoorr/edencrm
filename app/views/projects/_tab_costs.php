@@ -21,7 +21,7 @@
 <div class="card pad" id="costs">
   <div class="section-head">
     <div class="st"><h2>지출 관리</h2></div>
-    <a href="<?= e(url('costs.export', array_merge(['project_id' => $p['id']], array_slice($costBase, 1)))) ?>" class="btn btn-outline btn-sm">CSV 출력</a>
+    <a href="<?= e(url('costs.export', array_merge(['project_id' => $p['id']], array_slice($costBase, 1)))) ?>" class="btn btn-outline btn-sm">CSV 다운로드</a>
   </div>
 
   <form method="get" action="<?= e(url('projects.show')) ?>#costs" class="toolbar">
@@ -104,10 +104,10 @@
               <td class="nowrap">
                 <?php if (!$isCancelled): ?>
                   <button type="button" class="btn btn-ghost btn-sm" data-cost-edit="<?= e(json_encode($editData, JSON_UNESCAPED_UNICODE)) ?>">수정</button>
-                  <form method="post" action="<?= e(url('costs.cancel')) ?>" style="display:inline" onsubmit="return confirm('이 비용을 취소하시겠습니까? 취소하면 지출 총액에서 제외됩니다. (기록은 보존)');">
+                  <form method="post" action="<?= e(url('costs.cancel')) ?>" style="display:inline" onsubmit="return confirm('이 비용을 무효 처리하시겠습니까? 무효 처리하면 지출 총액에서 제외됩니다. (기록은 보존)');">
                     <?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
-                    <button type="submit" class="btn btn-ghost btn-sm">취소</button>
+                    <button type="submit" class="btn btn-ghost btn-sm">비용 무효</button>
                   </form>
                 <?php endif; ?>
               </td>

@@ -28,7 +28,7 @@ $keep = array_filter(
     </div>
     <div class="page-actions">
       <?php if ($canManage): ?>
-        <a href="<?= e(url('pipeline.form')) ?>" class="btn btn-primary">+ 신규 영업기회</a>
+        <a href="<?= e(url('pipeline.form')) ?>" class="btn btn-primary">+ 영업기회 등록</a>
       <?php endif; ?>
     </div>
   </div>

@@ -12,7 +12,7 @@ $typeLabel = ['work' => '작업', 'meeting' => '회의', 'inspection' => '검수
       <div class="page-sub"><?= e($me['name']) ?>님, 오늘도 안전 작업하세요.</div>
     </div>
     <div class="page-actions">
-      <?php if ($wl): ?><a class="btn btn-primary" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a><?php endif; ?>
+      <?php if ($wl): ?><a class="btn btn-primary" href="<?= e(url('worklogs.form')) ?>">작업일지 등록</a><?php endif; ?>
     </div>
   </div>
 

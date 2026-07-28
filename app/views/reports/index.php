@@ -24,7 +24,7 @@
     <input type="date" id="fFrom" class="input hidden">
     <span id="fSep" class="hidden muted">~</span>
     <input type="date" id="fTo" class="input hidden">
-    <button type="button" id="btnApply" class="btn btn-primary">조회</button>
+    <button type="button" id="btnApply" class="btn btn-primary">검색</button>
     <div class="toolbar-spacer"></div>
     <?php if (can('report.export')): ?>
     <select id="exportType" class="select">

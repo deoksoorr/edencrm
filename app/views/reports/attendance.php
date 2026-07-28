@@ -58,7 +58,7 @@ $markShort = ['late' => '지', 'absent' => '결'];
       <option value="inactive"<?= $f['status'] === 'inactive' ? ' selected' : '' ?>>비활성</option>
       <option value="all"<?= $f['status'] === 'all' ? ' selected' : '' ?>>전체</option>
     </select>
-    <button type="submit" class="btn btn-primary">조회</button>
+    <button type="submit" class="btn btn-primary">검색</button>
     <div class="toolbar-spacer"></div>
     <?php if (can('report.export')): ?>
       <a class="btn btn-outline" href="<?= e(url('reports.attendance_export', ['year' => $f['year'], 'month' => $f['month'], 'user_id' => $f['user_id'], 'dept' => $f['dept'], 'status' => $f['status']])) ?>">CSV 다운로드</a>

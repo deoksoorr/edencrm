@@ -342,7 +342,7 @@
     });
 
     EDEN.modal({
-      title: isEdit ? '일정 수정' : '새 일정', body,
+      title: isEdit ? '일정 수정' : '일정 등록', body,
       buttons: [
         { label: '취소', class: 'btn-outline', onClick: (close) => close() },
         {

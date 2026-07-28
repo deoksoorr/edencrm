@@ -31,7 +31,7 @@ $overdue = !empty($l['next_contact_date']) && $l['next_contact_date'] < date('Y-
           <button type="submit" class="btn btn-ghost-danger">삭제</button>
         </form>
       <?php endif; ?>
-      <a class="btn btn-outline" href="<?= e(url('pipeline.index')) ?>">보드</a>
+      <a class="btn btn-outline" href="<?= e(url('pipeline.index')) ?>">목록으로</a>
     </div>
   </div>
 

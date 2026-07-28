@@ -33,7 +33,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
       <?php if (can('customer.delete')): ?>
         <button type="button" class="btn btn-danger" id="btnDeleteCustomer">삭제</button>
       <?php endif; ?>
-      <a class="btn btn-outline" href="<?= e(url('customers.index')) ?>">목록</a>
+      <a class="btn btn-outline" href="<?= e(url('customers.index')) ?>">목록으로</a>
     </div>
   </div>
 
@@ -185,7 +185,7 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
         </table></div>
       <?php endif; ?>
       <?php if (can('pipeline.manage')): ?>
-        <div class="mt-14"><a class="btn btn-outline btn-sm" href="<?= e(url('pipeline.index')) ?>">파이프라인에서 신규 영업기회 등록</a></div>
+        <div class="mt-14"><a class="btn btn-outline btn-sm" href="<?= e(url('pipeline.index')) ?>">파이프라인에서 영업기회 등록</a></div>
       <?php endif; ?>
     </div></div>
   </div>

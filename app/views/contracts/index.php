@@ -72,7 +72,7 @@ $filtered = $filters['q'] !== '' || $filters['status'] !== '' || $filters['payme
       <div class="empty-icon">▤</div>
       <div class="empty-title"><?= $filters['trash'] ? '휴지통이 비어 있습니다.' : ($filtered ? '조건에 맞는 계약이 없습니다.' : '등록된 계약이 없습니다.') ?></div>
       <?php if (!$filters['trash'] && !$filtered && can('contract.manage')): ?>
-        <a href="<?= e(url('contracts.form')) ?>" class="btn btn-primary">첫 계약 등록하기</a>
+        <a href="<?= e(url('contracts.form')) ?>" class="btn btn-primary">계약 등록</a>
       <?php endif; ?>
     </div>
   <?php else: ?>

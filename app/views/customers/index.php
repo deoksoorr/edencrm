@@ -19,10 +19,10 @@ $filterParams = array_filter([
     </div>
     <div class="page-actions">
       <?php if (can('customer.export')): ?>
-        <a class="btn btn-outline" href="<?= e(url('customers.export', $filterParams)) ?>">CSV 내보내기</a>
+        <a class="btn btn-outline" href="<?= e(url('customers.export', $filterParams)) ?>">CSV 다운로드</a>
       <?php endif; ?>
       <?php if (can('customer.manage')): ?>
-        <a class="btn btn-primary" href="<?= e(url('customers.form')) ?>">신규 고객 등록</a>
+        <a class="btn btn-primary" href="<?= e(url('customers.form')) ?>">+ 고객 등록</a>
       <?php endif; ?>
     </div>
   </div>
@@ -60,7 +60,7 @@ $filterParams = array_filter([
     <div class="empty">
       <div class="empty-icon">○</div>
       <div class="empty-title">조건에 맞는 고객이 없습니다.</div>
-      <?php if (can('customer.manage')): ?><a class="btn btn-primary" href="<?= e(url('customers.form')) ?>">신규 고객 등록</a><?php endif; ?>
+      <?php if (can('customer.manage')): ?><a class="btn btn-primary" href="<?= e(url('customers.form')) ?>">고객 등록</a><?php endif; ?>
     </div>
   <?php else: ?>
     <div class="table-wrap">

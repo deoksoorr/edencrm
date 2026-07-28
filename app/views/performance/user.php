@@ -15,7 +15,7 @@ $proRemain = max(0.0, (float) $s['target_profit'] - (float) $s['month_profit']);
 <div class="page">
   <div class="page-head">
     <div>
-      <a href="<?= e(url('performance.index')) ?>" class="muted fs-12">&larr; 직원 성과 목록</a>
+      <a href="<?= e(url('performance.index')) ?>" class="muted fs-12">&larr; 목록으로</a>
       <div class="detail-title mt-8"><?= e($staff['name']) ?> 성과</div>
       <div class="detail-meta">
         <?= e($roleLabels[$staff['role_key']] ?? $staff['role_key']) ?> · <?= e($staff['department_name'] ?? '-') ?> · <?= $year ?>년 <?= $month ?>월 기준

@@ -89,7 +89,7 @@ $isCommonTab = $processType === 'common';
             <span><?= e($groupMeta[$s['stage_group'] ?? '']['label'] ?? '-') ?></span>
             <span><span class="stage-color-chip" style="background:<?= e($s['color'] ?: '#cbd5e1') ?>"></span></span>
             <span class="ta-c muted">-</span>
-            <span class="s2-act"><a href="<?= e(url('settings.stages', ['type' => 'common'])) ?>" class="btn btn-ghost btn-sm">공통에서 편집</a></span>
+            <span class="s2-act"><a href="<?= e(url('settings.stages', ['type' => 'common'])) ?>" class="btn btn-ghost btn-sm">공통에서 수정</a></span>
           <?php elseif ($rowCommon): /* 공통 페이지: 이름·색만 편집 */ ?>
             <form class="s2-inline" method="post" action="<?= e(url('settings.stage.save')) ?>">
               <?= csrf_field() ?><input type="hidden" name="kind" value="process"><input type="hidden" name="id" value="<?= (int) $s['id'] ?>">

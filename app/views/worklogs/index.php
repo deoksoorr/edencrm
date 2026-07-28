@@ -9,7 +9,7 @@
     </div>
     <div class="page-actions">
       <?php if (can('worklog.create')): ?>
-        <a href="<?= e(url('worklogs.form')) ?>" class="btn btn-primary">+ 작업일지 작성</a>
+        <a href="<?= e(url('worklogs.form')) ?>" class="btn btn-primary">+ 작업일지 등록</a>
       <?php endif; ?>
     </div>
   </div>
@@ -27,7 +27,7 @@
   <?php if (!$rows): ?>
     <div class="empty">
       <div class="empty-title">작업일지가 없습니다</div>
-      <?php if (can('worklog.create')): ?><a class="btn btn-primary mt-8" href="<?= e(url('worklogs.form')) ?>">작업일지 작성</a><?php endif; ?>
+      <?php if (can('worklog.create')): ?><a class="btn btn-primary mt-8" href="<?= e(url('worklogs.form')) ?>">작업일지 등록</a><?php endif; ?>
     </div>
   <?php else: ?>
     <div class="table-wrap">

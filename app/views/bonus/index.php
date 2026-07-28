@@ -1,6 +1,6 @@
 <?php
 /**
- * 보너스 지급 현황(bonus.index) — 목록 + 합계행, bonus.manage 보유 시 등록/수정/지급/취소/삭제 모달.
+ * 지급 이력(bonus.index) — 목록 + 합계행, bonus.manage 보유 시 등록/수정/지급/무효/삭제 모달.
  * @var array $f @var int[] $years @var array $users @var array $projects
  * @var array $bonuses @var array $bonusTotals @var bool $canManage @var array $formUsers
  */
@@ -10,11 +10,11 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
 <div class="page">
   <div class="page-head">
     <div>
-      <h1 class="page-title">보너스 지급 현황</h1>
+      <h1 class="page-title">지급 이력</h1>
       <div class="page-sub"><?= e(Util::halfLabel($f['year'], $f['half'])) ?> 현장 보너스 원장<?= $f['canAll'] ? '' : ' · 본인 내역만 표시' ?></div>
     </div>
     <div class="page-actions">
-      <a href="<?= e(url('halfyear.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">반기 보너스 지급 현황</a>
+      <a href="<?= e(url('halfyear.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">이전으로</a>
       <a href="<?= e(url('bonus.history', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">변경 이력</a>
     </div>
   </div>
@@ -50,7 +50,7 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
         <option value="<?= e($k) ?>" <?= $f['payStatus'] === $k ? 'selected' : '' ?>><?= e($l) ?></option>
       <?php endforeach; ?>
     </select>
-    <button type="submit" class="btn btn-outline">조회</button>
+    <button type="submit" class="btn btn-outline">검색</button>
     <a href="<?= e(url('bonus.index')) ?>" class="btn btn-ghost">초기화</a>
     <div class="toolbar-spacer"></div>
     <?php if ($canManage): ?>
@@ -115,8 +115,8 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
               <div class="btn-group bonus-actions">
                 <button type="button" class="btn btn-sm btn-outline" data-bact="edit">수정</button>
                 <?php if (!$cancelled): ?>
-                  <button type="button" class="btn btn-sm btn-outline" data-bact="pay">지급처리</button>
-                  <button type="button" class="btn btn-sm btn-outline" data-bact="cancel">취소</button>
+                  <button type="button" class="btn btn-sm btn-outline" data-bact="pay">지급 처리</button>
+                  <button type="button" class="btn btn-sm btn-outline" data-bact="cancel">보너스 무효</button>
                 <?php endif; ?>
                 <button type="button" class="btn btn-sm btn-danger" data-bact="del">삭제</button>
               </div>

@@ -10,7 +10,7 @@ $interestOptions = ['신축도장', '리모델링도장', '공장도장', '아�
 ?>
 <div class="page page-narrow">
   <div class="page-head">
-    <div class="page-title"><?= $isEdit ? '고객 정보 수정' : '신규 고객 등록' ?></div>
+    <div class="page-title"><?= $isEdit ? '고객 정보 수정' : '고객 등록' ?></div>
     <div class="page-actions">
       <a class="btn btn-outline" href="<?= e($isEdit ? url('customers.show', ['id' => $c['id']]) : url('customers.index')) ?>">취소</a>
     </div>

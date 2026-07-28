@@ -35,7 +35,7 @@ foreach ($users as $u) {
         <button type="button" class="btn btn-primary" data-bact="new">+ 보너스 등록</button>
       <?php endif; ?>
       <a href="<?= e(url('bonus.history', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">변경 이력</a>
-      <a href="<?= e(url('bonus.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">보너스 지급 현황</a>
+      <a href="<?= e(url('bonus.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">지급 이력</a>
     </div>
   </div>
 
@@ -72,7 +72,7 @@ foreach ($users as $u) {
         <option value="<?= e($k) ?>" <?= $f['payStatus'] === $k ? 'selected' : '' ?>><?= e($l) ?></option>
       <?php endforeach; ?>
     </select>
-    <button type="submit" class="btn btn-outline">조회</button>
+    <button type="submit" class="btn btn-outline">검색</button>
     <a href="<?= e(url('halfyear.index')) ?>" class="btn btn-ghost">초기화</a>
   </form>
 

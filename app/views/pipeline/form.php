@@ -13,7 +13,7 @@ $selStage = (int) ($l['stage_id'] ?? ($stages[0]['id'] ?? 0));
 <div class="page page-narrow">
   <div class="page-head">
     <div>
-      <div class="page-title"><?= $isEdit ? '영업기회 수정' : '신규 영업기회' ?></div>
+      <div class="page-title"><?= $isEdit ? '영업기회 수정' : '영업기회 등록' ?></div>
       <div class="page-sub">단계(12단계)는 산정 입력·이력용 원본값 — 보드 표시는 원본 데이터 기준 자동 산정</div>
     </div>
     <div class="page-actions">

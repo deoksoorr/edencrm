@@ -76,7 +76,7 @@ $isCount = static fn (string $m): bool => in_array($m, GoalService::COUNT_METRIC
             <?php endforeach; ?>
           </select>
         <?php endif; ?>
-        <button type="submit" class="btn btn-outline">조회</button>
+        <button type="submit" class="btn btn-outline">검색</button>
         <a href="<?= e(url('targets.index')) ?>" class="btn btn-ghost">초기화</a>
         <div class="toolbar-spacer"></div>
         <?php if ($canManage): ?>

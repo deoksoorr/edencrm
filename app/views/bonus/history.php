@@ -43,7 +43,7 @@ if ($canAll) {
       <div class="page-sub">현장 보너스 원장 변경 기록<?= $bonusId ? ' · 보너스 #' . (int) $bonusId : '' ?><?= $canAll ? '' : ' · 본인 대상 건만 표시' ?></div>
     </div>
     <div class="page-actions">
-      <a href="<?= e(url('bonus.index')) ?>" class="btn btn-outline">보너스 지급 현황</a>
+      <a href="<?= e(url('bonus.index')) ?>" class="btn btn-outline">지급 이력</a>
     </div>
   </div>
 
@@ -69,7 +69,7 @@ if ($canAll) {
         <?php endforeach; ?>
       </select>
     <?php endif; ?>
-    <button type="submit" class="btn btn-outline">조회</button>
+    <button type="submit" class="btn btn-outline">검색</button>
     <a href="<?= e(url('bonus.history', $bonusId ? ['bonus_id' => $bonusId] : [])) ?>" class="btn btn-ghost">초기화</a>
   </form>
 

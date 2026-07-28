@@ -169,7 +169,7 @@
                       data-id="<?= (int) $pm['id'] ?>" data-type="<?= e($pm['pay_type']) ?>" data-amount="<?= (int) $pm['amount'] ?>"
                       data-due="<?= e($pm['due_date'] ?? '') ?>" data-paid="<?= e($pm['paid_date'] ?? '') ?>"
                       data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">입금내역 갱신</button>
-                    <button type="button" class="btn btn-sm btn-ghost btn-del-pm" data-id="<?= (int) $pm['id'] ?>" title="물리 삭제 대신 취소 상태로 전환 — 내역·감사 추적 보존">취소</button>
+                    <button type="button" class="btn btn-sm btn-ghost btn-del-pm" data-id="<?= (int) $pm['id'] ?>" title="물리 삭제 대신 취소 상태로 전환 — 내역·감사 추적 보존">입금 무효</button>
                     <?php else: ?>
                     <span class="muted fs-12">취소됨</span>
                     <?php endif; ?>
@@ -316,11 +316,11 @@
 
   document.querySelectorAll('.btn-del-pm').forEach(function (btn) {
     btn.addEventListener('click', async function () {
-      var ok = await EDEN.confirm('이 입금 내역을 취소 처리하시겠습니까? 내역은 삭제되지 않고 \'취소\' 상태로 보존되며, 입금 총액·미수금 집계에서 제외됩니다.', { danger: true, okLabel: '취소 처리' });
+      var ok = await EDEN.confirm('이 입금 내역을 무효 처리하시겠습니까? 내역은 삭제되지 않고 \'취소\' 상태로 보존되며, 입금 총액·미수금 집계에서 제외됩니다.', { danger: true, okLabel: '무효 처리' });
       if (!ok) return;
       try {
         await api('payments.delete', { id: btn.dataset.id });
-        toast('입금 내역이 취소 처리되었습니다.', 'success');
+        toast('입금 내역이 무효 처리되었습니다.', 'success');
         location.reload();
       } catch (e) { toast(e.message, 'error'); }
     });

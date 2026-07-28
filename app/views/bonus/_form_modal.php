@@ -1,7 +1,7 @@
 <?php
 /**
  * 보너스 등록/수정 모달 파셜(R15) — bonus/index.php, halfyear/index.php 공용 include.
- * 등록(new)·수정(edit)·지급처리(pay)·취소(cancel)·삭제(del) 모달 + document 위임 핸들러 일체.
+ * 등록(new)·수정(edit)·지급 처리(pay)·무효(cancel)·삭제(del) 모달 + document 위임 핸들러 일체.
  * row 액션(edit/pay/cancel/del)은 tr[data-bonus] 존재 시에만 동작 — halfyear 화면처럼
  * 해당 tr이 없는 페이지에서는 자연히 no-op(등록만 사용).
  * @var bool  $canManage false면 아무 것도 렌더링하지 않음(호출부에서 include 전 보장 불요)
@@ -64,7 +64,7 @@
       '<input type="hidden" name="id" value="' + (b.id || 0) + '">' +
       '<div class="form-grid">' +
       projField + userField +
-      '<div class="field span2 muted fs-12" data-bonus-info>' + (isEdit ? '수정 저장 시 서버가 최신 입금·기여도 기준으로 재계산합니다. (지급처리는 재계산하지 않음)' : '프로젝트를 선택하면 계약 금액·누적 입금·총매출·배정 직원이 자동 조회됩니다.') + '</div>' +
+      '<div class="field span2 muted fs-12" data-bonus-info>' + (isEdit ? '수정 저장 시 서버가 최신 입금·기여도 기준으로 재계산합니다. (지급 처리는 재계산하지 않음)' : '프로젝트를 선택하면 계약 금액·누적 입금·총매출·배정 직원이 자동 조회됩니다.') + '</div>' +
       '<div class="field"><label class="field-label">연도</label><select name="year" class="select">' + years + '</select></div>' +
       '<div class="field"><label class="field-label">반기</label><select name="half" class="select">' +
         '<option value="1"' + ((b.half || CUR.half) === 1 ? ' selected' : '') + '>상반기</option>' +
@@ -79,7 +79,7 @@
       reasonField(b.id && b.closed) +
       '</div>' +
       '<div class="muted fs-12 mt-8" data-bonus-calc-hint></div>' +
-      '<div class="muted fs-12 mt-8">산정액은 참고 계산값이며, <b>확정 보너스</b>가 실제 지급 대상 금액입니다. 지급 여부는 목록의 <b>지급처리</b>로 관리합니다(등록 시 미지급).</div>' +
+      '<div class="muted fs-12 mt-8">산정액은 참고 계산값이며, <b>확정 보너스</b>가 실제 지급 대상 금액입니다. 지급 여부는 목록의 <b>지급 처리</b>로 관리합니다(등록 시 미지급).</div>' +
       '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary" data-bonus-submit>저장</button></div>' +
       '</form>';
   }
@@ -98,11 +98,11 @@
       '<div class="field"><label class="field-label">지급 담당자</label><select name="paid_by" class="select">' + selOpts(USERS, b.paid_by, '(미지정)') + '</select></div>' +
       reasonField(b.closed) +
       '</div>' +
-      '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">지급완료 처리</button></div>' +
+      '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">지급 처리</button></div>' +
       '</form>';
   }
 
-  /** 취소/삭제 사유 폼 */
+  /** 무효/삭제 사유 폼 */
   function reasonFormHtml(b, act) {
     var isDel = act === 'del';
     return '' +
@@ -111,10 +111,10 @@
       (isDel ? '' : '<input type="hidden" name="pay_status" value="cancelled">') +
       '<p class="muted fs-13 mt-0">' + (isDel
         ? '이 보너스 내역을 삭제합니다. 목록에서 제외되지만 변경 이력(원장)에는 보존됩니다.'
-        : '이 보너스를 취소 처리합니다. 합계 집계에서 제외되며 내역은 보존됩니다.') + '</p>' +
+        : '이 보너스를 무효 처리합니다. 합계 집계에서 제외되며 내역은 보존됩니다.') + '</p>' +
       '<div class="field"><label class="field-label">사유' + (b.closed ? ' <b class="text-danger">*</b> <span class="muted">(마감 반기 — 필수)</span>' : ' <span class="muted">(선택)</span>') + '</label>' +
       '<input type="text" name="reason" class="input" maxlength="255"' + (b.closed ? ' required' : '') + '></div>' +
-      '<div class="ta-r mt-8"><button type="submit" class="btn btn-danger">' + (isDel ? '삭제' : '취소 처리') + '</button></div>' +
+      '<div class="ta-r mt-8"><button type="submit" class="btn btn-danger">' + (isDel ? '삭제' : '무효 처리') + '</button></div>' +
       '</form>';
   }
 
@@ -172,7 +172,7 @@
     var info = form.querySelector('[data-bonus-info]');
     var bulkWrap = form.querySelector('[data-bonus-bulk-wrap]');
     var submitBtn = form.querySelector('[data-bonus-submit]');
-    if (!pidEl || pidEl.tagName !== 'SELECT') return; // 수정·지급처리·사유 폼에는 미적용
+    if (!pidEl || pidEl.tagName !== 'SELECT') return; // 수정·지급 처리·사유 폼에는 미적용
     // 프로젝트 변경 → 기존 선택·계산 초기화(§3)
     form._calcData = null;
     ['[data-bonus-base]', '[data-bonus-contrib]', '[data-bonus-calc]'].forEach(function (s) {
@@ -256,7 +256,7 @@
     var b = JSON.parse(row.dataset.bonus);
     if (act === 'edit') EDEN.modal({ title: '보너스 수정', body: formHtml(b), footer: false, wide: true });
     if (act === 'pay') EDEN.modal({ title: '지급 처리', body: payFormHtml(b), footer: false });
-    if (act === 'cancel') EDEN.modal({ title: '보너스 취소', body: reasonFormHtml(b, 'cancel'), footer: false });
+    if (act === 'cancel') EDEN.modal({ title: '보너스 무효', body: reasonFormHtml(b, 'cancel'), footer: false });
     if (act === 'del') EDEN.modal({ title: '보너스 삭제', body: reasonFormHtml(b, 'del'), footer: false });
   });
 

@@ -1,4 +1,4 @@
-/* 리포트 화면: 기간필터 → reports.data 호출 → 차트(Chart.js)/표 렌더 + CSV 내보내기.
+/* 리포트 화면: 기간필터 → reports.data 호출 → 차트(Chart.js)/표 렌더 + CSV 다운로드.
    차트는 대시보드와 동일한 절제된 팔레트·억/만 축약 축·하단 소형 범례 규격을 따른다. */
 (function () {
   'use strict';

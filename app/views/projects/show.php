@@ -96,7 +96,7 @@ $recentEvents = array_slice($recentEvents, 0, 5);
       </div>
     </div>
     <div class="page-actions">
-      <a href="<?= e(url('projects.index')) ?>" class="btn btn-outline">목록</a>
+      <a href="<?= e(url('projects.index')) ?>" class="btn btn-outline">목록으로</a>
       <?php if ($canManage): ?>
         <?php foreach ($allowedTransitions as $to):
           // R13: 진행 시작·하자보수 전환 버튼 제거 — 진행 시작/하자보수는 공정 보드 이동으로 자동 처리.

@@ -10,7 +10,7 @@ $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' 
 <div class="page">
   <div class="page-head">
     <div>
-      <a href="<?= e(url('staff.index')) ?>" class="muted fs-12">&larr; 직원 목록</a>
+      <a href="<?= e(url('staff.index')) ?>" class="muted fs-12">&larr; 목록으로</a>
       <div class="detail-title" style="margin-top:4px"><?= e($staff['name']) ?></div>
       <div class="detail-meta">
         <?= e($roleLabels[$staff['role_key']] ?? $staff['role_key']) ?> · <?= e($staff['department_name'] ?? '부서 미지정') ?> · <?= e($staff['position'] ?? '-') ?>
@@ -23,7 +23,7 @@ $payStatusBadge  = ['unpaid' => 'badge-warn', 'partial' => 'badge-info', 'paid' 
         <a href="<?= e(url('performance.user', ['id' => $staff['id']])) ?>" class="btn btn-outline">성과 보기</a>
       <?php endif; ?>
       <?php if (can('staff.manage')): ?>
-        <a href="<?= e(url('staff.form', ['id' => $staff['id']])) ?>" class="btn btn-outline">정보 수정</a>
+        <a href="<?= e(url('staff.form', ['id' => $staff['id']])) ?>" class="btn btn-outline">수정</a>
       <?php endif; ?>
     </div>
   </div>

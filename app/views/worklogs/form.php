@@ -3,7 +3,7 @@
 ?>
 <div class="page page-narrow">
   <div class="page-head">
-    <div class="page-title"><?= $row ? '작업일지 수정' : '작업일지 작성' ?></div>
+    <div class="page-title"><?= $row ? '작업일지 수정' : '작업일지 등록' ?></div>
   </div>
 
   <form class="card" data-ajax action-route="worklogs.save" data-redirect="worklogs.index" method="post">

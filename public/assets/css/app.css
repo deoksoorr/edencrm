@@ -800,7 +800,7 @@ a.kv:hover .kv-value{color:var(--brand)}
 .stage-color-input{width:90px !important}
 .stage-sort-input{width:70px !important}
 
-/* 임시 비밀번호 표시(직원 등록·비번 초기화 모달 공통) */
+/* 임시 비밀번호 표시(직원 등록·비밀번호 재발급 모달 공통) */
 .temp-pw{font-size:20px;font-weight:700;letter-spacing:1px;background:var(--line-2);padding:10px 14px;border-radius:var(--radius);text-align:center}
 
 /* 감사 로그 상세 JSON 블록 */

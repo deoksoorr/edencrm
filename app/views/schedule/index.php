@@ -9,7 +9,7 @@
     </div>
     <div class="page-actions">
       <?php if ($canManage): ?>
-        <button class="btn btn-primary" id="btnNewSchedule">+ 새 일정</button>
+        <button class="btn btn-primary" id="btnNewSchedule">+ 일정 등록</button>
       <?php endif; ?>
     </div>
   </div>

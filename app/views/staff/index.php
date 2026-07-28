@@ -17,7 +17,7 @@ $canAmount = $halfPerf !== null; // 금액 열람 가능(performance.view_all) �
     </div>
     <div class="page-actions">
       <a href="<?= e(url('halfyear.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">반기 보너스 지급 현황</a>
-      <a href="<?= e(url('bonus.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">보너스 지급 현황</a>
+      <a href="<?= e(url('bonus.index', ['year' => $vy, 'half' => $vh])) ?>" class="btn btn-outline">지급 이력</a>
     </div>
   </div>
 
@@ -97,7 +97,7 @@ $canAmount = $halfPerf !== null; // 금액 열람 가능(performance.view_all) �
             <?php if (can('staff.manage')): ?>
             <td>
               <div class="btn-group staff-actions">
-                <button type="button" class="btn btn-sm btn-outline" data-act="resetpw" data-id="<?= $uid ?>">비번초기화</button>
+                <button type="button" class="btn btn-sm btn-outline" data-act="resetpw" data-id="<?= $uid ?>">비밀번호 재발급</button>
                 <button type="button" class="btn btn-sm <?= $row['status'] === 'active' ? 'btn-danger' : 'btn-outline' ?>" data-act="toggle" data-id="<?= $uid ?>" data-cur="<?= e($row['status']) ?>">
                   <?= $row['status'] === 'active' ? '비활성화' : '활성화' ?>
                 </button>
@@ -125,7 +125,7 @@ document.addEventListener('click', async function (e) {
   const act = btn.dataset.act;
 
   if (act === 'resetpw') {
-    const ok = await EDEN.confirm('이 직원의 비밀번호를 초기화하시겠습니까? 새 임시 비밀번호가 발급됩니다.');
+    const ok = await EDEN.confirm('이 직원의 비밀번호를 재발급하시겠습니까? 새 임시 비밀번호가 발급됩니다.');
     if (!ok) return;
     try {
       const data = await api('staff.resetpw', { id });
