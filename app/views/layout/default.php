@@ -80,6 +80,8 @@ $__assetVer = static fn(string $rel): string => (string) (@filemtime(__DIR__ . '
   </div>
 </div>
 <script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/js/app.js?v=<?= $__assetVer('js/app.js') ?>"></script>
+<?php /* R16: 완전삭제 2단계 확인 — [data-purge] 폼에만 반응하므로 전역 로드해도 무해 */ ?>
+<script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/js/purge-confirm.js?v=<?= $__assetVer('js/purge-confirm.js') ?>"></script>
 <?php foreach (($scripts ?? []) as $s): ?>
 <script src="<?= e($GLOBALS['config']['BASE_URL']) ?>/assets/<?= e($s) ?>?v=<?= $__assetVer($s) ?>"></script>
 <?php endforeach; ?>

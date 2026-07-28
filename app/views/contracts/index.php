@@ -22,8 +22,11 @@ $filtered = $filters['q'] !== '' || $filters['status'] !== '' || $filters['payme
       <?php if ($filters['trash']): ?>
         <a href="<?= e(url('contracts.index')) ?>" class="btn btn-ghost">목록으로</a>
       <?php else: ?>
-        <?php if (can('contract.manage')): ?>
+        <?php /* R16: 휴지통은 최고운영자 전용(trash.manage = ADMIN_ONLY) — 등록 권한과 분리 */ ?>
+        <?php if (can('trash.manage')): ?>
           <a href="<?= e(url('contracts.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
+        <?php endif; ?>
+        <?php if (can('contract.manage')): ?>
           <a href="<?= e(url('contracts.form')) ?>" class="btn btn-primary">+ 계약 등록</a>
         <?php endif; ?>
       <?php endif; ?>
@@ -123,7 +126,9 @@ $filtered = $filters['q'] !== '' || $filters['status'] !== '' || $filters['payme
                     <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
                   <?php if (is_role('super_admin')): ?>
                   <form method="post" action="<?= e(url('contracts.purge')) ?>" style="display:inline"
-                        onsubmit="return confirm('완전삭제하면 되돌릴 수 없습니다. 진행할까요?');"><?= csrf_field() ?>
+                        data-purge data-purge-kind="계약"
+                        data-purge-label="<?= e($r['contract_no'] ?? ('#' . (int) $r['id'])) ?>"
+                        data-purge-scope="계약 상태 이력"><?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
                     <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
                   <?php endif; ?>

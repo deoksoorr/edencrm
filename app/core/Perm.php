@@ -40,8 +40,14 @@ class Perm
             'field.worklogs'     => ['section' => 'field', 'label' => '작업일지',    'order' => 40],
             'field.costs'        => ['section' => 'field', 'label' => '비용·원가',   'order' => 50],
             // ── 분석(읽기 전용) ──
-            'analytics.reports'  => ['section' => 'analytics', 'label' => '리포트·손익',
-                                     'order' => 10, 'read_only' => true],
+            // 이 권한은 '리포트 화면 접근'이 아니라 '전사 데이터 열람'을 뜻한다.
+            // 리포트 자체가 전사 매출·손익·고객·프로젝트 집계이므로, 부여하면
+            // 프로젝트·고객 목록도 배정분이 아닌 전체가 보인다(Scope::canViewAllProjects).
+            // 숨은 결합이 되지 않도록 표시명·설명에 이를 명시한다.
+            'analytics.reports'  => ['section' => 'analytics', 'label' => '리포트·손익 (전사 열람)',
+                                     'order' => 10, 'read_only' => true,
+                                     'note'  => '부여 시 전사 매출·손익 리포트와 함께 '
+                                              . '전체 프로젝트·고객 목록이 보입니다(배정분 한정 해제).'],
         ];
     }
 

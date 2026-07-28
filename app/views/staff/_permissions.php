@@ -59,7 +59,12 @@
           $readOnly = !empty($def['read_only']);
         ?>
           <tr data-perm-row="<?= e($key) ?>">
-            <th scope="row" class="perm-name"><?= e($def['label']) ?></th>
+            <th scope="row" class="perm-name">
+              <?= e($def['label']) ?>
+              <?php if (!empty($def['note'])): ?>
+                <span class="perm-row-note"><?= e($def['note']) ?></span>
+              <?php endif; ?>
+            </th>
             <?php foreach (['read', 'write', 'delete'] as $act):
               $disabled = $readOnly && $act !== 'read';
               $checked  = !$disabled && !empty($cur['can_' . $act]);

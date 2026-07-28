@@ -35,7 +35,8 @@ function projSortArrow(string $key, string $sort, string $dir): string
       <?php if ($trash): ?>
         <a href="<?= e(url('projects.index')) ?>" class="btn btn-ghost">목록으로</a>
       <?php else: ?>
-        <?php if (can('project.manage')): ?>
+        <?php /* R16: 휴지통은 최고운영자 전용(trash.manage = ADMIN_ONLY) */ ?>
+        <?php if (can('trash.manage')): ?>
           <a href="<?= e(url('projects.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
         <?php endif; ?>
         <?php /* r3-contractflow: 프로젝트는 계약 '진행' 전환 시 자동 생성 — 예외 생성은 최고 관리자 전용(라우트도 서버측 차단) */ ?>
@@ -175,7 +176,9 @@ function projSortArrow(string $key, string $sort, string $dir): string
                     <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
                   <?php if (is_role('super_admin')): ?>
                   <form method="post" action="<?= e(url('projects.purge')) ?>" style="display:inline"
-                        onsubmit="return confirm('완전삭제하면 되돌릴 수 없습니다. 진행할까요?');"><?= csrf_field() ?>
+                        data-purge data-purge-kind="프로젝트"
+                        data-purge-label="<?= e($p['project_no'] ?? ('#' . (int) $p['id'])) ?>"
+                        data-purge-scope="공정 이력·진행률·메모"><?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
                     <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
                   <?php endif; ?>

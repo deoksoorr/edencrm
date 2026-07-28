@@ -191,7 +191,11 @@ class CostsController
         Response::redirect('projects.show', ['id' => $projectId], '비용이 취소되었습니다. 지출 총액에서 제외됩니다.');
     }
 
-    /** 프로젝트 비용 CSV(UTF-8 BOM). 필터(cost_cat/cost_worker/cost_from/cost_to) 반영. finance.view 또는 cost.manage. */
+    /**
+     * 프로젝트 비용 CSV(UTF-8 BOM). 필터(cost_cat/cost_worker/cost_from/cost_to) 반영.
+     * R16: 비용 읽기(cost.view)만 가진 직원도 내려받을 수 있어야 한다 —
+     * 라우트 게이트는 cost.view 인데 여기서 finance/manage 만 허용하면 항상 403 이 되어 기능이 죽는다.
+     */
     public function export(): void
     {
         $projectId = (int) Util::int('project_id', 0);
@@ -199,7 +203,7 @@ class CostsController
             http_response_code(403);
             exit('접근 권한이 없습니다.');
         }
-        if (!Rbac::can('finance.view') && !Rbac::can('cost.manage')) {
+        if (!Rbac::can('cost.view') && !Rbac::can('finance.view') && !Rbac::can('cost.manage')) {
             http_response_code(403);
             exit('지출 정보를 열람할 권한이 없습니다.');
         }

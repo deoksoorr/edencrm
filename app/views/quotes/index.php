@@ -10,8 +10,11 @@
       <?php if ($filters['trash']): ?>
         <a href="<?= e(url('quotes.index')) ?>" class="btn btn-ghost">목록으로</a>
       <?php else: ?>
-        <?php if (can('quote.manage')): ?>
+        <?php /* R16: 휴지통은 최고운영자 전용(trash.manage = ADMIN_ONLY) — 등록 권한과 분리 */ ?>
+        <?php if (can('trash.manage')): ?>
           <a href="<?= e(url('quotes.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
+        <?php endif; ?>
+        <?php if (can('quote.manage')): ?>
           <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">+ 견적 등록</a>
         <?php endif; ?>
       <?php endif; ?>
@@ -73,7 +76,9 @@
                     <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
                   <?php if (is_role('super_admin')): ?>
                   <form method="post" action="<?= e(url('quotes.purge')) ?>" style="display:inline"
-                        onsubmit="return confirm('완전삭제하면 되돌릴 수 없습니다. 진행할까요?');"><?= csrf_field() ?>
+                        data-purge data-purge-kind="견적"
+                        data-purge-label="<?= e($r['quote_no'] ?? ('#' . (int) $r['id'])) ?>"
+                        data-purge-scope="견적 버전·견적 항목"><?= csrf_field() ?>
                     <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
                     <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
                   <?php endif; ?>
