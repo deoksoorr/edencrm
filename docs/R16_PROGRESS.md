@@ -4,7 +4,7 @@
 설계 원본: `docs/superpowers/specs/2026-07-29-r16-employee-permissions-design.md`
 하네스 상태: `node "…/telegram-control/harness_progress.js" show`
 
-최종 갱신: 2026-07-29 (T6 진행 중)
+최종 갱신: 2026-07-29 — **전체 완료 · 운영 배포·실검수 완료**
 
 ---
 
@@ -17,9 +17,9 @@
 | T3 | 라우트·컨트롤러 서버단 강제 + 취약점 12건 | ✅ 완료 | `feat(r16): 서버단 권한 강제` |
 | T4 | 고객·영업기회 휴지통 신설 | ✅ 완료 | `feat(r16): 고객·영업기회 휴지통 신설` |
 | T5 | 권한 매트릭스 UI·메뉴 노출제어 | ✅ 완료 | `feat(r16): 직원 권한 매트릭스 배선` |
-| T6 | 대시보드 권한 필터링 | 🔄 진행 중 | — |
-| T7 | 로컬 QA(A~H)·보안 우회·회귀 | ⬜ 대기 | — |
-| T8 | 운영 배포·DB 마이그레이션·실서버 검수 | ⬜ 대기 | — |
+| T6 | 대시보드 권한 필터링 | ✅ 완료 | `feat(r16): 대시보드 권한별 위젯 조립` |
+| T7 | 로컬 QA(A~H)·보안 우회·회귀 | ✅ 완료 | 프로브 119 · 브라우저 43 · 단위 25스위트 |
+| T8 | 운영 배포·DB 마이그레이션·실서버 검수 | ✅ 완료 | 2026-07-29 배포·검수·정리 완료 |
 
 ---
 
@@ -38,10 +38,10 @@
 
 ### 2-3. 마이그레이션 파일
 - 로컬: `database/migrations/2026-07-29_r16_permissions.sql` — **적용 완료**
-- 운영: `database/cafe24/013_r16_permissions.sql` — **미적용** (T8에서 실행)
+- 운영: `database/cafe24/013_r16_permissions.sql` — **적용 완료** (2026-07-29)
 - 데이터 변환: `scripts/migrate_permissions_r16.php`
   - 로컬 `--apply` **완료** (권한 행 10개)
-  - 운영 `--prod --apply` **미실행** (dry-run 검증만 완료)
+  - 운영 `--prod --apply` **완료** — 권한 행 32개, 상실 권한 0건
 
 ### 2-4. 중요 — 코드 동기화 필수
 `app/core/Db.php`의 `TABLES` 상수에 `employee_permissions`를 추가했다.
@@ -76,24 +76,22 @@
 
 ---
 
-## 5. 다음 실행 작업 (재개 지점)
+## 5. 완료 상태 · 남은 판단 사항
 
-1. **T6 완료 확인** — `DashboardController` 권한별 위젯 조립. 완료 후:
-   - `php scripts/tests/run.php` 전건 통과
-   - `bash scripts/qa_r16_probe.sh` 119/119 복귀
-2. **T7 통합 QA** — 브라우저 검수(PC·모바일), 권한 변경 즉시 반영, 회귀 전 항목
-3. **T8 운영 배포** — 순서 엄수:
-   1. `bash deploy/backup.sh` (운영 파일 FTP 미러 백업)
-   2. 운영 DB 백업 (`php deploy/db_dump.php`)
-   3. `php deploy/inspect_prod.php` (배포 전 건수 재기록)
-   4. `php deploy/run_migration.php database/cafe24/013_r16_permissions.sql --dry` → 실행
-   5. `php scripts/migrate_permissions_r16.php --prod --apply --report docs/r16_perm_migration_prod.md`
-   6. `CONFIRM=yes ./deploy/deploy.sh`
-   7. `./deploy/verify.sh` + 실서버 세션 검수
-   8. `php deploy/inspect_prod.php` 로 건수 대조
-4. **QA 계정 정리** — 로컬 `--cleanup`. 운영에는 QA 계정을 만들지 않는다.
+전 태스크 완료. 운영 배포·실검수·QA 정리까지 끝났다.
 
----
+**사장 판단이 필요한 항목**
+1. 운영 휴지통에 **삭제된 고객 2건**(id=1 고객1, id=2 고객나, 2026-07-24 삭제)이 남아 있다.
+   이번 작업으로 복원이 가능해졌으나, 실데이터라 임의로 복원하지 않았다.
+   필요 시 관리 > 고객 > 휴지통에서 복원 또는 완전삭제.
+2. 프로젝트 휴지통 7건, 견적 2건, 계약 1건도 동일하게 대기 중이다.
+3. `리포트·손익 (전사 열람)` 권한을 부여하면 해당 직원에게 **전체 프로젝트·고객 목록**이
+   함께 보인다(매트릭스 화면에 명시). 현재 영업관리자 1명만 보유.
+
+**재검수 방법**
+- 운영 권한 시스템: `bash deploy/verify_r16.sh` (검수용 임시 계정 선행 생성 필요)
+- 운영 휴지통 수명주기: `php deploy/verify_r16_trash.php`
+- 로컬: `php scripts/tests/run.php` · `bash scripts/qa_r16_probe.sh` · `node scripts/qa_browser/qa_r16_browser.js`
 
 ## 6. 운영 기준선 (2026-07-29 측정)
 
@@ -119,3 +117,21 @@ costs 4 · schedules 2 · site_bonuses 5 · audit_logs 377 · project_assignment
   단 **코드가 구버전으로 돌아가야** 판정이 role_permissions 기반으로 복귀한다.
 - 가장 안전한 롤백: 파일만 직전 커밋으로 되돌리면 신규 테이블이 있어도 무해하다
   (구버전 Rbac는 employee_permissions를 참조하지 않는다).
+
+---
+
+## 8. 운영 배포 결과 (2026-07-29)
+
+- 파일 백업: `database/backups/ftp_20260729-082624`
+- DB 백업: `database/backups/proddb_r16_pre_20260728-232641.sql` (45 tables, 1018 rows, 328KB)
+- 스키마 마이그레이션: `013_r16_permissions.sql` 3문장 적용
+- 권한 변환: 7계정 중 6계정에 32행 생성, super_admin 0행, **상실 권한 0건**
+- 파일 업로드: 48개 (mirror --reverse, --delete 미사용, 운영 config·업로드 폴더 보존)
+- 데이터 보존: 16개 업무 테이블 건수 배포 전과 **완전 일치**(audit_logs 만 검수 기록 +2)
+- 실검수: 최고운영자 29항목 · 일반 직원 차단 20항목 · 휴지통 수명주기 14항목 전건 통과
+- QA 정리: 운영 임시 계정 2개·QA 고객 전량 삭제 확인(잔존 0)
+
+### 검수 중 발견·수정한 기존 결함
+CSRF 실패 응답이 419(비표준)라 카페24 Apache 가 500 으로 변질시켜,
+사용자에게 안내 문구 대신 서버 오류 페이지가 표시되고 있었다(R16 이전부터 존재).
+요청 차단 자체는 정상이었고 데이터 변경도 없었다. 표준 403 으로 교체 후 재배포·재검증 완료.
