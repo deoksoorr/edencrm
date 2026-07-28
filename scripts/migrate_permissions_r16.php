@@ -14,13 +14,39 @@
  *  - 멱등: 재실행해도 결과가 같다(사용자별 전량 재계산 후 교체).
  *
  * 사용:
- *   php scripts/migrate_permissions_r16.php --dry      (변환 결과만 출력)
- *   php scripts/migrate_permissions_r16.php --apply    (실제 반영)
- *   php scripts/migrate_permissions_r16.php --apply --report docs/r16_perm_migration.md
+ *   php scripts/migrate_permissions_r16.php --dry      (로컬, 변환 결과만 출력)
+ *   php scripts/migrate_permissions_r16.php --apply    (로컬 반영)
+ *   php scripts/migrate_permissions_r16.php --prod --dry    (운영 DB 대상 미리보기)
+ *   php scripts/migrate_permissions_r16.php --prod --apply --report docs/r16_perm_migration_prod.md
+ *
+ * --prod 는 deploy/cafe24.env 의 외부 DB 접속값과 TBL_PREFIX 를 사용한다.
+ * 이 스크립트는 배포에서 제외되며(deploy.sh --exclude scripts/) 로컬에서 운영 DB 로 접속해 실행한다.
  */
 if (PHP_SAPI !== 'cli') { exit(1); }
 
 $GLOBALS['config'] = require __DIR__ . '/../app/config/config.php';
+
+// ── 운영 DB 대상 실행 ──
+if (in_array('--prod', $argv, true)) {
+    $envFile = __DIR__ . '/../deploy/cafe24.env';
+    if (!is_file($envFile)) { fwrite(STDERR, "cafe24.env 없음\n"); exit(1); }
+    $env = [];
+    foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $l) {
+        $l = trim($l);
+        if ($l === '' || $l[0] === '#' || !str_contains($l, '=')) { continue; }
+        [$k, $v] = explode('=', $l, 2);
+        $env[trim($k)] = trim($v);
+    }
+    $GLOBALS['config']['DB_HOST']    = $env['DB_HOST'];
+    $GLOBALS['config']['DB_PORT']    = $env['DB_PORT'] ?? '3306';
+    $GLOBALS['config']['DB_NAME']    = $env['DB_NAME'];
+    $GLOBALS['config']['DB_USER']    = $env['DB_USER'];
+    $GLOBALS['config']['DB_PASS']    = $env['DB_PASSWORD'];
+    $GLOBALS['config']['DB_SOCKET']  = null;              // 외부 접속 — 로컬 소켓 금지
+    $GLOBALS['config']['TBL_PREFIX'] = $env['TBL_PREFIX'] ?? 'edencrm_';
+    fwrite(STDERR, "⚠ 운영 DB 대상 실행 — host={$env['DB_HOST']} db={$env['DB_NAME']} prefix={$GLOBALS['config']['TBL_PREFIX']}\n");
+}
+
 foreach (['Util', 'Db', 'Perm'] as $c) { require_once APP_PATH . '/core/' . $c . '.php'; }
 
 $dry      = in_array('--dry', $argv, true);
