@@ -86,6 +86,23 @@ try {
     t_null('⑤purgeQuote 후 quote_versions 행 물리 삭제', Db::val('SELECT id FROM quote_versions WHERE id=:id', [':id' => $qcVer]));
     t_null('⑤purgeQuote 후 quote_items 행 물리 삭제', Db::val('SELECT id FROM quote_items WHERE quote_version_id=:id', [':id' => $qcVer]));
 
+    // ── ⑥ ContractsController::purgeBlockReason — 입금 참조 차단(재무 보존)·소프트삭제 참조 포함·무참조 허용 ──
+    $con6a = Db::insert('contracts', ['contract_no' => 'R15T3-C6A-' . $suf, 'customer_id' => $cust, 'contract_amount' => 1100000]);
+    Db::insert('payments', ['contract_id' => $con6a, 'pay_type' => 'down', 'amount' => 1100000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    $r6a = ContractsController::purgeBlockReason($con6a);
+    t_true('⑥입금 참조 계약 완전삭제 차단', $r6a !== null);
+    t_true("⑥차단 사유에 '입금' 포함", $r6a !== null && str_contains($r6a, '입금'));
+    // 소프트삭제된 프로젝트 참조도 차단(FK 는 soft 개념 무시 — deleted 무필터 회귀 고정)
+    $con6b = Db::insert('contracts', ['contract_no' => 'R15T3-C6B-' . $suf, 'customer_id' => $cust, 'contract_amount' => 500000]);
+    $p6b = Db::insert('projects', ['project_no' => 'R15T3-P6B-' . $suf, 'name' => 'R15T3프로젝트6b', 'customer_id' => $cust,
+        'contract_id' => $con6b, 'customer_name_snapshot' => 'x', 'contract_amount' => 0,
+        'deleted_at' => date('Y-m-d H:i:s')]);
+    $r6b = ContractsController::purgeBlockReason($con6b);
+    t_true('⑥소프트삭제 프로젝트 참조도 완전삭제 차단(무필터)', $r6b !== null && str_contains($r6b, '프로젝트'));
+    // 무참조 계약은 허용
+    $con6c = Db::insert('contracts', ['contract_no' => 'R15T3-C6C-' . $suf, 'customer_id' => $cust, 'contract_amount' => 300000]);
+    t_null('⑥무참조 계약은 완전삭제 허용', ContractsController::purgeBlockReason($con6c));
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();
