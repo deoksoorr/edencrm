@@ -49,6 +49,7 @@ function projSortArrow(string $key, string $sort, string $dir): string
 
   <form class="toolbar" method="get" action="<?= e(url('projects.index')) ?>">
     <input type="hidden" name="r" value="projects.index">
+    <?php if (!empty($trash)): ?><input type="hidden" name="trash" value="1"><?php endif; ?>
     <input type="text" name="q" class="input search" placeholder="프로젝트명/고객/현장주소 검색" value="<?= e($q) ?>">
     <select name="status" class="select">
       <option value="">전체 상태</option>

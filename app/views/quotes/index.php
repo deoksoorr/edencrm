@@ -20,6 +20,7 @@
 
   <form class="toolbar" method="get" action="<?= e(url('quotes.index')) ?>">
     <input type="hidden" name="r" value="quotes.index">
+    <?php if (!empty($filters['trash'])): ?><input type="hidden" name="trash" value="1"><?php endif; ?>
     <input type="text" name="q" class="input search" placeholder="견적번호 / 고객명 검색" value="<?= e($filters['q']) ?>">
     <select name="status" class="select">
       <option value="">전체 상태</option>
