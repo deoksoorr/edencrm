@@ -161,30 +161,6 @@ class SettlementController
         $this->ok($projectId, ['id' => $id, 'status' => 'cancelled'], '입금이 취소되었습니다.');
     }
 
-    /** 정산 예정 금액 저장(예외 프로젝트 전용) — 수정 전·후 금액·수정자를 감사 이력으로 보존. */
-    public function expectedSave(): void
-    {
-        $projectId = (int) Util::postInt('project_id', 0);
-        $project = $this->guardProject($projectId);
-        if ((int) $project['is_exception'] !== 1 || !empty($project['contract_id'])) {
-            $this->fail('예정 금액 직접 입력은 예외 프로젝트 전용입니다. 일반 프로젝트는 계약 총액을 사용합니다.', 422, $projectId);
-        }
-        $raw = trim(Util::postStr('expected_amount', ''));
-        $expected = $raw === '' ? null : max(0, (int) round((float) str_replace([',', ' '], '', $raw)));
-        $beforeVal = $project['expected_amount'] !== null ? (int) $project['expected_amount'] : null;
-        if ($expected === $beforeVal) {
-            $this->ok($projectId, ['expected_amount' => $expected], '변경 사항이 없습니다.');
-        }
-
-        Db::update('projects', ['expected_amount' => $expected], 'id = :id', [':id' => $projectId]);
-        Audit::log('project_expected_amount_change', 'project', $projectId,
-            ['expected_amount' => $beforeVal],
-            ['expected_amount' => $expected, 'changed_by' => Auth::id(), 'at' => date('Y-m-d H:i:s')]);
-        StatusService::recalcProjectSettlement($projectId);
-
-        $this->ok($projectId, ['expected_amount' => $expected], '정산 예정 금액이 저장되었습니다.');
-    }
-
     /**
      * 정산 상태 컨트롤 — action: settle(정산 완료)/hold(보류)/refunding(환불 진행)/release(자동 재계산 복귀).
      * settle 가드: 미수금 0 + 대기(pending) 입금·환불 0 — 공정 '종결'만으로 정산 완료가 되지 않는다.

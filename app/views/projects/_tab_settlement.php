@@ -1,7 +1,8 @@
 <?php
 /**
- * [입금·정산] 탭(R11) — 예정 금액·누적 입금·미수금·입금 상태·정산 상태 + 입금 원장.
- * 예외 프로젝트: 프로젝트 직접 입금 CRUD(등록/수정/취소/환불) + 예정 금액 수정 + 정산 상태 컨트롤.
+ * [입금·정산] 탭(R11, R14) — 계약 총액·누적 입금·미수금·입금 상태·정산 상태 + 입금 원장.
+ * 예외 프로젝트: 프로젝트 직접 입금 CRUD(등록/수정/취소/환불) + 정산 상태 컨트롤.
+ *   총액은 표시 전용(R14) — 수정은 프로젝트 수정 폼의 계약금액에서만.
  * 일반 프로젝트: 연결 계약 입금 내역 연동 표시(관리는 계약 화면) + 정산 상태 컨트롤.
  * projects/show.php 에서 include (변수 스코프 공유: $p, $paySummary, $projectPayments,
  * $isExceptionLedger, $settleAudit, $payMethods, $payTypeLabels, $canPayment, $contract).
@@ -20,14 +21,11 @@ $payRowLabels = ['pending' => '대기', 'paid' => '입금완료', 'cancelled' =>
       <span class="section-desc">확정 매출은 실제 입금액(순입금)만 반영 — 미입금 제외·환불/취소 차감</span></div>
   </div>
   <div class="kv-row">
-    <div class="kv" title="<?= $isExceptionLedger ? '계약 총액 — 예외 프로젝트 직접 입력(수정 이력 보존)·전액 입금 판정 기준' : '연결 계약 총액(VAT 포함)' ?>">
+    <div class="kv" title="<?= $isExceptionLedger ? '계약 총액 — 프로젝트 수정 폼의 계약금액·전액 입금 판정 기준' : '연결 계약 총액(VAT 포함)' ?>">
       <div class="kv-label">계약 총액</div>
       <div class="kv-value">
         <?php if ($ps['expected_set'] || !$isExceptionLedger): ?><?= moneyCell($ps['expected']) ?>
-        <?php else: ?><span class="badge badge-warn" title="예정 금액이 입력되지 않아 미수금·완납 판정을 할 수 없습니다">미설정</span><?php endif; ?>
-        <?php if ($isExceptionLedger && $canPayment): ?>
-          <button type="button" class="btn btn-sm btn-ghost" id="btnEditExpected" title="수정 전·후 금액과 수정자가 이력으로 남습니다">수정</button>
-        <?php endif; ?>
+        <?php else: ?><span class="badge badge-warn" title="프로젝트 수정에서 계약금액을 입력하세요">미설정</span><?php endif; ?>
       </div></div>
     <div class="kv" title="확정(paid) 입금 − 환불 (취소·대기 제외)"><div class="kv-label">누적 입금액(순)</div>
       <div class="kv-value"><?= moneyCell($ps['paid']) ?></div></div>
@@ -256,22 +254,6 @@ $payRowLabels = ['pending' => '대기', 'paid' => '입금완료', 'cancelled' =>
         toast('입금 내역이 취소 처리되었습니다.', 'success');
         location.reload();
       } catch (e) { toast(e.message, 'error'); }
-    });
-  });
-
-  // ── 예정 금액 수정(예외 전용) ──
-  var expBtn = document.getElementById('btnEditExpected');
-  if (expBtn) expBtn.addEventListener('click', function () {
-    EDEN.modal({
-      title: '계약 총액 수정',
-      body: '<form data-ajax action-route="projects.expected.save" data-reload class="form">' +
-        '<input type="hidden" name="_csrf" value="' + (window.EDEN.CSRF || '') + '">' +
-        '<input type="hidden" name="project_id" value="' + PROJECT_ID + '">' +
-        '<div class="field"><label class="field-label">계약 총액(원) <span class="req">*</span></label>' +
-        '<input type="text" inputmode="decimal" name="expected_amount" class="input" required value="<?= $p['expected_amount'] !== null ? (int) $p['expected_amount'] : '' ?>" placeholder="전액 입금 판정 기준 금액"></div>' +
-        '<div class="muted fs-13 mt-8">수정 전·후 금액과 수정자가 변경 이력에 남습니다.</div>' +
-        '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">저장</button></div></form>',
-      footer: false,
     });
   });
 

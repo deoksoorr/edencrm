@@ -225,7 +225,7 @@ class StatusService
      */
     public static function recalcProjectSettlement(int $projectId): string
     {
-        $project = Db::one("SELECT id, contract_id, is_exception, expected_amount, settlement_status
+        $project = Db::one("SELECT id, contract_id, is_exception, contract_amount, expected_amount, settlement_status
             FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
         if (!$project) {
             return 'unsettled';

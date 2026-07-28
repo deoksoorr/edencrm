@@ -76,6 +76,23 @@ try {
     t_int('warranty: 보드 위치 warranty_repair 유지', (int) ProcessService::stageIdByKey('warranty_repair'), (int) $row['process_stage_id']);
     t_true('warranty: status 컬럼도 유지', $row['status'] === 'warranty');
 
+    // ── Task 5: 예외 계약총액 연동 ──
+    $xp = Db::insert('projects', ['project_no' => 'R14-X1', 'name' => 'R14예외총액', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 33000000,
+        'expected_amount' => null, 'status' => 'in_progress', 'settlement_status' => 'unsettled']);
+    $p = Db::one("SELECT * FROM projects WHERE id=:id", [':id' => $xp]);
+    $s = AccountingService::projectPaySummary($p);
+    t_int('예외 총액 = contract_amount(expected NULL이어도)', 33000000, $s['expected']);
+    t_true('expected_set = true', $s['expected_set'] === true);
+    Db::insert('payments', ['project_id' => $xp, 'pay_type' => 'down', 'amount' => 33000000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    t_true('전액 입금 → 자동 전액 입금 완료', StatusService::recalcProjectSettlement($xp) === 'settled');
+    // 레거시 fallback: contract_amount=0 + expected_amount만 있는 행
+    $lg = Db::insert('projects', ['project_no' => 'R14-X2', 'name' => 'R14레거시', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 0,
+        'expected_amount' => 5000000, 'status' => 'in_progress', 'settlement_status' => 'unsettled']);
+    $p2 = Db::one("SELECT * FROM projects WHERE id=:id", [':id' => $lg]);
+    t_int('레거시 fallback = expected_amount', 5000000, AccountingService::projectPaySummary($p2)['expected']);
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

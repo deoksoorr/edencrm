@@ -238,12 +238,14 @@ class AccountingService
             $pendingCnt = (int) Db::val("SELECT COUNT(*) FROM payments WHERE contract_id=:c AND status='pending'", [':c' => $cid]);
             $expectedSet = $expected > 0;
         } else {
-            $expected = $p['expected_amount'] !== null ? (int) $p['expected_amount'] : 0;
+            $expected = ((int) ($p['contract_amount'] ?? 0)) > 0
+                ? (int) $p['contract_amount']
+                : ($p['expected_amount'] !== null ? (int) $p['expected_amount'] : 0); // R14: 계약총액 우선, 레거시 fallback
             $paid = self::projectNetPaid($pid);
             $refund = (int) Db::val("SELECT COALESCE(SUM(amount),0) FROM payments
                 WHERE project_id=:p AND status='paid' AND kind='refund'", [':p' => $pid]);
             $pendingCnt = (int) Db::val("SELECT COUNT(*) FROM payments WHERE project_id=:p AND status='pending'", [':p' => $pid]);
-            $expectedSet = $p['expected_amount'] !== null && $expected > 0;
+            $expectedSet = $expected > 0;
         }
         $outstanding = max(0, $expected - $paid);
         if ($expected > 0) {
@@ -255,12 +257,12 @@ class AccountingService
             'outstanding' => $outstanding, 'pay_status' => $payStatus, 'expected_set' => $expectedSet];
     }
 
-    /** 예외 프로젝트 미수금 모집단 조건(R11, 별칭 p 고정) — 예정 금액 입력된 유효 예외 프로젝트. */
+    /** 예외 프로젝트 미수금 모집단 조건(R11, 별칭 p 고정) — 계약총액(R14 우선)·레거시 예정 금액 입력된 유효 예외 프로젝트. */
     private const RECEIVABLE_EXCEPTION_COND =
-        "p.deleted_at IS NULL AND p.is_exception = 1 AND p.expected_amount > 0
+        "p.deleted_at IS NULL AND p.is_exception = 1 AND COALESCE(NULLIF(p.contract_amount, 0), p.expected_amount, 0) > 0
          AND p.status NOT IN ('cancelled','terminated')";
 
-    /** 미수금(현금 축) = Σ 계약별 max(0, 계약총액 − 순입금) + Σ 예외 프로젝트 max(0, 예정 금액 − 직접 입금 순액)(R11). */
+    /** 미수금(현금 축) = Σ 계약별 max(0, 계약총액 − 순입금) + Σ 예외 프로젝트 max(0, 총액 − 직접 입금 순액)(R11, R14: 총액=계약총액 우선·레거시 fallback). */
     public static function receivable(): int
     {
         $contract = (int) Db::val("SELECT COALESCE(SUM(GREATEST(0,
@@ -268,7 +270,7 @@ class AccountingService
             )),0)
             FROM contracts c WHERE " . self::RECEIVABLE_CONTRACT_COND);
         $exception = (int) Db::val("SELECT COALESCE(SUM(GREATEST(0,
-                p.expected_amount - " . self::PROJECT_PAID_SQL . "
+                COALESCE(NULLIF(p.contract_amount, 0), p.expected_amount, 0) - " . self::PROJECT_PAID_SQL . "
             )),0)
             FROM projects p WHERE " . self::RECEIVABLE_EXCEPTION_COND);
         return $contract + $exception;
@@ -282,7 +284,7 @@ class AccountingService
               AND c.contract_amount > " . self::PAID_SUM_SQL);
         $exception = (int) Db::val("SELECT COUNT(*) FROM projects p
             WHERE " . self::RECEIVABLE_EXCEPTION_COND . "
-              AND p.expected_amount > " . self::PROJECT_PAID_SQL);
+              AND COALESCE(NULLIF(p.contract_amount, 0), p.expected_amount, 0) > " . self::PROJECT_PAID_SQL);
         return $contract + $exception;
     }
 

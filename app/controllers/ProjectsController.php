@@ -33,9 +33,9 @@ class ProjectsController
         }
         $page      = max(1, (int) Util::int('page', 1));
 
-        // R11: 예정 금액(예외=직접 입력, 일반=계약 총액)·순입금(계약 입금 + 프로젝트 직접 입금) SQL 식 — 목록·필터 공용
+        // R14: 총액(예외=계약총액 우선·레거시 fallback, 일반=계약 총액)·순입금(계약 입금 + 프로젝트 직접 입금) SQL 식 — 목록·필터 공용
         $expectedExpr = "CASE WHEN p.is_exception = 1 AND p.contract_id IS NULL
-                              THEN COALESCE(p.expected_amount, 0) ELSE p.contract_amount END";
+                              THEN COALESCE(NULLIF(p.contract_amount, 0), p.expected_amount, 0) ELSE p.contract_amount END";
         $paidExpr = "(COALESCE((SELECT SUM(CASE WHEN pm.kind='refund' THEN -pm.amount ELSE pm.amount END)
                         FROM payments pm WHERE pm.contract_id = p.contract_id AND pm.status='paid'),0)
                     + COALESCE((SELECT SUM(CASE WHEN pm2.kind='refund' THEN -pm2.amount ELSE pm2.amount END)
@@ -653,14 +653,6 @@ class ProjectsController
         $constructionType = Util::postStr('construction_type', '');
         $constructionType = array_key_exists($constructionType, Stages::constructionTypes()) ? $constructionType : null;
 
-        // R11: 정산 예정 금액(예외 프로젝트 전용 입력) — 미전송 시 기존 값 유지, 빈값은 미설정(NULL)
-        $expectedPosted = array_key_exists('expected_amount', $_POST);
-        $expectedAmount = null;
-        if ($expectedPosted) {
-            $rawExpected = trim(Util::postStr('expected_amount', ''));
-            $expectedAmount = $rawExpected === '' ? null : max(0, (int) round((float) str_replace([',', ' '], '', $rawExpected)));
-        }
-
         $data = [
             'name'               => $name,
             'customer_id'        => $customerId > 0 ? $customerId : null, // 예외 프로젝트는 미연결(NULL) 허용
@@ -689,11 +681,6 @@ class ProjectsController
         $data['supply_amount'] = $split['supply'];
         $data['vat_amount']    = $split['vat'];
 
-        // R11: 예정 금액은 예외 프로젝트(전환 아님)에서만 저장 — 일반은 계약 총액이 예정 금액
-        if ($expectedPosted && $isException && !$convertToNormal) {
-            $data['expected_amount'] = $expectedAmount;
-        }
-
         if ($id) {
             // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
             if ($constructionType === null) {
@@ -715,15 +702,6 @@ class ProjectsController
             } elseif ($beforeSales !== $data['sales_user_id']) {
                 Audit::log('project_sales_user_change', 'project', $id,
                     ['sales_user_id' => $beforeSales], ['sales_user_id' => $data['sales_user_id']]);
-            }
-            // R11: 예정 금액 변경 이력 — 수정 전·후 금액과 수정자 보존
-            if (array_key_exists('expected_amount', $data)) {
-                $beforeExp = $before['expected_amount'] !== null ? (int) $before['expected_amount'] : null;
-                if ($beforeExp !== $data['expected_amount']) {
-                    Audit::log('project_expected_amount_change', 'project', $id,
-                        ['expected_amount' => $beforeExp],
-                        ['expected_amount' => $data['expected_amount'], 'changed_by' => Auth::id(), 'at' => date('Y-m-d H:i:s')]);
-                }
             }
             Db::update('projects', $data, 'id = :id', [':id' => $id]);
             if ($from !== $status) {
