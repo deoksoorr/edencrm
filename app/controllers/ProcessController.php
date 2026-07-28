@@ -28,17 +28,21 @@ class ProcessController
 
         // 원천 정합 보정: 공정 미배치(NULL)·유효하지 않은 공정 참조는 ProcessService 로 '대기중' 배치.
         // 화면 강제 출력 패치가 아니라 원천 자체를 서비스 경유(is_auto=1, 이력 기록)로 복구한다.
-        $broken = Db::all(
-            "SELECT p.id, p.process_stage_id FROM projects p
-             WHERE p.deleted_at IS NULL AND p.status IN ($statusIn)
-               AND (p.process_stage_id IS NULL
-                    OR NOT EXISTS (SELECT 1 FROM process_stages ps WHERE ps.id = p.process_stage_id))"
-        );
-        foreach ($broken as $b) {
-            if ($b['process_stage_id'] === null) {
-                ProcessService::initWaiting((int) $b['id'], null, true, '보드 정합 보정(공정 미배치)');
-            } else {
-                ProcessService::moveStage((int) $b['id'], ProcessService::waitingStageId(), null, '보드 정합 보정(유효하지 않은 공정 참조)', true);
+        // R16-V9: 조회(GET) 페이지가 데이터를 변경하는 문제 — 쓰기 권한(process.move) 보유자에 한해서만 보정한다.
+        //         읽기 전용 사용자는 보정 없이 렌더만 하며(모집단 쿼리는 동일), 다음 쓰기 권한자 접속 시 보정된다.
+        if (Rbac::can('process.move')) {
+            $broken = Db::all(
+                "SELECT p.id, p.process_stage_id FROM projects p
+                 WHERE p.deleted_at IS NULL AND p.status IN ($statusIn)
+                   AND (p.process_stage_id IS NULL
+                        OR NOT EXISTS (SELECT 1 FROM process_stages ps WHERE ps.id = p.process_stage_id))"
+            );
+            foreach ($broken as $b) {
+                if ($b['process_stage_id'] === null) {
+                    ProcessService::initWaiting((int) $b['id'], null, true, '보드 정합 보정(공정 미배치)');
+                } else {
+                    ProcessService::moveStage((int) $b['id'], ProcessService::waitingStageId(), null, '보드 정합 보정(유효하지 않은 공정 참조)', true);
+                }
             }
         }
 

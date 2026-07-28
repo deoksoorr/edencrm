@@ -64,8 +64,11 @@ class ContractsController
             'last_paid'     => $lastPaid,
         ][$basis];
 
-        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시).
-        $trash  = Util::int('trash', 0) === 1 && Rbac::can('contract.manage');
+        // R16: 휴지통 목록은 최고운영자 전용 — trash=1 진입 자체를 403 으로 끊는다(일반 목록 폴백 금지).
+        $trash  = Util::int('trash', 0) === 1;
+        if ($trash) {
+            Perm::requireSuperAdmin('contracts.trash');
+        }
         $where  = [$trash ? 'c.deleted_at IS NOT NULL' : 'c.deleted_at IS NULL'];
         $params = [];
         if ($q !== '') {
@@ -150,6 +153,8 @@ class ContractsController
     public function show(): void
     {
         $id = Util::int('id', 0);
+        // R16-V7: 행 단위 스코프 — id 만 알면 전건 열람되던 경로 차단(고객 범위 밖 계약은 404).
+        [$scopeSql, $scopeParams] = Scope::customerWhere('cu');
         $contract = Db::one(
             "SELECT c.*, cu.name AS customer_name, cu.phone AS customer_phone, cu.site_address AS customer_site_address,
                     u.name AS sales_user_name, q.quote_no,
@@ -160,8 +165,8 @@ class ContractsController
              LEFT JOIN quotes q ON q.id = c.quote_id
              LEFT JOIN quote_versions qv ON qv.id = c.quote_version_id
              LEFT JOIN users cb ON cb.id = c.converted_by
-             WHERE c.id = :id AND c.deleted_at IS NULL",
-            [':id' => $id]
+             WHERE c.id = :id AND c.deleted_at IS NULL AND $scopeSql",
+            [':id' => $id] + $scopeParams
         );
         if (!$contract) {
             http_response_code(404);
@@ -322,6 +327,9 @@ class ContractsController
      */
     public function quoteData(): void
     {
+        // R16-V4: 견적 읽기 권한 + 고객 스코프를 모두 만족해야 한다(임의 견적 JSON 덤프 차단).
+        Rbac::require('quote.view');
+        [$scopeSql, $scopeParams] = Scope::customerWhere('cu');
         $id = Util::int('id', 0);
         $quote = Db::one(
             "SELECT q.id, q.quote_no, q.customer_id, q.memo, q.valid_until, q.current_version_id,
@@ -335,8 +343,8 @@ class ContractsController
              JOIN customers cu ON cu.id = q.customer_id
              LEFT JOIN leads l ON l.id = q.lead_id
              LEFT JOIN quote_versions qv ON qv.id = q.current_version_id
-             WHERE q.id = :id AND q.deleted_at IS NULL",
-            [':id' => $id]
+             WHERE q.id = :id AND q.deleted_at IS NULL AND $scopeSql",
+            [':id' => $id] + $scopeParams
         );
         if (!$quote) {
             Response::error('견적을 찾을 수 없습니다.', 404);
@@ -935,6 +943,7 @@ class ContractsController
     /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 계약만. */
     public function purge(): void
     {
+        Perm::requireSuperAdmin('contracts.purge');  // R16: 라우터 trash.manage 와 이중 가드
         if (!Rbac::isRole('super_admin')) {
             Audit::log('access_denied', 'contracts', null, null, ['action' => 'contract_purge']);
             http_response_code(403);
@@ -955,9 +964,10 @@ class ContractsController
         Response::redirect('contracts.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
-    /** 복원(휴지통 → 정상). */
+    /** 복원(휴지통 → 정상) — super_admin 전용. */
     public function restore(): void
     {
+        Perm::requireSuperAdmin('contracts.restore');  // R16: 라우터 trash.manage 와 이중 가드
         $id = (int) Util::postInt('id', 0);
         $row = Db::one("SELECT * FROM contracts WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
         if (!$row) {

@@ -72,7 +72,7 @@ class AttendanceController
     /** 해제(DELETE): {user_id, mark_date, reason?} — 확인 절차는 화면(confirm), 기록은 Audit. */
     public function unmark(): void
     {
-        [$userId, $date] = $this->targetOrFail();
+        [$userId, $date] = $this->targetOrFail(false);
         $row = Db::one(
             "SELECT * FROM attendance_marks WHERE user_id = :u AND mark_date = :d",
             [':u' => $userId, ':d' => $date]
@@ -87,16 +87,27 @@ class AttendanceController
         Response::json(['id' => (int) $row['id'], 'mode' => 'deleted']);
     }
 
-    /** 공통 대상 검증: 실존(미삭제) 직원 + 유효 날짜. 실패 시 422 로 즉시 종료. */
-    private function targetOrFail(): array
+    /**
+     * 공통 대상 검증: 실존(미삭제) 직원 + 유효 날짜. 실패 시 422 로 즉시 종료.
+     * R16-V6: 등록·변경($requireActive)은 재직(active) 직원만 — 퇴사·휴직 직원에게 새 근태를 남기지 않는다.
+     *         해제(unmark)는 기존 기록 정리를 막지 않도록 재직 여부를 보지 않는다.
+     */
+    private function targetOrFail(bool $requireActive = true): array
     {
         $userId = (int) (Util::postInt('user_id') ?? 0);
         $date = Util::dateOrNull(Util::postStr('mark_date'));
         if ($userId <= 0 || $date === null) {
             Response::error('직원과 날짜를 올바르게 지정하세요.', 422);
         }
-        if (!Db::val("SELECT 1 FROM users WHERE id = :id AND deleted_at IS NULL", [':id' => $userId])) {
+        $target = Db::one(
+            "SELECT id, status FROM users WHERE id = :id AND deleted_at IS NULL",
+            [':id' => $userId]
+        );
+        if (!$target) {
             Response::error('존재하지 않는 직원입니다.', 422);
+        }
+        if ($requireActive && ($target['status'] ?? '') !== 'active') {
+            Response::error('비활성(퇴사·휴직) 직원에게는 근태 상태를 등록·변경할 수 없습니다.', 422);
         }
         return [$userId, $date];
     }

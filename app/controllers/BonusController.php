@@ -166,7 +166,9 @@ class BonusController
             $paid    = AccountingService::paidTotal($from, $to);
             $revenue = AccountingService::confirmedRevenue($from, $to);
         }
-        $receivable = AccountingService::receivable(); // 현재 시점 스냅샷(기간 무관) — 뷰에서 라벨 명시
+        // R16-V8: 미수금은 전사 축 스냅샷이라 직원 스코프($uid 고정)에서는 노출하지 않는다.
+        //         (직원 귀속 미수금 정의가 없으므로 값을 만들어내지 않고 미표시 — 뷰에서 '-' 로 렌더)
+        $receivable = $uid === null ? AccountingService::receivable() : null;
 
         // 프로젝트 수: 기간 내 계약일(없으면 등록일) 기준, 취소·파기 제외
         $pp = [':pf' => $from, ':pt' => $to];
@@ -183,14 +185,16 @@ class BonusController
             $pp
         );
 
-        // (b) 순이익 현황 — 등록 지출·직접 원가는 전사 축(스펙 고정), 순이익만 직원 선택 시 귀속치
-        $costReg    = AccountingService::costTotal($from, $to);
-        $costDirect = AccountingService::confirmedCost($from, $to);
+        // (b) 순이익 현황 — R16-V8: 직원 스코프면 전사 합계를 내보내지 않고 귀속 원가(확정 지출 × 기여도)로 통일한다.
+        //     귀속 원가는 순이익(contrib = 귀속매출 − 귀속원가)과 동일 산식의 구성요소라 새 계산을 만들지 않는다.
         if ($uid !== null) {
             $byUser = AccountingService::employeeConfirmedByUser($from, $to);
             $profit = (int) ($byUser[$uid]['contrib'] ?? 0);
+            $costReg = $costDirect = (int) ($byUser[$uid]['cost'] ?? 0);
         } else {
-            $profit = AccountingService::confirmedProfit($from, $to);
+            $costReg    = AccountingService::costTotal($from, $to);
+            $costDirect = AccountingService::confirmedCost($from, $to);
+            $profit     = AccountingService::confirmedProfit($from, $to);
         }
         $profitRate = $revenue > 0 ? round($profit / $revenue * 100, 1) : null; // 0 나눗셈 방지
 

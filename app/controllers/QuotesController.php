@@ -41,8 +41,11 @@ class QuotesController
         }
         $range = Util::periodRange($period, $fromIn !== '' ? $fromIn : null, $toIn !== '' ? $toIn : null);
 
-        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시).
-        $trash  = Util::int('trash', 0) === 1 && Rbac::can('quote.manage');
+        // R16: 휴지통 목록은 최고운영자 전용 — trash=1 진입 자체를 403 으로 끊는다(일반 목록 폴백 금지).
+        $trash  = Util::int('trash', 0) === 1;
+        if ($trash) {
+            Perm::requireSuperAdmin('quotes.trash');
+        }
         $where  = [$trash ? 'q.deleted_at IS NOT NULL' : 'q.deleted_at IS NULL'];
         $params = [];
         if ($q !== '') {
@@ -115,14 +118,16 @@ class QuotesController
     public function show(): void
     {
         $id = Util::int('id', 0);
+        // R16-V7: 행 단위 스코프 — id 만 알면 전건 열람되던 경로 차단(고객 범위 밖 견적은 404).
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
         $quote = Db::one(
             "SELECT q.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address,
                     l.work_type AS lead_work_type
              FROM quotes q
              JOIN customers c ON c.id = q.customer_id
              LEFT JOIN leads l ON l.id = q.lead_id
-             WHERE q.id = :id AND q.deleted_at IS NULL",
-            [':id' => $id]
+             WHERE q.id = :id AND q.deleted_at IS NULL AND $scopeSql",
+            [':id' => $id] + $scopeParams
         );
         if (!$quote) {
             http_response_code(404);
@@ -340,12 +345,14 @@ class QuotesController
     public function printView(): void
     {
         $id = Util::int('id', 0);
+        // R16-V7: 인쇄 경로도 상세와 동일한 행 스코프(우회 열람 방지).
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
         $quote = Db::one(
             "SELECT q.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address,
                     c.site_address AS customer_site_address
              FROM quotes q JOIN customers c ON c.id = q.customer_id
-             WHERE q.id = :id AND q.deleted_at IS NULL",
-            [':id' => $id]
+             WHERE q.id = :id AND q.deleted_at IS NULL AND $scopeSql",
+            [':id' => $id] + $scopeParams
         );
         if (!$quote) {
             http_response_code(404);
@@ -418,6 +425,7 @@ class QuotesController
     /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 견적만. */
     public function purge(): void
     {
+        Perm::requireSuperAdmin('quotes.purge');   // R16: 라우터 trash.manage 와 이중 가드
         if (!Rbac::isRole('super_admin')) {
             Audit::log('access_denied', 'quotes', null, null, ['action' => 'quote_purge']);
             http_response_code(403);
@@ -438,9 +446,10 @@ class QuotesController
         Response::redirect('quotes.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
-    /** 복원(휴지통 → 정상). */
+    /** 복원(휴지통 → 정상) — super_admin 전용. */
     public function restore(): void
     {
+        Perm::requireSuperAdmin('quotes.restore');  // R16: 라우터 trash.manage 와 이중 가드
         $id = (int) Util::postInt('id', 0);
         $row = Db::one("SELECT * FROM quotes WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
         if (!$row) {
@@ -455,7 +464,12 @@ class QuotesController
     public function leadOptions(): void
     {
         $customerId = Util::int('customer_id', 0);
-        if ($customerId <= 0 || !Db::val("SELECT id FROM customers WHERE id=:id AND deleted_at IS NULL", [':id' => $customerId])) {
+        // R16-V3: 고객 스코프 적용 — 담당 밖 고객의 영업기회 목록이 노출되던 경로 차단.
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
+        if ($customerId <= 0 || !Db::val(
+            "SELECT c.id FROM customers c WHERE c.id=:id AND c.deleted_at IS NULL AND $scopeSql",
+            [':id' => $customerId] + $scopeParams
+        )) {
             Response::error('고객을 찾을 수 없습니다.', 404);
         }
         Response::json(['leads' => $this->leadOptionsFor($customerId, Util::int('include_lead_id', 0))]);

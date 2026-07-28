@@ -18,11 +18,12 @@ class Nav
                 ['quotes.index', '견적', 'quote.view', 'file'],
                 ['contracts.index', '계약', 'contract.view', 'check'],
             ],
+            // R16: 라우터 perm 과 동일한 키로 노출 제어(메뉴는 보이는데 열면 403 인 상태 방지)
             '현장' => array_values(array_filter([
-                ['projects.index', '프로젝트', null, 'briefcase'],
-                ['process.board', '공정 보드', null, 'trello'],
-                ['schedule.index', '일정', null, 'calendar'],
-                Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', null, 'book'] : null,
+                ['projects.index', '프로젝트', 'project.view_all', 'briefcase'],
+                ['process.board', '공정 보드', 'process.view', 'trello'],
+                ['schedule.index', '일정', 'schedule.view_all', 'calendar'],
+                Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', 'worklog.view_all', 'book'] : null,
             ])),
             '분석' => [
                 ['reports.index', '리포트', 'report.view', 'bar'], // R14-2: 리포트를 반기 위로(사장 지시)

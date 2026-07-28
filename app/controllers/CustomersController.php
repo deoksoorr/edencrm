@@ -404,23 +404,26 @@ class CustomersController
             Response::json(['candidates' => []]);
         }
 
+        // R16-V2: 담당 범위 밖 고객이 이름·전화·이메일·사업자번호로 검색되던 문제 — Scope 적용.
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
         $conds = [];
-        $params = [':exclude' => $excludeId];
+        $params = [':exclude' => $excludeId] + $scopeParams;
         if ($phone !== '') {
-            $conds[] = 'phone = :phone';
+            $conds[] = 'c.phone = :phone';
             $params[':phone'] = $phone;
         }
         if ($email !== '') {
-            $conds[] = 'email = :email';
+            $conds[] = 'c.email = :email';
             $params[':email'] = $email;
         }
         if ($bizRegNo !== '') {
-            $conds[] = "REPLACE(biz_reg_no, '-', '') = :bizno";
+            $conds[] = "REPLACE(c.biz_reg_no, '-', '') = :bizno";
             $params[':bizno'] = $bizRegNo;
         }
         $rows = Db::all(
-            "SELECT id, name, company_name, phone, email, biz_reg_no FROM customers
-             WHERE deleted_at IS NULL AND id <> :exclude AND (" . implode(' OR ', $conds) . ") LIMIT 5",
+            "SELECT c.id, c.name, c.company_name, c.phone, c.email, c.biz_reg_no FROM customers c
+             WHERE c.deleted_at IS NULL AND c.id <> :exclude AND $scopeSql
+               AND (" . implode(' OR ', $conds) . ") LIMIT 5",
             $params
         );
         Response::json(['candidates' => $rows]);
@@ -435,8 +438,11 @@ class CustomersController
             Response::error('병합할 두 고객을 올바르게 지정하세요.', 422);
         }
 
-        $keep = Db::one('SELECT * FROM customers WHERE id=:id AND deleted_at IS NULL', [':id' => $keepId]);
-        $merge = Db::one('SELECT * FROM customers WHERE id=:id AND deleted_at IS NULL', [':id' => $mergeId]);
+        // R16-V10: 병합은 파괴적 작업 — 유지·병합 대상 '양쪽 모두' 담당 범위 안이어야 한다.
+        [$scopeSql, $scopeParams] = Scope::customerWhere('c');
+        $sql = "SELECT c.* FROM customers c WHERE c.id=:id AND c.deleted_at IS NULL AND $scopeSql";
+        $keep = Db::one($sql, [':id' => $keepId] + $scopeParams);
+        $merge = Db::one($sql, [':id' => $mergeId] + $scopeParams);
         if (!$keep || !$merge) {
             Response::error('고객을 찾을 수 없습니다.', 404);
         }

@@ -55,8 +55,11 @@ class ProjectsController
         }
         $dir = strtolower(Util::str('dir', 'asc')) === 'desc' ? 'DESC' : 'ASC';
 
-        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시). 데이터 범위(Scope)는 유지.
-        $trash = Util::int('trash', 0) === 1 && Rbac::can('project.manage');
+        // R16: 휴지통 목록은 최고운영자 전용 — trash=1 진입 자체를 403 으로 끊는다(일반 목록 폴백 금지).
+        $trash = Util::int('trash', 0) === 1;
+        if ($trash) {
+            Perm::requireSuperAdmin('projects.trash');
+        }
         [$scopeSql, $params] = Scope::projectWhere('p');
         $where = [$trash ? 'p.deleted_at IS NOT NULL' : 'p.deleted_at IS NULL', $scopeSql];
 
@@ -810,6 +813,7 @@ class ProjectsController
     /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 프로젝트만. */
     public function purge(): void
     {
+        Perm::requireSuperAdmin('projects.purge');   // R16: 라우터 trash.manage 와 이중 가드
         if (!Rbac::isRole('super_admin')) {
             Audit::log('access_denied', 'project', null, null, ['action' => 'project_purge']);
             http_response_code(403);
@@ -830,9 +834,10 @@ class ProjectsController
         Response::redirect('projects.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
-    /** 복원(휴지통 → 정상). */
+    /** 복원(휴지통 → 정상) — super_admin 전용. */
     public function restore(): void
     {
+        Perm::requireSuperAdmin('projects.restore');  // R16: 라우터 trash.manage 와 이중 가드
         $id = (int) Util::postInt('id', 0);
         $row = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
         if (!$row) {
@@ -907,7 +912,9 @@ class ProjectsController
                 return false;
             }
             if (empty($f['project_id'])) {
-                return Rbac::can('project.view_all');
+                // R16: project.view_all(=field.projects read) 은 이제 읽기 권한자 전원에게 참이므로
+                //      범위 판정 전용 헬퍼를 쓴다(프로젝트 미연결 파일의 열람 범위 확대 방지).
+                return Scope::canViewAllProjects();
             }
             return Scope::canAccessProject((int) $f['project_id']);
         });

@@ -16,7 +16,7 @@ class AssignmentContributionException extends RuntimeException
 
 /**
  * 직원 배정 (T7). 프로젝트 상세(T6) 화면에서 폼으로 호출된다.
- * perm project.assign 은 라우터가 강제한다.
+ * perm project.assign 은 라우터가 강제하고, 대상 프로젝트 범위는 Scope::canAccessProject 가 강제한다(R16).
  */
 class AssignmentsController
 {
@@ -70,6 +70,11 @@ class AssignmentsController
         }
         if (!in_array($role, self::ROLES, true)) {
             Response::error('허용되지 않는 역할입니다: ' . $role, 422);
+        }
+
+        // R16-V5: 프로젝트 접근 범위 가드 — 임의 프로젝트에 배정을 생성·수정하던 경로 차단.
+        if (!Scope::canAccessProject($projectId)) {
+            Response::error('이 프로젝트에 접근할 권한이 없습니다.', 403);
         }
 
         $project = Db::one(
@@ -182,6 +187,10 @@ class AssignmentsController
         $row = Db::one("SELECT * FROM project_assignments WHERE id = :id", [':id' => $id]);
         if (!$row) {
             Response::error('배정 정보를 찾을 수 없습니다.', 404);
+        }
+        // R16-V5: 프로젝트 접근 범위 가드 — 배정 id 만으로 타 프로젝트 배정을 삭제하던 경로 차단.
+        if (!Scope::canAccessProject((int) $row['project_id'])) {
+            Response::error('이 프로젝트에 접근할 권한이 없습니다.', 403);
         }
         Db::run("DELETE FROM project_assignments WHERE id = :id", [':id' => $id]);
         Audit::log('assignment_delete', 'project_assignments', $id, $row, null);
