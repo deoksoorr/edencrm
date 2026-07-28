@@ -15,11 +15,11 @@ class CustomersController
         'name' => 'c.name ASC',
     ];
 
-    /** 목록 필터 WHERE 조합 (index/export 공용). */
-    private function buildFilter(): array
+    /** 목록 필터 WHERE 조합 (index/export 공용). $trash=true 면 휴지통(소프트삭제분)만 본다. */
+    private function buildFilter(bool $trash = false): array
     {
         [$scopeSql, $scopeParams] = Scope::customerWhere('c');
-        $where = ['c.deleted_at IS NULL', $scopeSql];
+        $where = [$trash ? 'c.deleted_at IS NOT NULL' : 'c.deleted_at IS NULL', $scopeSql];
         $params = $scopeParams;
 
         $q = Util::str('q');
@@ -49,9 +49,15 @@ class CustomersController
 
     public function index(): void
     {
-        [$whereSql, $params] = $this->buildFilter();
+        // R16: 휴지통 목록은 최고운영자 전용 — trash=1 진입 자체를 403 으로 끊는다(일반 목록 폴백 금지).
+        $trash = Util::int('trash', 0) === 1;
+        if ($trash) {
+            Perm::requireSuperAdmin('customers.trash');
+        }
+        [$whereSql, $params] = $this->buildFilter($trash);
         $sort = Util::str('sort', 'created_at');
-        $orderBy = self::SORT_MAP[$sort] ?? self::SORT_MAP['created_at'];
+        // 휴지통은 최근 삭제순 고정(정렬 선택은 일반 목록 전용)
+        $orderBy = $trash ? 'c.deleted_at DESC, c.id DESC' : (self::SORT_MAP[$sort] ?? self::SORT_MAP['created_at']);
 
         $total = (int) Db::val("SELECT COUNT(*) FROM customers c WHERE $whereSql", $params);
         $per = (int) ($GLOBALS['config']['PAGE_SIZE'] ?? 20);
@@ -69,7 +75,7 @@ class CustomersController
         $sources = Db::run("SELECT DISTINCT source FROM customers WHERE source IS NOT NULL AND source <> '' ORDER BY source")->fetchAll(PDO::FETCH_COLUMN);
 
         View::render('customers/index', [
-            'title' => '고객 CRM',
+            'title' => $trash ? '고객 CRM — 휴지통' : '고객 CRM',
             'rows' => $rows,
             'pg' => $pg,
             'salesUsers' => $salesUsers,
@@ -79,6 +85,7 @@ class CustomersController
             'source' => Util::str('source'),
             'salesUserId' => Util::int('sales_user_id', null),
             'sort' => $sort,
+            'trash' => $trash,
         ]);
     }
 
@@ -476,7 +483,134 @@ class CustomersController
         if (Response::wantsJson()) {
             Response::json(['id' => $id]);
         }
-        Response::redirect('customers.index', [], '고객이 삭제되었습니다.');
+        Response::redirect('customers.index', [], '고객이 휴지통으로 이동되었습니다.');
+    }
+
+    /* ───────────────────── 휴지통: 복원·완전삭제 (R16 T4) ─────────────────────
+     * 정책은 견적·계약·프로젝트(R15)와 동일 — 목록 진입·복원·완전삭제 전부 최고운영자 전용.
+     * 고객은 영업기회·견적·계약·프로젝트의 부모(FK RESTRICT)라 참조가 남아 있으면 물리 삭제가
+     * 불가능하다. 활성 참조와 휴지통 잔존 참조를 사유를 나눠 안내한다. */
+
+    /**
+     * 완전삭제 차단 사유 — 활성(미삭제) 영업기회·견적·계약·프로젝트가 참조 중이면 차단.
+     * 참조가 전부 휴지통으로 내려가면 이 사유는 해제되고, 잔존 참조는 purgeResidualReason 이 맡는다.
+     * 없으면 null.
+     */
+    public static function purgeBlockReason(int $customerId): ?string
+    {
+        $refs = [];
+        foreach ([
+            ['leads', '영업기회'], ['quotes', '견적'], ['contracts', '계약'], ['projects', '프로젝트'],
+        ] as [$t, $label]) {
+            $n = (int) Db::val(
+                "SELECT COUNT(*) FROM `$t` WHERE customer_id = :id AND deleted_at IS NULL",
+                [':id' => $customerId]
+            );
+            if ($n > 0) { $refs[] = "{$label} {$n}건"; }
+        }
+        return $refs ? ('연결된 기록(' . implode(', ', $refs) . ')이 있어 완전삭제할 수 없습니다. 기록 보존을 위해 휴지통에 유지하세요.') : null;
+    }
+
+    /**
+     * 휴지통에 남은 참조 사유 — 소프트삭제된 영업기회·견적·계약·프로젝트도 FK(RESTRICT)가
+     * 고객 행의 물리 삭제를 막는다. 각 화면 휴지통에서 먼저 완전삭제해야 한다. 없으면 null.
+     */
+    public static function purgeResidualReason(int $customerId): ?string
+    {
+        $refs = [];
+        foreach ([
+            ['leads', '영업기회'], ['quotes', '견적'], ['contracts', '계약'], ['projects', '프로젝트'],
+        ] as [$t, $label]) {
+            $n = (int) Db::val(
+                "SELECT COUNT(*) FROM `$t` WHERE customer_id = :id AND deleted_at IS NOT NULL",
+                [':id' => $customerId]
+            );
+            if ($n > 0) { $refs[] = "{$label} {$n}건"; }
+        }
+        return $refs ? ('휴지통에 남아 있는 기록(' . implode(', ', $refs) . ')을 해당 화면의 휴지통에서 먼저 완전삭제하세요.') : null;
+    }
+
+    /**
+     * 고객 완전삭제 실행(정적, 테스트/액션 공용).
+     * 삭제 범위 = 고객이 소유한 하위 데이터(연락처·활동 이력·사업자등록증 파일 행) + 고객 행.
+     * FK 안전 순서: 등록증 포인터 해제 → project_files → customer_contacts → customer_activities → customers.
+     *   - customers.biz_license_file_id → project_files (ON DELETE SET NULL) 이라 포인터를 먼저 끊는다.
+     *   - project_files 는 고객 FK 가 없는 다형 테이블이라 남기면 고아가 된다(entity_type='customer_license').
+     *   - customer_contacts 는 RESTRICT, customer_activities 는 CASCADE 지만 둘 다 명시 삭제한다.
+     * 참조가 남아 있으면 예외를 던져 트랜잭션 전체를 롤백한다(FK 위반·부분 삭제 방지).
+     * 이미 트랜잭션 안이면 그대로 참여(중첩 begin 금지 — QuotesController::purgeQuote 패턴).
+     */
+    public static function purgeCustomer(int $id): void
+    {
+        $run = function () use ($id) {
+            $reason = self::purgeBlockReason($id) ?? self::purgeResidualReason($id);
+            if ($reason !== null) {
+                throw new RuntimeException($reason);
+            }
+            Db::run("UPDATE customers SET biz_license_file_id = NULL WHERE id = :id", [':id' => $id]);
+            Db::run("DELETE FROM project_files WHERE entity_type = 'customer_license' AND entity_id = :id", [':id' => $id]);
+            Db::run("DELETE FROM customer_contacts WHERE customer_id = :id", [':id' => $id]);
+            Db::run("DELETE FROM customer_activities WHERE customer_id = :id", [':id' => $id]);
+            Db::run("DELETE FROM customers WHERE id = :id", [':id' => $id]);
+        };
+        if (Db::pdo()->inTransaction()) {
+            $run();
+        } else {
+            Db::transaction($run);
+        }
+    }
+
+    /** 복원 실행(정적, 테스트/액션 공용) — deleted_at 해제. */
+    public static function restoreCustomer(int $id): void
+    {
+        Db::update('customers', ['deleted_at' => null], 'id = :id', [':id' => $id]);
+    }
+
+    /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 고객만. */
+    public function purge(): void
+    {
+        Perm::requireSuperAdmin('customers.purge');   // R16: 라우터 trash.manage 와 이중 가드
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM customers WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('customers.index', ['trash' => 1], '휴지통에 있는 고객만 완전삭제할 수 있습니다.', 'error');
+        }
+        $reason = self::purgeBlockReason($id) ?? self::purgeResidualReason($id);
+        if ($reason !== null) {
+            Response::redirect('customers.index', ['trash' => 1], $reason, 'error');
+        }
+        // 물리 파일 경로는 DB 삭제 전에 확보하고, 커밋에 성공한 뒤에만 지운다(롤백 시 파일 유실 방지).
+        $files = Db::all(
+            "SELECT path FROM project_files WHERE entity_type = 'customer_license' AND entity_id = :id",
+            [':id' => $id]
+        );
+        try {
+            self::purgeCustomer($id);
+        } catch (\Throwable $e) {
+            error_log('[CustomersController::purge] ' . $e->getMessage());
+            Response::redirect('customers.index', ['trash' => 1], '완전삭제에 실패했습니다: ' . $e->getMessage(), 'error');
+        }
+        foreach ($files as $f) {
+            $full = UPLOAD_PATH . '/' . $f['path'];
+            if (is_file($full)) { @unlink($full); }
+        }
+        // 감사 로그의 before 는 삭제 직전 스냅샷($row) — 고객명·식별번호가 행 소멸 후에도 남는다.
+        Audit::log('trash_purge', 'customers', $id, $row, ['name' => $row['name']]);
+        Response::redirect('customers.index', ['trash' => 1], '완전삭제되었습니다.');
+    }
+
+    /** 복원(휴지통 → 정상) — super_admin 전용. */
+    public function restore(): void
+    {
+        Perm::requireSuperAdmin('customers.restore');  // R16: 라우터 trash.manage 와 이중 가드
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM customers WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('customers.index', ['trash' => 1], '휴지통에 있는 고객만 복원할 수 있습니다.', 'error');
+        }
+        self::restoreCustomer($id);
+        Audit::log('trash_restore', 'customers', $id, $row, ['name' => $row['name']]);
+        Response::redirect('customers.index', ['trash' => 1], '고객이 복원되었습니다.');
     }
 
     public function export(): void

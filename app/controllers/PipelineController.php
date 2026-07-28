@@ -160,6 +160,13 @@ class PipelineController
 
     public function index(): void
     {
+        // R16: 휴지통 목록은 최고운영자 전용 — trash=1 진입 자체를 403 으로 끊는다(일반 목록 폴백 금지).
+        if (Util::int('trash', 0) === 1) {
+            Perm::requireSuperAdmin('pipeline.trash');
+            $this->trashIndex();
+            return;
+        }
+
         $f = $this->filters();
         $leads = PipelineStageService::attachSignals($this->loadLeads($f));
 
@@ -188,6 +195,42 @@ class PipelineController
             'canManage'  => Rbac::can('pipeline.manage'),
             'quickAlertsOn' => Settings::enabled('feature_pipeline_quick_alerts'),
             'scripts'    => ['js/pipeline.js'],
+        ]);
+    }
+
+    /**
+     * 휴지통 목록(소프트삭제 영업기회) — 파생 단계 보드가 아니라 표로 표시한다.
+     * 삭제된 리드는 단계 산정·요약의 입력이 아니므로 보드 컬럼에 섞지 않는다.
+     * 고객이 함께 휴지통에 있으면 복원이 막히므로(부모 우선) 화면에서 미리 표시한다.
+     */
+    private function trashIndex(): void
+    {
+        $q = Util::str('q');
+        $where = ['l.deleted_at IS NOT NULL'];
+        $params = [];
+        if ($q !== '') {
+            $where[] = '(c.name LIKE :q1 OR c.company_name LIKE :q2 OR l.work_type LIKE :q3 OR l.site_address LIKE :q4)';
+            $like = '%' . $q . '%';
+            $params += [':q1' => $like, ':q2' => $like, ':q3' => $like, ':q4' => $like];
+        }
+        $rows = Db::all(
+            "SELECT l.id, l.work_type, l.site_address, l.expected_amount, l.deleted_at,
+                    c.name AS customer_name, c.deleted_at AS customer_deleted_at,
+                    ps.name AS stage_name, u.name AS sales_user_name
+             FROM leads l
+             JOIN customers c ON c.id = l.customer_id
+             LEFT JOIN pipeline_stages ps ON ps.id = l.stage_id
+             LEFT JOIN users u ON u.id = l.sales_user_id
+             WHERE " . implode(' AND ', $where) . "
+             ORDER BY l.deleted_at DESC, l.id DESC LIMIT 300",
+            $params
+        );
+
+        View::render('pipeline/index', [
+            'title'   => '영업 파이프라인 — 휴지통',
+            'trash'   => true,
+            'rows'    => $rows,
+            'trashQ'  => $q,
         ]);
     }
 
@@ -333,7 +376,112 @@ class PipelineController
         Audit::log('lead.delete', 'leads', $id, $lead, null);
 
         if (Response::wantsJson()) { Response::json(['id' => $id]); }
-        Response::redirect('pipeline.index', [], '영업기회가 삭제되었습니다.');
+        Response::redirect('pipeline.index', [], '영업기회가 휴지통으로 이동되었습니다.');
+    }
+
+    /* ───────────────────── 휴지통: 복원·완전삭제 (R16 T4) ─────────────────────
+     * 견적·계약·프로젝트(R15)와 동일 정책 — 목록 진입·복원·완전삭제 전부 최고운영자 전용.
+     * 영업기회는 quotes.lead_id(FK RESTRICT)의 부모이자 customers 의 자식이다. */
+
+    /** 완전삭제 차단 사유 — 활성(미삭제) 견적이 참조 중이면 차단. 없으면 null. */
+    public static function purgeBlockReason(int $leadId): ?string
+    {
+        $n = (int) Db::val("SELECT COUNT(*) FROM quotes WHERE lead_id = :id AND deleted_at IS NULL", [':id' => $leadId]);
+        return $n > 0
+            ? "연결된 기록(견적 {$n}건)이 있어 완전삭제할 수 없습니다. 기록 보존을 위해 휴지통에 유지하세요."
+            : null;
+    }
+
+    /**
+     * 휴지통에 남은 견적 참조 — 소프트삭제 견적도 FK(RESTRICT)가 영업기회 물리 삭제를 막는다.
+     * 견적 휴지통에서 먼저 완전삭제해야 한다. 없으면 null.
+     */
+    public static function purgeResidualReason(int $leadId): ?string
+    {
+        $n = (int) Db::val("SELECT COUNT(*) FROM quotes WHERE lead_id = :id AND deleted_at IS NOT NULL", [':id' => $leadId]);
+        return $n > 0 ? "휴지통에 남아 있는 견적 {$n}건을 견적 휴지통에서 먼저 완전삭제하세요." : null;
+    }
+
+    /** 복원 차단 사유 — 부모 고객이 아직 휴지통이면 복원해도 목록에 뜨지 않는다(고객 먼저 복원). */
+    public static function restoreBlockReason(int $leadId): ?string
+    {
+        $customerDeletedAt = Db::val(
+            "SELECT c.deleted_at FROM leads l JOIN customers c ON c.id = l.customer_id WHERE l.id = :id",
+            [':id' => $leadId]
+        );
+        return $customerDeletedAt !== null
+            ? '고객이 휴지통에 있어 영업기회를 복원할 수 없습니다. 고객을 먼저 복원하세요.'
+            : null;
+    }
+
+    /**
+     * 영업기회 완전삭제 실행(정적, 테스트/액션 공용) — leads 는 소유 하위 테이블이 없어 행만 물리 삭제.
+     * 참조가 남아 있으면 예외로 트랜잭션 전체를 롤백한다(FK 위반·부분 삭제 방지).
+     * 이미 트랜잭션 안이면 그대로 참여(중첩 begin 금지 — QuotesController::purgeQuote 패턴).
+     */
+    public static function purgeLead(int $id): void
+    {
+        $run = function () use ($id) {
+            $reason = self::purgeBlockReason($id) ?? self::purgeResidualReason($id);
+            if ($reason !== null) {
+                throw new RuntimeException($reason);
+            }
+            Db::run("DELETE FROM leads WHERE id = :id", [':id' => $id]);
+        };
+        if (Db::pdo()->inTransaction()) {
+            $run();
+        } else {
+            Db::transaction($run);
+        }
+    }
+
+    /** 복원 실행(정적, 테스트/액션 공용) — deleted_at 해제. */
+    public static function restoreLead(int $id): void
+    {
+        Db::update('leads', ['deleted_at' => null], 'id = :id', [':id' => $id]);
+    }
+
+    /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 영업기회만. */
+    public function purge(): void
+    {
+        Perm::requireSuperAdmin('pipeline.purge');   // R16: 라우터 trash.manage 와 이중 가드
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM leads WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('pipeline.index', ['trash' => 1], '휴지통에 있는 영업기회만 완전삭제할 수 있습니다.', 'error');
+        }
+        $reason = self::purgeBlockReason($id) ?? self::purgeResidualReason($id);
+        if ($reason !== null) {
+            Response::redirect('pipeline.index', ['trash' => 1], $reason, 'error');
+        }
+        // 감사 로그의 before 는 삭제 직전 스냅샷($row) — 고객명은 행 소멸 후 조인이 불가하므로 미리 확보한다.
+        $label = (string) (Db::val("SELECT name FROM customers WHERE id = :id", [':id' => $row['customer_id']]) ?? '');
+        try {
+            self::purgeLead($id);
+        } catch (\Throwable $e) {
+            error_log('[PipelineController::purge] ' . $e->getMessage());
+            Response::redirect('pipeline.index', ['trash' => 1], '완전삭제에 실패했습니다: ' . $e->getMessage(), 'error');
+        }
+        Audit::log('trash_purge', 'leads', $id, $row, ['name' => $label . ' / ' . (string) ($row['work_type'] ?? '')]);
+        Response::redirect('pipeline.index', ['trash' => 1], '완전삭제되었습니다.');
+    }
+
+    /** 복원(휴지통 → 정상) — super_admin 전용. */
+    public function restore(): void
+    {
+        Perm::requireSuperAdmin('pipeline.restore');  // R16: 라우터 trash.manage 와 이중 가드
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM leads WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('pipeline.index', ['trash' => 1], '휴지통에 있는 영업기회만 복원할 수 있습니다.', 'error');
+        }
+        $reason = self::restoreBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('pipeline.index', ['trash' => 1], $reason, 'error');
+        }
+        self::restoreLead($id);
+        Audit::log('trash_restore', 'leads', $id, $row, null);
+        Response::redirect('pipeline.index', ['trash' => 1], '영업기회가 복원되었습니다.');
     }
 
     private function defaultStageId(): int

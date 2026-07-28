@@ -2,22 +2,95 @@
 /**
  * 영업 파이프라인 — 조회 전용(R4 T7). 파생 7그룹 컬럼 + 상단 요약 + 공통 기간 필터(GET 제출).
  * 표시 단계는 PipelineStageService 자동 산정(원본 12단계는 수정 폼에서만 관리).
+ * R16: trash=1 진입 시 보드 대신 휴지통 표(복원·완전삭제) — 최고운영자 전용.
  * @var array $columns,$summary,$filters,$range,$basisOptions,$salesUsers
  * @var int $total @var bool $fullAccess,$canManage,$quickAlertsOn
+ * @var bool $trash @var array $rows @var string $trashQ (휴지통 모드 전용)
  */
-$f = $filters;
-$filterOn = $f['q'] !== '' || $f['sales_user_id'] || $f['period'] !== '' || $f['quick'] !== '';
-$quickLabels = [
-    'today' => '오늘 연락 필요', 'overdue' => '연락 지남', 'stale' => '3일+ 미접촉', 'closing' => '계약 임박',
-    'highvalue' => '고액 견적', 'longstay' => '장기 체류', 'unassigned' => '담당 미배정',
-];
-// 필터 유지용 파라미터(빈 값 제외, 내부 키 제외)
-$keep = array_filter(
-    ['q' => $f['q'], 'sales_user_id' => $f['sales_user_id'], 'period' => $f['period'],
-     'date_from' => $f['date_from'], 'date_to' => $f['date_to'], 'basis' => $f['basis'] !== 'created' ? $f['basis'] : ''],
-    static fn($v) => $v !== '' && $v !== null
-);
+$trash = !empty($trash);
+if (!$trash) {
+    $f = $filters;
+    $filterOn = $f['q'] !== '' || $f['sales_user_id'] || $f['period'] !== '' || $f['quick'] !== '';
+    $quickLabels = [
+        'today' => '오늘 연락 필요', 'overdue' => '연락 지남', 'stale' => '3일+ 미접촉', 'closing' => '계약 임박',
+        'highvalue' => '고액 견적', 'longstay' => '장기 체류', 'unassigned' => '담당 미배정',
+    ];
+    // 필터 유지용 파라미터(빈 값 제외, 내부 키 제외)
+    $keep = array_filter(
+        ['q' => $f['q'], 'sales_user_id' => $f['sales_user_id'], 'period' => $f['period'],
+         'date_from' => $f['date_from'], 'date_to' => $f['date_to'], 'basis' => $f['basis'] !== 'created' ? $f['basis'] : ''],
+        static fn($v) => $v !== '' && $v !== null
+    );
+}
 ?>
+<?php if ($trash): ?>
+<div class="page">
+  <div class="page-head">
+    <div>
+      <div class="page-title">영업 파이프라인 <span class="badge badge-muted">휴지통</span></div>
+      <div class="page-sub">삭제된 영업기회 <?= count($rows) ?>건 · 복원·완전삭제는 최고운영자 전용</div>
+    </div>
+    <div class="page-actions">
+      <a class="btn btn-ghost" href="<?= e(url('pipeline.index')) ?>">목록으로</a>
+    </div>
+  </div>
+
+  <form class="toolbar" method="get" action="<?= e(url('pipeline.index')) ?>">
+    <input type="hidden" name="r" value="pipeline.index">
+    <input type="hidden" name="trash" value="1">
+    <input type="text" name="q" class="input search" placeholder="고객·업체·공사종류·주소 검색" value="<?= e($trashQ) ?>">
+    <button type="submit" class="btn btn-outline">검색</button>
+    <?php if ($trashQ !== ''): ?>
+      <a href="<?= e(url('pipeline.index', ['trash' => 1])) ?>" class="btn btn-ghost">초기화</a>
+    <?php endif; ?>
+  </form>
+
+  <?php if (!$rows): ?>
+    <div class="empty">
+      <div class="empty-icon">▤</div>
+      <div class="empty-title">휴지통이 비어 있습니다.</div>
+    </div>
+  <?php else: ?>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>고객</th><th>공사종류</th><th>현장주소</th><th class="num">예상금액</th><th>단계</th><th>담당영업</th><th>삭제일</th><th>관리</th></tr>
+        </thead>
+        <tbody>
+          <?php foreach ($rows as $r): ?>
+            <tr>
+              <td><?= e($r['customer_name']) ?>
+                <?php if ($r['customer_deleted_at'] !== null): ?>
+                  <span class="badge badge-warn" title="고객을 먼저 복원해야 합니다">고객 삭제됨</span>
+                <?php endif; ?>
+              </td>
+              <td class="ellipsis"><?= e($r['work_type'] ?: '-') ?></td>
+              <td class="ellipsis"><?= e($r['site_address'] ?: '-') ?></td>
+              <td class="num"><?= money($r['expected_amount'] !== null ? (float) $r['expected_amount'] : null) ?></td>
+              <td><?= e($r['stage_name'] ?: '-') ?></td>
+              <td><?= e($r['sales_user_name'] ?: '-') ?></td>
+              <td class="nowrap"><?= fmtdate($r['deleted_at']) ?></td>
+              <td class="nowrap">
+                <form method="post" action="<?= e(url('pipeline.restore')) ?>" style="display:inline"><?= csrf_field() ?>
+                  <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                  <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
+                <?php if (is_role('super_admin')): ?>
+                <form method="post" action="<?= e(url('pipeline.purge')) ?>" style="display:inline"
+                      data-purge data-purge-kind="영업기회"
+                      data-purge-label="<?= e($r['customer_name'] ?: ('#' . (int) $r['id'])) ?>"
+                      data-purge-scope="영업기회 기록"><?= csrf_field() ?>
+                  <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                  <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  <?php endif; ?>
+</div>
+<?php return; endif; ?>
 <div class="page page-wide">
   <div class="page-head">
     <div>
@@ -27,6 +100,10 @@ $keep = array_filter(
         · 단계는 원본 데이터(계약·견적·리드 단계) 기준 자동 산정 — 조회 전용</div>
     </div>
     <div class="page-actions">
+      <?php /* R16: 휴지통은 최고운영자 전용(trash.manage = ADMIN_ONLY) — 등록·삭제 권한과 분리 */ ?>
+      <?php if (can('trash.manage')): ?>
+        <a href="<?= e(url('pipeline.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
+      <?php endif; ?>
       <?php if ($canManage): ?>
         <a href="<?= e(url('pipeline.form')) ?>" class="btn btn-primary">+ 영업기회 등록</a>
       <?php endif; ?>

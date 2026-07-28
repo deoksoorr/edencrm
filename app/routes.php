@@ -37,6 +37,9 @@ return [
     'customers.form'    => ['CustomersController', 'form',   'perm' => 'customer.manage'],
     'customers.save'    => ['CustomersController', 'save',   'perm' => 'customer.manage', 'method' => 'POST'],
     'customers.delete'  => ['CustomersController', 'delete', 'perm' => 'customer.delete', 'method' => 'POST'],
+    // R16: 고객 휴지통 복원·완전삭제는 최고운영자 전용(trash.manage = ADMIN_ONLY) + 컨트롤러 requireSuperAdmin 이중 가드
+    'customers.restore' => ['CustomersController', 'restore', 'perm' => 'trash.manage', 'method' => 'POST'],
+    'customers.purge'   => ['CustomersController', 'purge',   'perm' => 'trash.manage', 'method' => 'POST'],
     'customers.dupcheck'=> ['CustomersController', 'dupCheck', 'perm' => 'customer.manage'],
     'customers.merge'   => ['CustomersController', 'merge',  'perm' => 'customer.manage', 'method' => 'POST'],
     // 사업자등록증 (R4 T2) — 업로드/교체/삭제=customer.manage, 열람=customer.view(+Scope)
@@ -54,6 +57,9 @@ return [
     'pipeline.save'     => ['PipelineController', 'save',   'perm' => 'pipeline.manage', 'method' => 'POST'],
     'pipeline.show'     => ['PipelineController', 'show',   'perm' => 'pipeline.view'],
     'pipeline.delete'   => ['PipelineController', 'delete', 'perm' => 'pipeline.delete', 'method' => 'POST'],
+    // R16: 영업기회 휴지통 복원·완전삭제도 최고운영자 전용(trash.manage) + 컨트롤러 이중 가드
+    'pipeline.restore'  => ['PipelineController', 'restore', 'perm' => 'trash.manage', 'method' => 'POST'],
+    'pipeline.purge'    => ['PipelineController', 'purge',   'perm' => 'trash.manage', 'method' => 'POST'],
 
     // ── 견적 (T5) ──
     'quotes.index'      => ['QuotesController', 'index',  'perm' => 'quote.view'],
