@@ -47,7 +47,8 @@ return [
     'customers.license.delete'   => ['CustomersController', 'licenseDelete',   'perm' => 'customer.manage', 'method' => 'POST'],
     'customers.license.download' => ['CustomersController', 'licenseDownload', 'perm' => 'customer.view'],
     'customers.export'  => ['CustomersController', 'export', 'perm' => 'customer.export'],
-    'activities.save'   => ['ActivitiesController', 'save',  'perm' => 'customer.view', 'method' => 'POST'],
+    // R16-1: 활동 추가는 데이터 생성이므로 읽기(customer.view)가 아니라 쓰기 권한을 요구한다.
+    'activities.save'   => ['ActivitiesController', 'save',  'perm' => 'customer.manage', 'method' => 'POST'],
 
     // ── 영업 파이프라인 (T4 → R4 T7 조회 전용 전환) ──
     // 단계·상태 변경 쓰기 라우트(pipeline.move/patch)와 AJAX 보드(pipeline.board)는 기능 제거(→404).
@@ -99,7 +100,8 @@ return [
     'projects.restore'  => ['ProjectsController', 'restore', 'perm' => 'trash.manage', 'method' => 'POST'],
     'projects.purge'    => ['ProjectsController', 'purge',   'perm' => 'trash.manage', 'method' => 'POST'],
     'projects.transition'=> ['ProjectsController', 'transition', 'perm' => 'project.manage', 'method' => 'POST'],
-    'projects.upload'   => ['ProjectsController', 'upload', 'perm' => 'project.view_all', 'method' => 'POST'],
+    // R16-1: 파일 업로드도 쓰기 — 읽기 권한(project.view_all)으로는 허용하지 않는다.
+    'projects.upload'   => ['ProjectsController', 'upload', 'perm' => 'project.manage', 'method' => 'POST'],
     'files.download'    => ['ProjectsController', 'download', 'perm' => 'project.view_all'],
     // ── R11: 예외 프로젝트 입금·정산(프로젝트 상세 '입금·정산' 탭) — 입금 CRUD 는 계약 입금과 동일 perm ──
     'projects.payment.save'     => ['SettlementController', 'paymentSave',      'perm' => 'payment.manage', 'method' => 'POST'],

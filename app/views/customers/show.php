@@ -133,7 +133,8 @@ $overdue = !empty($customer['next_contact_date']) && $customer['next_contact_dat
 
   <div class="tab-panel" data-panel="timeline">
     <div class="card"><div class="card-body">
-      <?php if (can('customer.view')): ?>
+      <?php /* R16-1: 활동 추가는 쓰기 — 읽기 전용 사용자에게는 입력 폼을 노출하지 않는다(서버도 거부). */ ?>
+      <?php if (can('customer.manage')): ?>
       <form id="activityForm" class="form" style="margin-bottom:18px;border-bottom:1px solid var(--line-2);padding-bottom:16px">
         <div class="form-grid-3">
           <label class="field">

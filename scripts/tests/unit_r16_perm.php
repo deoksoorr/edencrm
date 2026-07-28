@@ -150,6 +150,38 @@ try {
     Perm::reset();
     t_true('⑩reset 후에는 즉시 반영',   Perm::can($staffId, 'sales.quotes', 'read') === false);
 
+    // ══════════════ 11) R16-1 회귀 — 쓰기 라우트가 읽기 perm 을 쓰지 않는다 ══════════════
+    // 고객 읽기만 가진 직원이 활동 추가(쓰기)를 할 수 있던 결함의 재발 방지.
+    $routes = require APP_PATH . '/routes.php';
+    $readPerms = ['customer.view', 'pipeline.view', 'quote.view', 'contract.view',
+                  'project.view_all', 'project.view_assigned', 'process.view',
+                  'schedule.view_all', 'worklog.view_all', 'cost.view',
+                  'report.view', 'finance.view'];
+    $violations = [];
+    foreach ($routes as $key => $def) {
+        if (($def['method'] ?? 'GET') !== 'POST') { continue; }
+        $perm = $def['perm'] ?? null;
+        if ($perm !== null && in_array($perm, $readPerms, true)) {
+            $violations[] = "$key→$perm";
+        }
+    }
+    t_true('⑪POST 라우트가 읽기 perm 을 쓰지 않음 (' . implode(', ', $violations) . ')', $violations === []);
+    t_true('⑪activities.save 는 쓰기 perm', ($routes['activities.save']['perm'] ?? '') === 'customer.manage');
+    t_true('⑪projects.upload 은 쓰기 perm', ($routes['projects.upload']['perm'] ?? '') === 'project.manage');
+
+    // ══════════════ 12) R16-1 회귀 — 열람 범위는 해당 리소스의 읽기 권한이 정한다 ══════════════
+    // 프로젝트 읽기를 부여했는데 목록이 비던 결함(현장관리자 0건)의 재발 방지.
+    $src = file_get_contents(APP_PATH . '/core/Scope.php');
+    t_true('⑫프로젝트 범위가 분석 권한에 결합되지 않음',
+        !preg_match('/canViewAllProjects\(\).*?analytics\.reports/s', $src));
+    t_true('⑫프로젝트 범위는 project.view_all 로 판정',
+        str_contains($src, "Rbac::can('project.view_all')"));
+    t_true('⑫고객 범위는 customer.view 로 판정',
+        str_contains($src, "Rbac::can('customer.view')"));
+    // 주석의 단어가 아니라 실제 호출(Rbac::isRole)이 남아 있는지로 판정한다.
+    t_true('⑫Scope 에서 역할 기반 판정(Rbac::isRole) 호출 제거',
+        !str_contains($src, 'Rbac::isRole'));
+
     $pdo->rollBack();
     echo "\n(픽스처 롤백 완료 — 기존 행 무변경)\n";
 } catch (\Throwable $e) {

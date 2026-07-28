@@ -6,23 +6,27 @@
 class Scope
 {
     /**
-     * 프로젝트 '전체 열람' 판정(R16 신설).
+     * 프로젝트 '전체 열람' 판정.
      *
-     * R16 이후 project.view_all 과 project.view_assigned 는 둘 다 (field.projects, read) 로 사상되므로
-     * Rbac::can('project.view_all') 로는 전체/배정 구분이 불가능하다 — 읽기 권한자 전원이 전체가 돼버린다.
-     * 그래서 열람 '범위'는 읽기 권한이 아니라 전사 데이터 열람 권한인 분석(리포트·손익) 읽기로 판정한다.
-     * 이 기준은 기존 역할 매핑과 1:1 로 일치한다(database/seed_core.sql):
-     *   - view_all 보유    = super_admin · sales_manager · accountant → 전부 리포트/손익 읽기 보유
-     *   - view_assigned 보유 = site_manager · staff                  → 리포트/손익 읽기 없음
-     * 즉 라우터 게이트(읽기)는 넓히되 행 범위는 기존과 동일하게 유지한다.
+     * R16-1: 열람 범위는 그 리소스 자신의 읽기 권한이 정한다.
+     *
+     * 이전에는 분석(리포트·손익) 읽기로 범위를 판정했다. 기존 역할과 1:1 로 맞아
+     * 마이그레이션 시점의 가시 범위는 보존됐지만, 실제로는 두 가지가 잘못돼 있었다.
+     *   ① 매트릭스에서 '프로젝트 읽기'를 부여해도 보이지 않았다 — 사장이 화면에서 켠 권한이
+     *      실제로 동작하지 않으니 권한 설정 UI 자체가 거짓말이 된다.
+     *   ② 리포트 권한을 주면 프로젝트·고객까지 함께 열리는 숨은 결합이 생겼다.
+     *
+     * 배정 기준 축소는 '권한은 있는데 남의 현장은 안 보인다'는 별개 개념이었으나,
+     * R16 이후에는 사장이 직원별로 읽기를 켜고 끄는 것으로 통제한다(요청서 3~4절).
+     * 읽기를 주지 않으면 아예 목록·상세·API 전부가 차단되므로 통제력은 오히려 더 강하다.
      */
     public static function canViewAllProjects(): bool
     {
         if (Perm::isSuperAdmin()) {
             return true;
         }
-        $uid = (int) Auth::id();
-        return $uid > 0 && Perm::can($uid, 'analytics.reports', 'read');
+        // project.view_all / project.view_assigned 는 둘 다 (field.projects, read) 로 사상된다.
+        return Rbac::can('project.view_all');
     }
 
     /**
@@ -67,12 +71,12 @@ class Scope
     public static function customerWhere(string $alias = 'c'): array
     {
         // 전체 고객 열람 권한군: customer.manage 또는 report/finance 계열 보유 시 전체
-        // R16: project.view_all(=field.projects read) 대신 canViewAllProjects() — 프로젝트 읽기만 가진
-        //      직원에게 전체 고객이 열리던 범위 확대를 차단한다(기존 역할 기준 결과는 동일).
-        if (Rbac::can('customer.manage') || self::canViewAllProjects() || Rbac::isRole('super_admin', 'accountant', 'site_manager')) {
+        // R16-1: 고객 범위는 고객 자신의 읽기 권한(customer.view = sales.customers read)이 정한다.
+        //        역할 기반 판정(isRole)과 프로젝트/분석 권한 결합을 제거 — 매트릭스가 유일한 통제 지점.
+        if (Perm::isSuperAdmin() || Rbac::can('customer.view')) {
             return ['1=1', []];
         }
-        // 그 외에는 본인 담당 고객만
+        // 읽기 권한이 없으면 라우터가 이미 403 이지만, 방어적으로 본인 담당 고객만 남긴다.
         return ["$alias.sales_user_id = :sc_cuid", [':sc_cuid' => Auth::id()]];
     }
 
