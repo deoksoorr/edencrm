@@ -86,6 +86,14 @@ class SettlementController
             $status = 'paid';
         }
 
+        // R13: 입금 유형(계약금/중도금/잔금). 환불은 'refund' 고정.
+        $payType = Util::postStr('pay_type', '');
+        if ($kind === 'refund') {
+            $payType = 'refund';
+        } elseif (!in_array($payType, ['down', 'middle', 'balance'], true)) {
+            $this->fail('입금 유형(계약금/중도금/잔금)을 선택하세요.', 422, $projectId);
+        }
+
         if ($kind === 'refund') {
             // 환불은 확정(paid) 행으로만 기록 — 순입금·확정 매출에서 즉시 차감(취소는 별도 기능)
             $status = 'paid';
@@ -107,7 +115,7 @@ class SettlementController
         $data = [
             'contract_id' => null,
             'project_id'  => $projectId,
-            'pay_type'    => 'etc',
+            'pay_type'    => $payType,
             'method'      => $method,
             'kind'        => $kind,
             'amount'      => $amount,
@@ -115,7 +123,7 @@ class SettlementController
             'paid_date'   => $status === 'paid' ? $paidDate : null,
             'status'      => $status,
             'memo'        => $memo,
-            'payer_name'  => $payerName,
+            'payer_name'  => null, // R13: 입금자명 미수집(유형으로 대체)
         ];
 
         if ($id > 0) {
