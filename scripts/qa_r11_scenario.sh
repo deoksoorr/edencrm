@@ -55,9 +55,17 @@ echo "$SHOW" | grep -q "3,000,000" && ok "미수금 3,000,000 표시" || ng "미
 echo "$SHOW" | grep -q "일부 입금" && ok "입금 상태=일부 입금" || ng "입금 상태 오류"
 
 echo "== 8) 공정 종결(전체완료) 처리 =="
-FULLID=$(curl -s -b "$J" "$B?r=process.board" | grep -o 'data-stage-id="[0-9]*"' | tail -1 | grep -o '[0-9]*')
-R=$(api "process.move" -d "project_id=$PID&to_stage_id=$FULLID&board_type=painting")
-chk "종결 이동 → 상태 completed" "$(echo "$R" | jval "['data']['status']")" "completed"
+# R14: 드래그 이동(process.move) 폐지 — 게이지 보드는 단계별 process.progress.set(pct)로 진행하고,
+# 전 단계 100% 확인 후 process.complete.confirm 으로 완료를 확정한다(서버 재검증).
+SOCK=".devdb/mysql.sock"
+STAGE_IDS=$(/opt/homebrew/bin/mysql --socket="$SOCK" -ueden_crm_user -p'EdenCrm!local2026' eden_crm -N -e \
+  "SELECT id FROM process_stages WHERE process_type='painting' AND is_active=1 ORDER BY sort_order, id" 2>/dev/null)
+[ -n "$STAGE_IDS" ] && ok "도장 공정 게이지 단계 조회($(echo "$STAGE_IDS" | wc -l | tr -d ' ')건)" || ng "게이지 단계 조회 실패"
+for SID in $STAGE_IDS; do
+  api "process.progress.set" -d "project_id=$PID&stage_id=$SID&pct=100" >/dev/null
+done
+R=$(api "process.complete.confirm" -d "project_id=$PID")
+chk "종결 확정 → 상태 completed" "$(echo "$R" | jval "['data']['status']")" "completed"
 
 echo "== 9) 미수금 잔존 → 정산 완료 거부(422) =="
 CODE=$(curl -s -o /dev/null -w "%{http_code}" -b "$J" -H "X-Requested-With: XMLHttpRequest" -d "_csrf=$CSRF&project_id=$PID&action=settle" "$B?r=projects.settlement.update")
@@ -77,7 +85,7 @@ api "costs.save" -d "project_id=$PID&type=actual&cost_status=confirmed&category=
 HY=$(curl -s -b "$J" "$B?r=halfyear.index")
 echo "$HY" | grep -q "확정매출(공급가액)" && ok "반기 화면 R12 라벨(공급가액)" || ng "반기 라벨 미반영"
 BC=$(curl -s -b "$J" "$B?r=bonus.calc&project_id=$PID")
-# R12: 보너스 산정 대상 매출 = 확정 매출(공급가·VAT 제외) = 입금 5,000,000 ÷ 1.1 = 4,545,455
+# R12: 보너스 총매출 = 확정 매출(공급가·VAT 제외) = 입금 5,000,000 ÷ 1.1 = 4,545,455
 chk "보너스 base=확정매출 공급가 4,545,455" "$(echo "$BC" | jval "['data']['base']")" "4545455"
 chk "보너스 배정 직원 2명 반환" "$(echo "$BC" | jval "['data']['assignees'].__len__()")" "2"
 

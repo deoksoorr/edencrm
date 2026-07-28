@@ -36,6 +36,7 @@ $projects = q($pdo, "SELECT p.id, p.status, p.construction_type, p.process_stage
                      FROM {$P}projects p LEFT JOIN {$P}process_stages ps ON ps.id = p.process_stage_id
                      WHERE p.deleted_at IS NULL");
 $ins = 0;
+$progSync = 0;
 foreach ($projects as $pr) {
     $type = in_array($pr['construction_type'], ['painting', 'interior'], true) ? $pr['construction_type'] : 'painting';
     $ids = $byType[$type] ?? [];
@@ -48,7 +49,7 @@ foreach ($projects as $pr) {
         $pos = array_search((int) $pr['process_stage_id'], $ids, true); // 0-base
         foreach ($ids as $i => $sid) { $rows[$sid] = $i < $pos ? 100 : ($i === $pos ? 50 : 0); }
     } else {
-        continue; // 대기중·하자보수·미배치 — 게이지 0(행 미생성)
+        continue; // 대기중·하자보수·미배치 — 게이지 0(행 미생성), progress 는 건드리지 않는다
     }
     foreach ($rows as $sid => $pct) {
         if ($pct === 0) continue;
@@ -59,8 +60,17 @@ foreach ($projects as $pr) {
                 ->execute([(int) $pr['id'], $sid, $pct]);
         }
     }
+    // R14-fix: projects.progress 를 게이지 평균과 동기화(ProcessService::setStageProgress 와 동일 산식) —
+    // 안 그러면 배포 직후 카드 헤더 %(구 위치 기반)가 게이지 평균과 어긋난 채로 첫 수정 전까지 남는다.
+    $avg = count($ids) ? (int) round(array_sum(array_map(static fn($sid) => $rows[$sid] ?? 0, $ids)) / count($ids)) : 0;
+    $progSync++;
+    if (!$dry) {
+        $pdo->prepare("UPDATE {$P}projects SET progress = ? WHERE id = ?")
+            ->execute([$avg, (int) $pr['id']]);
+    }
 }
 echo "게이지 백필: " . count($projects) . "개 프로젝트 검사, pct행 {$ins}건" . ($dry ? " (dry)" : " 적용") . "\n";
+echo "progress 동기화: {$progSync}건" . ($dry ? " (dry)" : " 적용") . "\n";
 
 // ── (2) 예외 계약총액 백필 ──
 $targets = q($pdo, "SELECT id, expected_amount FROM {$P}projects
