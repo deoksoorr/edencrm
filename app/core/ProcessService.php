@@ -88,6 +88,78 @@ class ProcessService
         return self::moveStage($projectId, self::waitingStageId(), $userId, '공사 유형 지정에 따른 보드 재배치', true);
     }
 
+    /** R14: 게이지 대상 실공정(유형·활성, 공통 예약 자동 제외 — common 은 process_type 불일치) 위치순. */
+    public static function gaugeStages(string $constructionType): array
+    {
+        return Db::all(
+            "SELECT id, stage_key, name, sort_order, color FROM process_stages
+             WHERE process_type = :t AND is_active = 1
+             ORDER BY sort_order, id",
+            [':t' => $constructionType]
+        );
+    }
+
+    /**
+     * R14: 공정 게이지 저장 + 파생 — 보드 게이지의 단일 진입점.
+     * 파생: progress=pct 평균, 현재 공정=pct>0 최후방(없으면 대기중), 상태 자동 전환
+     *  (preparing/paused+시작→in_progress, completed/settled+미완→재개). 전부 100 은 all_done
+     *  플래그만 반환(완료 확정은 클라 확인 후 별도 호출 — 서버 재검증).
+     * warranty 상태는 보드 위치(warranty_repair) 유지 — 게이지만 기록.
+     */
+    public static function setStageProgress(int $projectId, int $stageId, int $pct, ?int $userId): array
+    {
+        $pct = max(0, min(100, $pct));
+        $project = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
+        if (!$project) {
+            throw new RuntimeException('프로젝트를 찾을 수 없습니다.');
+        }
+        if (in_array($project['status'], ['cancelled', 'terminated'], true)) {
+            throw new RuntimeException('취소·파기 프로젝트는 공정 게이지를 수정할 수 없습니다.');
+        }
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $stages = self::gaugeStages($type);
+        $ids = array_map(static fn($s) => (int) $s['id'], $stages);
+        if (!in_array($stageId, $ids, true)) {
+            throw new RuntimeException('이 프로젝트 유형의 공정이 아닙니다.');
+        }
+        Db::run("INSERT INTO project_stage_progress (project_id, stage_id, pct, updated_by)
+                 VALUES (:p, :s, :v, :u)
+                 ON DUPLICATE KEY UPDATE pct = VALUES(pct), updated_by = VALUES(updated_by)",
+            [':p' => $projectId, ':s' => $stageId, ':v' => $pct, ':u' => $userId]);
+
+        // ── 파생 ──
+        $pctMap = [];
+        foreach (Db::all("SELECT stage_id, pct FROM project_stage_progress WHERE project_id = :p", [':p' => $projectId]) as $r) {
+            $pctMap[(int) $r['stage_id']] = (int) $r['pct'];
+        }
+        $sum = 0; $currentStageId = null; $allDone = count($ids) > 0;
+        foreach ($ids as $sid) {
+            $v = $pctMap[$sid] ?? 0;
+            $sum += $v;
+            if ($v > 0) { $currentStageId = $sid; }   // 위치순 순회 — pct>0 최후방
+            if ($v < 100) { $allDone = false; }
+        }
+        $progress = count($ids) ? (int) round($sum / count($ids)) : 0;
+        Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
+
+        $status = (string) $project['status'];
+        if (!$allDone && in_array($status, ['completed', 'settled'], true)) {
+            StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 수정 재개(종결 해제)']);
+            $status = 'in_progress';
+        } elseif ($currentStageId !== null && in_array($status, ['preparing', 'paused'], true)) {
+            StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 시작 자동 전환']);
+            $status = 'in_progress';
+        }
+        // 보드 위치 동기 — 종결(전체완료 유지)·하자보수(warranty_repair 유지) 제외
+        $targetStage = $currentStageId ?? self::waitingStageId();
+        if (!in_array($status, ['completed', 'settled', 'warranty'], true)) {
+            self::moveStage($projectId, $targetStage, $userId, '공정 게이지 파생 이동', true);
+        }
+        $cur = (int) Db::val("SELECT process_stage_id FROM projects WHERE id = :id", [':id' => $projectId]);
+        return ['pct' => $pct, 'progress' => $progress, 'status' => $status,
+            'current_stage_id' => $cur, 'all_done' => $allDone];
+    }
+
     private static function applyStage(int $projectId, ?int $fromStageId, int $toStageId, ?int $userId, ?string $reason, bool $auto): void
     {
         Db::run("UPDATE projects SET process_stage_id = :s, process_entered_at = NOW() WHERE id = :id",

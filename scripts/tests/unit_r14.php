@@ -1,0 +1,74 @@
+<?php
+/** R14 — 게이지 파생·자동 상태·계약총액 연동·메모·반기 집계 회귀 (트랜잭션 롤백). */
+require __DIR__ . '/bootstrap.php';
+require __DIR__ . '/lib.php';
+require_once APP_PATH . '/core/StatusService.php';
+require_once APP_PATH . '/core/ProcessService.php';
+require_once APP_PATH . '/core/BonusService.php';
+require_once APP_PATH . '/core/Audit.php';
+require_once APP_PATH . '/core/Auth.php';
+require_once APP_PATH . '/core/Stages.php';
+
+echo "R14 회귀 (트랜잭션 롤백)\n";
+$pdo = Db::pdo();
+$pdo->beginTransaction();
+try {
+    // ── Task 2: 게이지 파생 ──
+    $stages = ProcessService::gaugeStages('painting');
+    $n = count($stages);
+    t_true('도장 실공정 목록(공통 제외) 존재', $n >= 10);
+    $first = (int) $stages[0]['id']; $second = (int) $stages[1]['id'];
+
+    $gp = Db::insert('projects', ['project_no' => 'R14-G1', 'name' => 'R14게이지', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => '게이지고객', 'contract_amount' => 0,
+        'construction_type' => 'painting', 'status' => 'preparing',
+        'process_stage_id' => ProcessService::waitingStageId()]);
+
+    // 게이지 시작 → 자동 진행 중 + 현재 공정 파생
+    $r = ProcessService::setStageProgress($gp, $first, 30, null);
+    t_true('게이지>0 → 자동 진행 중', $r['status'] === 'in_progress');
+    t_int('현재 공정 = 시작 공정', $first, $r['current_stage_id']);
+    t_int('전체 진행률 = round(30/N)', (int) round(30 / $n), $r['progress']);
+    t_true('아직 all_done 아님', $r['all_done'] === false);
+
+    // 뒤 공정 시작 → 현재 공정 전진(pct>0 최후방)
+    $r = ProcessService::setStageProgress($gp, $second, 20, null);
+    t_int('현재 공정 = 더 뒤 공정', $second, $r['current_stage_id']);
+    $row = Db::one("SELECT process_stage_id, progress, status FROM projects WHERE id=:id", [':id' => $gp]);
+    t_int('projects.process_stage_id 동기', $second, (int) $row['process_stage_id']);
+
+    // 전부 100 → all_done (상태는 클라 확인 후 별도 완료 — 여기선 파생 플래그만)
+    foreach ($stages as $st) { $r = ProcessService::setStageProgress($gp, (int) $st['id'], 100, null); }
+    t_true('전 공정 100 → all_done', $r['all_done'] === true);
+    t_int('전체 진행률 100', 100, $r['progress']);
+
+    // 완료 확정(컨트롤러 흐름 재현) → R13 T6이 전체완료 이동
+    $prow = Db::one("SELECT * FROM projects WHERE id=:id", [':id' => $gp]);
+    StatusService::applyProjectStatus($prow, 'completed', ['reason' => 'R14 게이지 완료 확인']);
+    $row = Db::one("SELECT status, process_stage_id FROM projects WHERE id=:id", [':id' => $gp]);
+    t_true('완료 상태', $row['status'] === 'completed');
+    t_int('보드 전체완료 이동', (int) ProcessService::stageIdByKey('full_complete'), (int) $row['process_stage_id']);
+
+    // completed에서 게이지 낮춤 → 자동 재개 + 현재 공정 복귀
+    $r = ProcessService::setStageProgress($gp, $second, 60, null);
+    t_true('게이지 재수정 → 자동 재개(in_progress)', $r['status'] === 'in_progress');
+    t_true('all_done 해제', $r['all_done'] === false);
+    $row = Db::one("SELECT process_stage_id FROM projects WHERE id=:id", [':id' => $gp]);
+    t_true('보드 위치 실공정 복귀(전체완료 아님)',
+        (int) $row['process_stage_id'] !== (int) ProcessService::stageIdByKey('full_complete'));
+
+    // 취소 프로젝트 거부
+    $cx = Db::insert('projects', ['project_no' => 'R14-G2', 'name' => 'R14취소', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 0,
+        'construction_type' => 'painting', 'status' => 'cancelled']);
+    $threw = false;
+    try { ProcessService::setStageProgress($cx, $first, 10, null); } catch (RuntimeException $e) { $threw = true; }
+    t_true('취소 프로젝트 게이지 거부', $threw);
+
+    $pdo->rollBack();
+} catch (\Throwable $e) {
+    $pdo->rollBack();
+    echo "  [FAIL] 예외: " . $e->getMessage() . "\n";
+    $GLOBALS['__T']['fail']++;
+}
+exit(t_summary());
