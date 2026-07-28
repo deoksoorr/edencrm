@@ -65,6 +65,17 @@ try {
     try { ProcessService::setStageProgress($cx, $first, 10, null); } catch (RuntimeException $e) { $threw = true; }
     t_true('취소 프로젝트 게이지 거부', $threw);
 
+    // warranty 상태: 게이지만 기록, 보드 위치(warranty_repair)·상태 유지
+    $wp = Db::insert('projects', ['project_no' => 'R14-G3', 'name' => 'R14하자', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 0,
+        'construction_type' => 'painting', 'status' => 'warranty',
+        'process_stage_id' => ProcessService::stageIdByKey('warranty_repair')]);
+    $r = ProcessService::setStageProgress($wp, $first, 40, null);
+    t_true('warranty: 상태 유지', $r['status'] === 'warranty');
+    $row = Db::one("SELECT process_stage_id, status FROM projects WHERE id=:id", [':id' => $wp]);
+    t_int('warranty: 보드 위치 warranty_repair 유지', (int) ProcessService::stageIdByKey('warranty_repair'), (int) $row['process_stage_id']);
+    t_true('warranty: status 컬럼도 유지', $row['status'] === 'warranty');
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

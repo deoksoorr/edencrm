@@ -122,42 +122,47 @@ class ProcessService
         if (!in_array($stageId, $ids, true)) {
             throw new RuntimeException('이 프로젝트 유형의 공정이 아닙니다.');
         }
-        Db::run("INSERT INTO project_stage_progress (project_id, stage_id, pct, updated_by)
-                 VALUES (:p, :s, :v, :u)
-                 ON DUPLICATE KEY UPDATE pct = VALUES(pct), updated_by = VALUES(updated_by)",
-            [':p' => $projectId, ':s' => $stageId, ':v' => $pct, ':u' => $userId]);
 
-        // ── 파생 ──
-        $pctMap = [];
-        foreach (Db::all("SELECT stage_id, pct FROM project_stage_progress WHERE project_id = :p", [':p' => $projectId]) as $r) {
-            $pctMap[(int) $r['stage_id']] = (int) $r['pct'];
-        }
-        $sum = 0; $currentStageId = null; $allDone = count($ids) > 0;
-        foreach ($ids as $sid) {
-            $v = $pctMap[$sid] ?? 0;
-            $sum += $v;
-            if ($v > 0) { $currentStageId = $sid; }   // 위치순 순회 — pct>0 최후방
-            if ($v < 100) { $allDone = false; }
-        }
-        $progress = count($ids) ? (int) round($sum / count($ids)) : 0;
-        Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
+        $run = function () use ($project, $projectId, $stageId, $pct, $userId, $ids) {
+            Db::run("INSERT INTO project_stage_progress (project_id, stage_id, pct, updated_by)
+                     VALUES (:p, :s, :v, :u)
+                     ON DUPLICATE KEY UPDATE pct = VALUES(pct), updated_by = COALESCE(VALUES(updated_by), updated_by)",
+                [':p' => $projectId, ':s' => $stageId, ':v' => $pct, ':u' => $userId]);
 
-        $status = (string) $project['status'];
-        if (!$allDone && in_array($status, ['completed', 'settled'], true)) {
-            StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 수정 재개(종결 해제)']);
-            $status = 'in_progress';
-        } elseif ($currentStageId !== null && in_array($status, ['preparing', 'paused'], true)) {
-            StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 시작 자동 전환']);
-            $status = 'in_progress';
-        }
-        // 보드 위치 동기 — 종결(전체완료 유지)·하자보수(warranty_repair 유지) 제외
-        $targetStage = $currentStageId ?? self::waitingStageId();
-        if (!in_array($status, ['completed', 'settled', 'warranty'], true)) {
-            self::moveStage($projectId, $targetStage, $userId, '공정 게이지 파생 이동', true);
-        }
-        $cur = (int) Db::val("SELECT process_stage_id FROM projects WHERE id = :id", [':id' => $projectId]);
-        return ['pct' => $pct, 'progress' => $progress, 'status' => $status,
-            'current_stage_id' => $cur, 'all_done' => $allDone];
+            // ── 파생 ──
+            $pctMap = [];
+            foreach (Db::all("SELECT stage_id, pct FROM project_stage_progress WHERE project_id = :p", [':p' => $projectId]) as $r) {
+                $pctMap[(int) $r['stage_id']] = (int) $r['pct'];
+            }
+            $sum = 0; $currentStageId = null; $allDone = count($ids) > 0;
+            foreach ($ids as $sid) {
+                $v = $pctMap[$sid] ?? 0;
+                $sum += $v;
+                if ($v > 0) { $currentStageId = $sid; }   // 위치순 순회 — pct>0 최후방
+                if ($v < 100) { $allDone = false; }
+            }
+            $progress = count($ids) ? (int) round($sum / count($ids)) : 0;
+            Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
+
+            $status = (string) $project['status'];
+            if (!$allDone && in_array($status, ['completed', 'settled'], true)) {
+                StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 수정 재개(종결 해제)']);
+                $status = 'in_progress';
+            } elseif ($currentStageId !== null && in_array($status, ['preparing', 'paused'], true)) {
+                StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 게이지 시작 자동 전환']);
+                $status = 'in_progress';
+            }
+            // 보드 위치 동기 — 종결(전체완료 유지)·하자보수(warranty_repair 유지) 제외
+            $targetStage = $currentStageId ?? self::waitingStageId();
+            if (!in_array($status, ['completed', 'settled', 'warranty'], true)) {
+                self::moveStage($projectId, $targetStage, $userId, '공정 게이지 파생 이동', true);
+            }
+            $cur = (int) Db::val("SELECT process_stage_id FROM projects WHERE id = :id", [':id' => $projectId]);
+            return ['pct' => $pct, 'progress' => $progress, 'status' => $status,
+                'current_stage_id' => $cur, 'all_done' => $allDone];
+        };
+        // R14-fix: 원자성 — 이미 열린 트랜잭션(테스트·상위 호출) 안이면 그대로, 아니면 트랜잭션 래핑
+        return Db::pdo()->inTransaction() ? $run() : Db::transaction(static fn() => $run());
     }
 
     private static function applyStage(int $projectId, ?int $fromStageId, int $toStageId, ?int $userId, ?string $reason, bool $auto): void
