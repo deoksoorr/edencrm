@@ -25,8 +25,8 @@ class Nav
                 Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', null, 'book'] : null,
             ])),
             '분석' => [
+                ['reports.index', '리포트', 'report.view', 'bar'], // R14-2: 리포트를 반기 위로(사장 지시)
                 ['halfyear.index', '반기 보너스 지급 현황', null, 'bar'],
-                ['reports.index', '리포트', 'report.view', 'bar'],
             ],
             '관리' => [
                 ['staff.index', '직원 관리', 'staff.view', 'id'],

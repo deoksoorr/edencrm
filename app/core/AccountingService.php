@@ -569,6 +569,21 @@ class AccountingService
         return $out;
     }
 
+    /** R14-2: 담당 영업 기준 수주 건수 — contractedAmountByUser 와 동일 모집단(WHERE 일치 유지). */
+    public static function contractedCountByUser(?string $from = null, ?string $to = null): array
+    {
+        $p = [];
+        $r = self::range('contract_date', $from, $to, $p);
+        $rows = Db::all("SELECT sales_user_id AS uid, COUNT(*) AS c FROM projects
+            WHERE deleted_at IS NULL AND status NOT IN ('cancelled','terminated') AND contract_date IS NOT NULL
+              AND sales_user_id IS NOT NULL $r GROUP BY sales_user_id", $p);
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row['uid']] = (int) $row['c'];
+        }
+        return $out;
+    }
+
     /**
      * 원가 총액(발생일 기준) = costs(type='actual', cost_status='confirmed') 의 지출일(spent_date) 기준 합.
      * 삭제 프로젝트 제외(실지출은 프로젝트 상태와 무관하게 집계 — 취소·파기 공사의 실비도 현금 유출).

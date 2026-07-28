@@ -204,6 +204,7 @@ class BonusController
             $byUser     = $byUser ?? AccountingService::employeeConfirmedByUser($from, $to);
             $paidByUser = $paidMap ?? AccountingService::employeePaidByUser($from, $to);
             $contractedByUser = AccountingService::contractedAmountByUser($from, $to);
+            $contractCntByUser = AccountingService::contractedCountByUser($from, $to);
             $salesPaidByUser  = AccountingService::salesPaidByUser($from, $to);
             $projCntByUser    = AccountingService::employeeProjectCountByUser();
             $bonusByUser = [];
@@ -223,6 +224,7 @@ class BonusController
                     'user_id'    => $sid,
                     'name'       => $u['name'],
                     'contracted' => (int) ($contractedByUser[$sid] ?? 0),
+                    'contract_cnt' => (int) ($contractCntByUser[$sid] ?? 0),
                     'paid'       => (int) ($paidByUser[$sid] ?? 0),
                     'revenue'    => (int) ($byUser[$sid]['revenue'] ?? 0),
                     'profit'     => (int) ($byUser[$sid]['contrib'] ?? 0),

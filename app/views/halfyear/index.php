@@ -130,25 +130,22 @@ foreach ($users as $u) {
   </div>
 
   <?php if ($f['canAll'] && $staffRows): ?>
-  <!-- 직원별 표 (전체 열람 권한) — 계약 실적(담당영업 축) / 공사 실적(기여도 축) 탭 분리 -->
-  <div class="card mb-14">
-    <div class="card-head"><div class="card-title">직원별 반기 실적</div>
-      <div class="tab-mini" role="tablist">
-        <button type="button" class="tab-btn active" data-hy-tab="contract">계약 실적</button>
-        <button type="button" class="tab-btn" data-hy-tab="construction">공사 실적</button>
-      </div>
-    </div>
-    <div data-hy-panel="contract">
-      <div class="muted fs-12" style="padding:0 12px">계약금액=담당 영업 수주(공급가) · 매출금액=담당 계약·예외 프로젝트 입금(현금·VAT 포함, 환불 차감)</div>
+  <!-- 직원별 표 (전체 열람 권한) — 계약 실적(담당영업 축) / 공사 실적(기여도 축) 반반 배치(R14-2) -->
+  <div class="hy-split mb-14">
+    <div class="card">
+      <div class="card-head"><div class="card-title">계약 실적</div></div>
+      <div class="muted fs-12" style="padding:0 12px">건수·계약금액=담당 영업 수주(공급가) · 매출금액=담당 계약·예외 프로젝트 입금(현금·VAT 포함, 환불 차감)</div>
       <div class="table-wrap"><table class="data compact">
-        <thead><tr><th>직원</th><th class="num">계약금액</th><th class="num">매출금액(입금)</th></tr></thead>
+        <thead><tr><th>직원</th><th class="num">건수</th><th class="num">계약금액</th><th class="num">매출금액(입금)</th></tr></thead>
         <tbody><?php foreach ($staffRows as $s): ?>
           <tr><td><a href="<?= e(url('staff.show', ['id' => $s['user_id'], 'year' => $f['year'], 'half' => $f['half']])) ?>"><?= e($s['name']) ?></a></td>
+            <td class="num mono"><?= (int) $s['contract_cnt'] ?>건</td>
             <td class="num mono"><?= moneyCell($s['contracted']) ?></td>
             <td class="num mono"><?= moneyCell($s['sales_paid']) ?></td></tr>
         <?php endforeach; ?></tbody></table></div>
     </div>
-    <div data-hy-panel="construction" hidden>
+    <div class="card">
+      <div class="card-head"><div class="card-title">공사 실적</div></div>
       <div class="muted fs-12" style="padding:0 12px">배정·기여도 기준 — 순이익=기여도 반영 순이익 누적 · 보너스=지급완료 확정(취소 제외) · 담당 프로젝트 수=현재 배정 기준(반기 무관)</div>
       <div class="table-wrap"><table class="data compact">
         <thead><tr><th>직원</th><th class="num">담당 프로젝트 수</th><th class="num">기여도 반영 순이익 누적</th><th class="num">보너스 지급</th></tr></thead>
@@ -160,14 +157,6 @@ foreach ($users as $u) {
         <?php endforeach; ?></tbody></table></div>
     </div>
   </div>
-  <script>
-  document.querySelectorAll('[data-hy-tab]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      document.querySelectorAll('[data-hy-tab]').forEach(function (x) { x.classList.toggle('active', x === b); });
-      document.querySelectorAll('[data-hy-panel]').forEach(function (p) { p.hidden = p.dataset.hyPanel !== b.dataset.hyTab; });
-    });
-  });
-  </script>
   <?php endif; ?>
 
   <!-- (c) 현장 보너스 -->
