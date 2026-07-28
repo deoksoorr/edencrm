@@ -24,10 +24,27 @@
    * 종속 규칙 — 서버 Perm::normalize() 와 동일하게 맞춘다.
    *  1) 쓰기/삭제 ON  → 읽기 자동 ON
    *  2) 읽기 OFF      → 쓰기·삭제 함께 OFF
+   *
+   * 두 규칙은 서로를 되돌릴 수 있으므로 '무엇이 바뀌었는지'를 알아야 한다.
+   * 읽기를 끈 경우에 규칙 1을 먼저 적용하면 쓰기·삭제가 아직 켜져 있어 읽기가 즉시 되살아나
+   * 체크 해제가 먹지 않는다. changed 를 받아 해제 의도를 우선한다.
+   *
+   * @param {HTMLElement} tr        대상 행
+   * @param {HTMLInputElement=} changed 방금 사용자가 조작한 체크박스(없으면 정규화만)
    */
-  function applyRules(tr) {
+  function applyRules(tr, changed) {
     var r = get(tr, 'read'), w = get(tr, 'write'), d = get(tr, 'delete');
     if (!r) { return; }
+
+    var act = changed && changed.dataset ? changed.dataset.permAct : null;
+
+    if (act === 'read' && !r.checked) {
+      // 읽기를 끄면 쓰기·삭제도 함께 꺼진다(규칙 2 우선)
+      if (w) { w.checked = false; }
+      if (d) { d.checked = false; }
+      return;
+    }
+    // 그 외에는 쓰기·삭제가 켜져 있으면 읽기를 보장한다(규칙 1)
     if ((w && w.checked) || (d && d.checked)) { r.checked = true; }
     if (!r.checked) {
       if (w) { w.checked = false; }
@@ -35,7 +52,9 @@
     }
   }
   function applyAllRules() {
-    Array.prototype.forEach.call(block.querySelectorAll('[data-perm-row]'), applyRules);
+    Array.prototype.forEach.call(block.querySelectorAll('[data-perm-row]'), function (tr) {
+      applyRules(tr, null);
+    });
   }
 
   function markDirty() { dirty = true; }
@@ -45,7 +64,7 @@
     var cb = e.target;
     if (!cb || cb.type !== 'checkbox' || !cb.dataset.permAct) { return; }
     var tr = cb.closest('[data-perm-row]');
-    if (tr) { applyRules(tr); }
+    if (tr) { applyRules(tr, cb); }
     markDirty();
   });
 

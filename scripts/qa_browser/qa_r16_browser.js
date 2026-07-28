@@ -3,7 +3,8 @@
  * 선행: php scripts/qa_r16_seed.php --seed
  * 사용: node scripts/qa_browser/qa_r16_browser.js
  */
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const CHROME = process.env.QA_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const BASE = process.env.QA_BASE || 'http://127.0.0.1:8080/index.php';
 const ADMIN = { id: 'admin', pw: process.env.QA_ADMIN_PW || 'password123!' };
@@ -30,11 +31,19 @@ async function logout(page) {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
   const page = await browser.newPage();
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
   page.on('pageerror', (e) => consoleErrors.push('pageerror: ' + e.message));
+  // 미저장 이탈 경고(beforeunload)는 정상 동작이다 — 테스트 진행을 위해 자동 수락한다.
+  let dialogSeen = 0;
+  page.on('dialog', async (d) => { dialogSeen++; await d.accept().catch(() => {}); });
+  // 403/500 응답을 URL 과 함께 수집 — 어떤 화면이 권한 없는 엔드포인트를 호출하는지 특정한다.
+  const badResponses = [];
+  page.on('response', (r) => {
+    if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()} (from ${page.url()})`);
+  });
 
   try {
     // ───────────── 1) 최고운영자 — 권한 매트릭스 렌더 ─────────────
@@ -43,12 +52,11 @@ async function logout(page) {
 
     // qa_r16_a 의 id 찾기
     await page.goto(`${BASE}?r=staff.index`, { waitUntil: 'domcontentloaded' });
+    // 직원 목록의 행은 staff.show 로 링크되고 tr 에 data-staff-row 가 붙는다.
     const targetId = await page.evaluate(() => {
-      const a = Array.from(document.querySelectorAll('a[href*="staff.form"]'))
-        .find((x) => x.closest('tr') && x.closest('tr').textContent.includes('QA영업읽기'));
-      if (!a) return null;
-      const m = a.href.match(/id=(\d+)/);
-      return m ? m[1] : null;
+      const tr = Array.from(document.querySelectorAll('tr[data-staff-row]'))
+        .find((x) => x.textContent.includes('QA영업읽기'));
+      return tr ? tr.getAttribute('data-staff-row') : null;
     });
     chk('QA 대상 직원 행 발견', targetId !== null);
     if (!targetId) throw new Error('QA영업읽기 계정을 직원 목록에서 찾지 못함');
@@ -163,16 +171,18 @@ async function logout(page) {
 
     // ───────────── 4) 최고운영자 대상은 편집 불가 ─────────────
     console.log('\n════ 4) 최고운영자 대상 ════');
-    const adminRow = await page.evaluate(() => {
-      const a = Array.from(document.querySelectorAll('a[href*="staff.form"]'));
-      return a.length ? true : false;
-    });
+    // 미저장 이탈 경고가 실제로 무장되는지 확인한 뒤, 이동을 위해 해제한다.
+    chk('미저장 변경 시 이탈 경고 무장', await page.evaluate(() => {
+      const e = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented === true;
+    }));
+    // 이후 이동은 dialog 핸들러가 경고를 자동 수락한다(폼 제출은 하지 않는다 — 실제 저장 방지).
     await page.goto(`${BASE}?r=staff.index`, { waitUntil: 'domcontentloaded' });
     const superId = await page.evaluate(() => {
-      const a = Array.from(document.querySelectorAll('a[href*="staff.form"]'))
-        .find((x) => x.closest('tr') && /사장|super/i.test(x.closest('tr').textContent));
-      const m = a && a.href.match(/id=(\d+)/);
-      return m ? m[1] : null;
+      const tr = Array.from(document.querySelectorAll('tr[data-staff-row]'))
+        .find((x) => /슈퍼관리자|사장|super_admin/i.test(x.textContent));
+      return tr ? tr.getAttribute('data-staff-row') : null;
     });
     if (superId) {
       await page.goto(`${BASE}?r=staff.form&id=${superId}`, { waitUntil: 'domcontentloaded' });
@@ -259,6 +269,9 @@ async function logout(page) {
     const real = consoleErrors.filter((e) => !/favicon|net::ERR_/i.test(e));
     chk(`브라우저 콘솔 오류 0건 (실제 ${real.length})`, real.length === 0);
     real.slice(0, 5).forEach((e) => console.log('     ' + e.slice(0, 160)));
+    const badReal = badResponses.filter((r) => !/favicon/i.test(r));
+    chk(`4xx/5xx 응답 0건 (실제 ${badReal.length})`, badReal.length === 0);
+    badReal.slice(0, 8).forEach((r) => console.log('     ' + r));
 
   } catch (e) {
     bad('예외: ' + e.message);

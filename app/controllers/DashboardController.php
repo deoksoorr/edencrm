@@ -1,14 +1,24 @@
 <?php
 /**
- * 대시보드 — 권한별 4변형(boss/sales/site/staff). 정보를 업무 목적별 섹션으로 그룹화한다.
- * R3: '주의가 필요한 항목' 레일 폐지 — 항목은 관련 섹션이 흡수(지연→공정, 미수금→재무, 계약대기→영업, 미배정→직원 업무).
- *  - boss  (super_admin·accountant): ①핵심 KPI ②직원 일정·업무 ③영업·계약 ④프로젝트·공정 ⑤재무·추이 ⑥직원성과 ⑦최근활동
- *  - sales (sales_manager)         : 내 영업 핵심 / 목표 / 파이프라인(연락·계약대기 흡수)
- *  - site  (site_manager)          : 공정 핵심(지연·미배정·일지·검수 포함) / 공정상태 / 일정
- *  - staff (staff)                 : 오늘 일정 / 내 프로젝트 / 작업할 공정 / 알림
+ * 대시보드 — R16: 역할 분기(switch role)를 폐지하고 **보유 권한 기반 위젯 조립**으로 재구성.
+ *
+ * 원칙(설계 6절)
+ *  1. 권한 없는 위젯은 쿼리 자체를 실행하지 않는다. 0 으로 표시하지 않고 위젯을 렌더링하지 않는다.
+ *     → HTML·JSON·JS 변수 어디에도 열람 권한 없는 금액·건수가 나타나지 않는다.
+ *  2. dashboard.data(JSON)도 같은 규칙 — 0 을 보내는 대신 키를 제외한다.
+ *  3. attention() 처럼 여러 도메인이 섞인 위젯은 위젯 통째로 버리지 않고 항목 단위로 거른다.
+ *  4. 업무 권한이 하나도 없는 계정도 본인 범위(일정·알림·목표)만으로 정상 렌더링되고
+ *     '표시할 업무 위젯이 없음' 안내를 받는다.
+ *
+ * 행 범위(전사 vs 본인)는 Scope::canViewAllProjects() 와 동일 기준인 report(analytics.reports read)로
+ * 통일한다 — 대시보드 숫자가 목록·보드 화면에서 열 수 있는 행보다 커지지 않는다.
+ *
+ * 뷰는 dashboard/index.php 하나로 통합(기존 boss/sales/site/staff 4변형 폐지). 섹션은 전부
+ * isset() 가드라 키가 없으면 통째로 사라진다. super_admin 은 모든 게이트를 통과하므로
+ * 기존 boss 대시보드와 동일한 섹션·순서를 그대로 받는다.
  *
  * 금액은 Util::moneyShort/moneyCell 로 축약, 모든 계산은 Calc 사용(0 나눗셈 → null → '-').
- * 차트는 boss/sales 만 사용(월별추이 bar+line, 영업단계 6그룹 도넛). site/staff 는 차트 없이 칩·진행바·리스트.
+ * 차트는 report(월별추이 bar+line)·pipeline(영업단계 6그룹 도넛) 권한이 있을 때만 로드한다.
  */
 class DashboardController
 {
@@ -20,50 +30,129 @@ class DashboardController
             NotificationsController::generateMissing();
         } catch (\Throwable $e) { /* 알림 생성 실패는 대시보드를 막지 않음 */ }
 
-        $u = Auth::user();
-        switch ($u['role']) {
-            case 'sales_manager': $this->renderSales($u); break;
-            case 'site_manager':  $this->renderSite($u);  break;
-            case 'staff':         $this->renderStaff($u); break;
-            default:              $this->renderBoss($u);  break; // super_admin, accountant
+        $u   = Auth::user();
+        $uid = (int) $u['id'];
+        $can = $this->capabilities();
+
+        // 전사 열람(report) 여부가 곧 행 범위 — 없으면 본인 담당/배정 범위로 축소한다.
+        $scope = $can['report'] ? null : $uid;
+
+        $d = [
+            'title'   => $can['report'] ? '대시보드' : '내 대시보드',
+            'me'      => $u,
+            'can'     => $can,
+            'wl'      => $can['wl'],
+            'attn'    => $this->attention($scope, $can),
+            'scripts' => [],
+        ];
+
+        // ── 전사 재무(analytics.reports read) ──────────────────────────────
+        if ($can['report']) {
+            $d['kpi']     = $this->bossKpi();          // 확정매출·입금·원가·순이익 + 건수
+            $d['finance'] = $this->finance(null);      // 재무 현황 + 회사 목표
+            $d['cash']    = $this->cashflowLists();    // 최근 입금·출금
         }
+
+        // ── 영업(sales.leads read) ────────────────────────────────────────
+        if ($can['pipeline']) {
+            $d['funnel'] = $this->salesFunnel($scope);
+            if (!$can['report']) {                     // 전사 뷰에는 본인 영업 KPI 를 넣지 않는다(기존 boss 동일)
+                $d['saleskpi'] = $this->salesKpi($uid, $can);
+            }
+        }
+
+        // ── 공정 보드(field.process_board read) ───────────────────────────
+        if ($can['process']) {
+            $d['board']   = $this->processBoardCounts($scope);
+            $d['process'] = $this->processChips($scope);
+            if (!$can['report']) {
+                $d['pgroups'] = $this->processGroupCounts($uid);
+            }
+        }
+
+        // ── 프로젝트(field.projects read) ─────────────────────────────────
+        if ($can['project'] && !$can['report']) {
+            $d['sitekpi']  = $this->siteKpi($uid);     // 진행·착공예정·지연·미배정(본인 범위)
+            $d['projects'] = $this->myProjectsList($uid);
+        }
+
+        // ── 현장 일정(field.schedules read) ───────────────────────────────
+        if ($can['schedule']) {
+            $d['workstatus'] = $this->employeeWork();  // 오늘 전 직원 일정·업무
+        }
+
+        // ── 최고운영자 전용 ───────────────────────────────────────────────
+        if ($can['super']) {
+            $d['workload'] = $this->employeeLoad();
+            $d['perf']     = $this->staffPerformance();
+            $d['attend']   = $this->attendanceSummary(); // null=feature_attendance OFF
+        }
+
+        // ── 본인 범위(권한 무관) ──────────────────────────────────────────
+        if (!$can['report']) {
+            $d['mykpi']    = $this->staffKpi($uid, $can); // 오늘·이번주 일정, 알림, (권한 시)내 프로젝트·일지
+            $d['goal']     = $this->goal($uid);           // 본인 목표(전사 뷰는 finance.goal 이 담당)
+            $d['schedule'] = $this->scheduleSummary($uid);
+        }
+
+        // ── 최근 활동: 도메인별 읽기 권한이 있는 종류만 ──────────────────
+        $kinds = array_values(array_filter([
+            $can['contract'] ? 'contract' : null,
+            $can['project']  ? 'project'  : null,
+            $can['process']  ? 'process'  : null,
+            $can['pipeline'] ? 'lead'     : null,
+        ]));
+        if ($kinds) {
+            $d['activity'] = $this->recentActivity($kinds);
+        }
+
+        // 차트 스크립트는 실제로 그릴 차트가 있을 때만 로드한다.
+        if ($can['report'] || $can['pipeline']) {
+            $d['scripts'] = ['vendor/chart.umd.js', 'js/dashboard.js'];
+        }
+
+        View::render('dashboard/index', $d);
     }
 
-    /** 차트 JSON(boss/sales 전용). */
+    /**
+     * 차트 JSON — 위젯 조립과 동일 규칙. 권한 없는 계열은 0 배열이 아니라 키 자체를 제외한다.
+     * (기존 결함: sales_manager 외 전원이 6개월 전사 매출·순이익 monthly_trend 를 받았다.)
+     */
     public function data(): void
     {
-        $u = Auth::user();
-        if ($u['role'] === 'sales_manager') {
-            Response::json($this->salesCharts((int) $u['id']));
-        } else {
-            Response::json($this->bossCharts());
+        $u   = Auth::user();
+        $uid = (int) $u['id'];
+        $can = $this->capabilities();
+
+        $out = [];
+        if ($can['report']) {
+            $out['monthly_trend'] = $this->monthlyTrend();
         }
+        if ($can['pipeline'] && !$can['report']) {
+            $out['stage_groups'] = $this->stageGroupDist($uid);
+        }
+        Response::json($out);
     }
 
-    // ═══════════════════════ BOSS (사장·회계) ═══════════════════════
-
-    private function renderBoss(array $u): void
+    /**
+     * 보유 권한 스냅샷(요청 1회). Rbac::can 은 R16 이후 employee_permissions 를 통해 판정되며
+     * ADMIN_ONLY(payment.manage·performance.view_all·attendance.manage)는 super_admin 에게만 true 다.
+     */
+    private function capabilities(): array
     {
-        // '주의가 필요한 항목' 레일은 R3 에서 제거 — 항목은 각 섹션이 흡수(지연→공정, 미수금→재무, 계약대기→영업, 미배정→직원)
-        $attn = $this->attention(null);
-        View::render('dashboard/boss', [
-            'title'      => '대시보드',
-            'me'         => $u,
-            'kpi'        => $this->bossKpi(),
-            'attn'       => $attn,
-            'funnel'     => $this->salesFunnel(null),
-            'finance'    => $this->finance(null),
-            'process'    => $this->processChips(null),
-            'board'      => $this->processBoardCounts(),
-            'workstatus' => $this->employeeWork(),
-            'attend'     => $this->attendanceSummary(), // R4: 근태는 feature_worklog 아닌 feature_attendance 게이트
-            'cash'       => $this->cashflowLists(),     // R4 T6: 최근 입금·출금(원가 지출) 리스트
-            'workload'   => $this->employeeLoad(),
-            'perf'       => $this->staffPerformance(),
-            'activity'   => $this->recentActivity(),
-            'wl'         => Settings::enabled('feature_worklog'),
-            'scripts'    => ['vendor/chart.umd.js', 'js/dashboard.js'],
-        ]);
+        return [
+            'super'    => Perm::isSuperAdmin(),
+            'report'   => Rbac::can('report.view'),      // analytics.reports read = 전사 열람
+            'customer' => Rbac::can('customer.view'),
+            'pipeline' => Rbac::can('pipeline.view'),
+            'quote'    => Rbac::can('quote.view'),
+            'contract' => Rbac::can('contract.view'),
+            'project'  => Rbac::can('project.view_all'), // field.projects read
+            'process'  => Rbac::can('process.view'),
+            'schedule' => Rbac::can('schedule.view_all'),
+            'worklog'  => Rbac::can('worklog.view_all') && Settings::enabled('feature_worklog'),
+            'wl'       => Settings::enabled('feature_worklog'),
+        ];
     }
 
     /**
@@ -201,16 +290,20 @@ class DashboardController
      * 화면=보드 일치(acctverify): '대기중'은 공정 보드 대기중 컬럼과 동일 모집단
      * (preparing/in_progress/paused/warranty — ProcessController::BOARD_STATUSES 와 동일, 진행 예정 포함).
      * R11: '검수 대기'(requires_confirm) 지표 제거 — 공정 잠금·확인 기능 폐지.
+     * R16: $uid 지정 시 본인 담당·배정 범위로 축소 — 전사 열람(report) 권한이 없는 사용자에게
+     *      공정 보드에서 열 수 없는 프로젝트가 카운트로 새지 않게 한다.
      */
-    private function processBoardCounts(): array
+    private function processBoardCounts(?int $uid = null): array
     {
+        [$scope, $p] = $this->siteScope($uid);
         $rows = Db::all(
             "SELECT CASE WHEN ps.stage_key='waiting' THEN 'waiting' ELSE 'doing' END AS bucket, COUNT(*) cnt
              FROM projects p JOIN process_stages ps ON ps.id=p.process_stage_id
              WHERE p.deleted_at IS NULL
                AND (p.status='in_progress'
                     OR (ps.stage_key='waiting' AND p.status IN ('preparing','paused','warranty')))
-             GROUP BY 1"
+               AND ($scope)
+             GROUP BY 1", $p
         );
         $by = array_column($rows, 'cnt', 'bucket');
         return [
@@ -267,64 +360,61 @@ class DashboardController
     }
 
     /**
-     * 최근 활동(boss ⑦ 섹션) — 영업(신규 문의)·계약 상태 변경·프로젝트 상태 변경·공정 이동을 시간순 통합.
+     * 최근 활동(⑦ 섹션) — 영업(신규 문의)·계약 상태 변경·프로젝트 상태 변경·공정 이동을 시간순 통합.
      * 표시·링크 가공은 뷰가 담당(kind: lead|contract|project|process).
+     * R16: $kinds 로 읽기 권한이 있는 도메인만 UNION 에 포함한다 — 권한 없는 종류는 조회 자체를 하지 않는다.
      */
-    private function recentActivity(int $limit = 10): array
+    private function recentActivity(array $kinds, int $limit = 10): array
     {
         $limit = max(1, min(30, $limit));
-        return Db::all(
-            "(SELECT 'contract' AS kind, h.changed_at AS at, c.id AS ref_id, c.contract_no AS title,
+        // 어떤 종류가 빠져도 첫 SELECT 가 컬럼명을 정하도록 전 분기에 동일 별칭을 붙인다.
+        $parts = [];
+        if (in_array('contract', $kinds, true)) {
+            $parts[] = "(SELECT 'contract' AS kind, h.changed_at AS at, c.id AS ref_id, c.contract_no AS title,
                      h.from_status AS f, h.to_status AS t, u.name AS actor
                 FROM contract_status_history h
                 JOIN contracts c ON c.id=h.contract_id AND c.deleted_at IS NULL
-                LEFT JOIN users u ON u.id=h.changed_by)
-             UNION ALL
-             (SELECT 'project', h.changed_at, p.id, p.name, h.from_status, h.to_status, u.name
+                LEFT JOIN users u ON u.id=h.changed_by)";
+        }
+        if (in_array('project', $kinds, true)) {
+            $parts[] = "(SELECT 'project' AS kind, h.changed_at AS at, p.id AS ref_id, p.name AS title,
+                     h.from_status AS f, h.to_status AS t, u.name AS actor
                 FROM project_status_history h
                 JOIN projects p ON p.id=h.project_id AND p.deleted_at IS NULL
-                LEFT JOIN users u ON u.id=h.changed_by)
-             UNION ALL
-             (SELECT 'process', h.changed_at, p.id, p.name, fs.name, ts.name, u.name
+                LEFT JOIN users u ON u.id=h.changed_by)";
+        }
+        if (in_array('process', $kinds, true)) {
+            $parts[] = "(SELECT 'process' AS kind, h.changed_at AS at, p.id AS ref_id, p.name AS title,
+                     fs.name AS f, ts.name AS t, u.name AS actor
                 FROM project_process_history h
                 JOIN projects p ON p.id=h.project_id AND p.deleted_at IS NULL
                 LEFT JOIN process_stages fs ON fs.id=h.from_stage_id
                 JOIN process_stages ts ON ts.id=h.to_stage_id
-                LEFT JOIN users u ON u.id=h.changed_by)
-             UNION ALL
-             (SELECT 'lead', l.created_at, l.id, cu.name, NULL, l.work_type, u.name
+                LEFT JOIN users u ON u.id=h.changed_by)";
+        }
+        if (in_array('lead', $kinds, true)) {
+            $parts[] = "(SELECT 'lead' AS kind, l.created_at AS at, l.id AS ref_id, cu.name AS title,
+                     NULL AS f, l.work_type AS t, u.name AS actor
                 FROM leads l
                 JOIN customers cu ON cu.id=l.customer_id
                 LEFT JOIN users u ON u.id=l.sales_user_id
-                WHERE l.deleted_at IS NULL)
-             ORDER BY at DESC LIMIT $limit"
-        );
+                WHERE l.deleted_at IS NULL)";
+        }
+        if (!$parts) {
+            return [];
+        }
+        return Db::all(implode("\n UNION ALL\n", $parts) . "\n ORDER BY at DESC LIMIT $limit");
     }
 
-    // ═══════════════════════ SALES (영업관리자) ═══════════════════════
+    // ═══════════════════════ 본인 범위 · 영업 · 현장 KPI ═══════════════════════
 
-    private function renderSales(array $u): void
+    /**
+     * 내 영업 핵심(sales.leads read). 금액 항목은 도메인별 읽기 권한을 추가로 확인한다.
+     *  - pipeline(가중 예상매출) = 리드 예상금액 → pipeline.view
+     *  - revenue(이번 달 수주액)  = 계약 공급가   → contract.view 없으면 키 자체를 만들지 않는다
+     */
+    private function salesKpi(int $uid, array $can): array
     {
-        $uid = (int) $u['id'];
-        View::render('dashboard/sales', [
-            'title'   => '영업 대시보드',
-            'me'      => $u,
-            'kpi'     => $this->salesKpi($uid),
-            'attn'    => $this->attention($uid),
-            'funnel'  => $this->salesFunnel($uid),
-            'goal'    => $this->goal($uid),
-            'scripts' => ['vendor/chart.umd.js', 'js/dashboard.js'],
-        ]);
-    }
-
-    private function salesKpi(int $uid): array
-    {
-        // 내 담당 리드 기준(가중) — AccountingService 단일 출처
-        $pipeline = (float) AccountingService::weightedPipeline($uid);
-        // 내 담당 이번달 수주(공급가 기준, 취소 제외) — AccountingService 단일 출처
-        $mFrom = date('Y-m-01'); $mTo = date('Y-m-t');
-        $rev = AccountingService::contractedAmount($mFrom, $mTo, $uid);
-        $goal = $this->goal($uid);
         $today = date('Y-m-d');
         $contactToday = (int) Db::val(
             "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
@@ -336,75 +426,50 @@ class DashboardController
              WHERE l.deleted_at IS NULL AND l.sales_user_id=:u AND ps.stage_key IN ('negotiating','contract_pending')",
             [':u' => $uid]
         );
-        return [
-            'pipeline'   => ['value' => $pipeline],
-            'revenue'    => ['value' => $rev],
-            'conv'       => ['value' => $goal['rate']],
-            'closing'    => ['value' => $closing],
-            'contact'    => ['value' => $contactToday],
+        $out = [
+            // 내 담당 리드 기준(가중) — AccountingService 단일 출처
+            'pipeline' => ['value' => (float) AccountingService::weightedPipeline($uid)],
+            'closing'  => ['value' => $closing],
+            'contact'  => ['value' => $contactToday],
         ];
+        if ($can['contract']) {
+            // 내 담당 이번달 수주(공급가 기준, 취소 제외) — AccountingService 단일 출처
+            $out['revenue'] = ['value' => AccountingService::contractedAmount(date('Y-m-01'), date('Y-m-t'), $uid)];
+            $out['conv']    = ['value' => $this->goal($uid)['rate']];
+        }
+        return $out;
     }
 
-    // ═══════════════════════ SITE (현장관리자) ═══════════════════════
-
-    private function renderSite(array $u): void
-    {
-        $uid = (int) $u['id'];
-        View::render('dashboard/site', [
-            'title'    => '현장 대시보드',
-            'me'       => $u,
-            'kpi'      => $this->siteKpi($uid), // '주의' 레일 항목(지연·미배정·일지·검수)은 KPI 가 동일 표시 — attn 데이터 불필요(R3)
-            'process'  => $this->processChips($uid),
-            'pgroups'  => $this->processGroupCounts($uid),
-            'schedule' => $this->scheduleSummary($uid),
-        ]);
-    }
-
+    /** 현장 핵심(field.projects read) — 본인 담당(site_manager_id) 또는 배정된 프로젝트 범위. */
     private function siteKpi(int $uid): array
     {
-        // 현장관리자: 본인 담당(site_manager_id) 또는 배정된 프로젝트 범위
         $scope = "(p.site_manager_id=:u1 OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:u2))";
         $p = [':u1' => $uid, ':u2' => $uid];
-        $out = [
+        return [
             'active'    => ['value' => $this->countProjects("status='in_progress'", $scope, $p)],
             'preparing' => ['value' => $this->countProjects("status='preparing'", $scope, $p)],
             'delayed'   => ['value' => $this->countProjects($this->delayedCond(), $scope, $p)],
             'unassigned'=> ['value' => $this->unassignedProjects($uid)],
         ];
-        if (Settings::enabled('feature_worklog')) {
-            $out['worklog'] = ['value' => $this->worklogMissing($uid)];
-        }
-        return $out;
     }
 
-    // ═══════════════════════ STAFF (일반직원) ═══════════════════════
-
-    private function renderStaff(array $u): void
+    /**
+     * 오늘 할 일(본인 범위) — 일정·알림은 권한 무관(설계 2-5 본인 데이터 열람 예외),
+     * 내 담당 프로젝트 수는 field.projects read, 오늘 일지 미작성은 field.worklogs read 가 있어야 한다.
+     */
+    private function staffKpi(int $uid, array $can): array
     {
-        $uid = (int) $u['id'];
-        View::render('dashboard/staff', [
-            'title'    => '내 대시보드',
-            'me'       => $u,
-            'kpi'      => $this->staffKpi($uid),
-            'goal'     => $this->goal($uid),
-            'pgroups'  => $this->processGroupCounts($uid),
-            'schedule' => $this->scheduleSummary($uid),
-            'projects' => $this->myProjectsList($uid),
-            'wl'       => Settings::enabled('feature_worklog'),
-        ]);
-    }
-
-    private function staffKpi(int $uid): array
-    {
-        $mine = "(p.sales_user_id=:a OR p.site_manager_id=:b OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:c))";
-        $mp = [':a' => $uid, ':b' => $uid, ':c' => $uid];
         $out = [
             'today'    => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date<=CURDATE() AND COALESCE(s.end_date, s.event_date)>=CURDATE()", [':u' => $uid])],
             'week'     => ['value' => (int) Db::val("SELECT COUNT(*) FROM schedules s WHERE EXISTS(SELECT 1 FROM schedule_participants sp WHERE sp.schedule_id=s.id AND sp.user_id=:u) AND s.event_date<CURDATE()+INTERVAL 7 DAY AND COALESCE(s.end_date, s.event_date)>=CURDATE()", [':u' => $uid])],
-            'projects' => ['value' => $this->countProjects("status IN ('preparing','in_progress')", $mine, $mp)],
             'unread'   => ['value' => (int) Db::val("SELECT COUNT(*) FROM notifications WHERE user_id=:u AND is_read=0", [':u' => $uid])],
         ];
-        if (Settings::enabled('feature_worklog')) {
+        if ($can['project']) {
+            $mine = "(p.sales_user_id=:a OR p.site_manager_id=:b OR EXISTS(SELECT 1 FROM project_assignments pa WHERE pa.project_id=p.id AND pa.user_id=:c))";
+            $mp = [':a' => $uid, ':b' => $uid, ':c' => $uid];
+            $out['projects'] = ['value' => $this->countProjects("status IN ('preparing','in_progress')", $mine, $mp)];
+        }
+        if ($can['worklog']) {
             $out['worklog'] = ['value' => $this->worklogMissing($uid)];
         }
         return $out;
@@ -412,42 +477,52 @@ class DashboardController
 
     // ═══════════════════════ 공용 집계 블록 ═══════════════════════
 
-    /** 주의가 필요한 항목. $uid 지정 시 해당 담당 범위로 축소(sales/site). null=전체(boss). */
-    private function attention(?int $uid): array
+    /**
+     * 주의가 필요한 항목. $uid 지정 시 해당 담당 범위로 축소, null=전체(전사 열람).
+     * R16: 리드·프로젝트·미수금·작업일지가 한 위젯에 섞여 있으므로 위젯 통째로 버리지 않고
+     *      항목마다 해당 도메인 읽기 권한을 확인한다 — 권한 없는 항목은 쿼리도 돌지 않는다.
+     */
+    private function attention(?int $uid, array $can): array
     {
-        $today = date('Y-m-d');
-        $leadScope = $uid !== null ? ' AND l.sales_user_id=:lu' : '';
-        $leadP = $uid !== null ? [':lu' => $uid] : [];
+        $out = [];
 
-        $contactOverdue = (int) Db::val(
-            "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
-             WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0
-               AND l.next_contact_date IS NOT NULL AND l.next_contact_date < :t $leadScope",
-            array_merge([':t' => $today], $leadP)
-        );
-        $contactNone = (int) Db::val(
-            "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
-             WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0
-               AND (l.next_contact_date IS NULL OR l.stage_entered_at < CURDATE()-INTERVAL 3 DAY) $leadScope",
-            $leadP
-        );
-        $contractStale = (int) Db::val(
-            "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
-             WHERE l.deleted_at IS NULL AND ps.stage_key='contract_pending'
-               AND l.stage_entered_at < CURDATE()-INTERVAL 7 DAY $leadScope",
-            $leadP
-        );
+        if ($can['pipeline']) {
+            $today = date('Y-m-d');
+            $leadScope = $uid !== null ? ' AND l.sales_user_id=:lu' : '';
+            $leadP = $uid !== null ? [':lu' => $uid] : [];
 
-        [$pscope, $pparams] = $this->siteScope($uid);
-        $out = [
-            'contact_overdue' => ['n' => $contactOverdue, 'label' => '연락 예정일 경과',    'route' => 'pipeline.index', 'params' => ['quick' => 'overdue'], 'sev' => 'danger'],
-            'contact_none'    => ['n' => $contactNone,    'label' => '3일+ 미접촉 고객',      'route' => 'pipeline.index', 'params' => ['quick' => 'stale'],   'sev' => 'warn'],
-            'contract_stale'  => ['n' => $contractStale,  'label' => '계약 대기 지연(7일+)',  'route' => 'pipeline.index', 'params' => ['tab' => 'contract'], 'sev' => 'warn'],
-            'delayed'         => ['n' => $this->countProjects($this->delayedCond(), $pscope, $pparams), 'label' => '공정 지연 프로젝트', 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'],
-            'receivable'      => ['n' => $this->receivableCount(), 'label' => '미수금 발생 건',  'route' => 'contracts.index', 'params' => [], 'sev' => 'warn'],
-            'unassigned'      => ['n' => $this->unassignedProjects($uid), 'label' => '직원 미배정 공사', 'route' => 'projects.index', 'params' => ['assign' => 'none'], 'sev' => 'warn'],
-        ];
-        if (Settings::enabled('feature_worklog')) {
+            $contactOverdue = (int) Db::val(
+                "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
+                 WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0
+                   AND l.next_contact_date IS NOT NULL AND l.next_contact_date < :t $leadScope",
+                array_merge([':t' => $today], $leadP)
+            );
+            $contactNone = (int) Db::val(
+                "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
+                 WHERE l.deleted_at IS NULL AND ps.is_won=0 AND ps.is_lost=0
+                   AND (l.next_contact_date IS NULL OR l.stage_entered_at < CURDATE()-INTERVAL 3 DAY) $leadScope",
+                $leadP
+            );
+            $contractStale = (int) Db::val(
+                "SELECT COUNT(*) FROM leads l JOIN pipeline_stages ps ON ps.id=l.stage_id
+                 WHERE l.deleted_at IS NULL AND ps.stage_key='contract_pending'
+                   AND l.stage_entered_at < CURDATE()-INTERVAL 7 DAY $leadScope",
+                $leadP
+            );
+            $out['contact_overdue'] = ['n' => $contactOverdue, 'label' => '연락 예정일 경과',   'route' => 'pipeline.index', 'params' => ['quick' => 'overdue'], 'sev' => 'danger'];
+            $out['contact_none']    = ['n' => $contactNone,    'label' => '3일+ 미접촉 고객',     'route' => 'pipeline.index', 'params' => ['quick' => 'stale'],   'sev' => 'warn'];
+            $out['contract_stale']  = ['n' => $contractStale,  'label' => '계약 대기 지연(7일+)', 'route' => 'pipeline.index', 'params' => ['tab' => 'contract'], 'sev' => 'warn'];
+        }
+
+        if ($can['project']) {
+            [$pscope, $pparams] = $this->siteScope($uid);
+            $out['delayed']    = ['n' => $this->countProjects($this->delayedCond(), $pscope, $pparams), 'label' => '공정 지연 프로젝트', 'route' => 'projects.index', 'params' => ['status' => 'delayed'], 'sev' => 'danger'];
+            $out['unassigned'] = ['n' => $this->unassignedProjects($uid), 'label' => '직원 미배정 공사', 'route' => 'projects.index', 'params' => ['assign' => 'none'], 'sev' => 'warn'];
+        }
+        if ($can['report']) {
+            $out['receivable'] = ['n' => $this->receivableCount(), 'label' => '미수금 발생 건', 'route' => 'contracts.index', 'params' => [], 'sev' => 'warn'];
+        }
+        if ($can['worklog']) {
             $out['worklog'] = ['n' => $this->worklogMissing($uid), 'label' => '오늘 작업일지 미작성', 'route' => 'worklogs.index', 'params' => [], 'sev' => 'warn'];
         }
         return $out;
@@ -652,26 +727,10 @@ class DashboardController
 
     // ═══════════════════════ 차트 JSON ═══════════════════════
 
-    /** boss 대시보드 차트 — 월별추이만(영업단계 도넛은 R3 에서 제거, stage_groups 는 sales 전용). */
-    private function bossCharts(): array
-    {
-        return [
-            'monthly_trend' => $this->monthlyTrend(),
-        ];
-    }
-
-    /** 영업(sales) 대시보드 차트 — 회사 재무(월별추이)는 제외(권한: 영업은 회사 재무를 볼 수 없음). */
-    private function salesCharts(int $uid): array
-    {
-        return [
-            'stage_groups' => $this->stageGroupDist($uid),
-        ];
-    }
-
     /**
      * 최근 6개월 회사 전체 확정매출·확정순이익(완료·준공월(actual_end_date)·공급가 기준 — AccountingService,
      * 리포트 월별추이(ReportsController::monthlyTrend)와 동일 산식으로 대시보드/리포트 차트를 일치시킨다).
-     * boss 전용(회사 재무) — sales 는 권한상 표시하지 않는다.
+     * 전사 재무 — analytics.reports read 없으면 dashboard.data 응답에서 키 자체가 빠진다.
      */
     private function monthlyTrend(): array
     {
@@ -688,7 +747,7 @@ class DashboardController
         return $out;
     }
 
-    /** 영업단계 6그룹 분포(도넛) — sales 대시보드 전용(본인 담당 리드). r4-refactor(T10): 미사용 전사(null) 분기 제거. */
+    /** 영업단계 6그룹 분포(도넛) — 본인 담당 리드. sales.leads read 없으면 응답에서 제외된다. */
     private function stageGroupDist(int $uid): array
     {
         $rows = Db::all(
