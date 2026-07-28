@@ -1,7 +1,8 @@
 <?php
 /**
- * [공정] 탭 — 현재 공정·진행 현황(단계 목록 내 현재 위치)·공정 변경(기존 process.move 액션 재사용,
- * ProcessService::moveStage 경유)·공정 이력 요약. projects/show.php 에서 include.
+ * [공정] 탭 — 현재 공정·진행 현황(단계 목록 내 현재 위치)·하자보수 관리·공정 이력 요약. projects/show.php 에서 include.
+ * R14: 수동 공정 변경 드롭다운(구 process.move 라우트)은 폐지 — 공정 진행률은 공정 보드의 카드 게이지
+ * (process.progress.set, ProcessService::setStageProgress 경유)에서만 조정한다. 이 탭에는 보드로 가는 링크만 남긴다.
  */
 $curStageId = $p['process_stage_id'] !== null ? (int) $p['process_stage_id'] : null;
 $curSort    = $p['process_stage_sort'] !== null ? (int) $p['process_stage_sort'] : null;
@@ -47,88 +48,10 @@ $ctLabel = Stages::constructionTypeLabel($p['construction_type'] ?? null);
     <div class="muted mt-8">공정 미배치 상태입니다 — 공정 보드 진입 시 '대기중'으로 자동 배치됩니다.</div>
   <?php endif; ?>
 
-  <?php if ($canMoveStage): ?>
-    <div class="section-head mt-14"><div class="st"><h3>공정 변경</h3><span class="section-desc">이동은 ProcessService 를 경유해 공정 이력에 기록됩니다</span></div></div>
-    <form class="form-grid-3" id="stageMoveForm" data-cur-sort="<?= $curSort ?? -1 ?>">
-      <?= csrf_field() ?>
-      <input type="hidden" name="project_id" value="<?= (int) $p['id'] ?>">
-      <div class="field"><label class="field-label">이동할 공정 <span class="req">*</span></label>
-        <select name="to_stage_id" class="select" required>
-          <option value="">공정 선택</option>
-          <?php foreach (Stages::processGroups($ctType) as $g): ?>
-            <optgroup label="<?= e($g['label']) ?>">
-              <?php foreach ($g['stages'] as $sk): if (!isset($stByKey[$sk])) { continue; } $st = $stByKey[$sk]; ?>
-                <option value="<?= (int) $st['id'] ?>" data-sort="<?= (int) $st['sort_order'] ?>" data-key="<?= e($st['stage_key']) ?>" <?= $curStageId === (int) $st['id'] ? 'disabled' : '' ?>><?= e($st['name']) ?><?= $curStageId === (int) $st['id'] ? ' (현재)' : '' ?></option>
-              <?php endforeach; ?>
-            </optgroup>
-          <?php endforeach; ?>
-        </select></div>
-      <div class="field"><label class="field-label">사유</label>
-        <input type="text" name="reason" class="input" placeholder="예: 크랙보수 완료로 다음 공정 진행"></div>
-      <div class="field"><button type="submit" class="btn btn-primary">공정 이동</button></div>
-      <div class="af-error" role="alert" style="display:none"></div>
-    </form>
-    <script>
-    (function () {
-      'use strict';
-      var f = document.getElementById('stageMoveForm');
-      if (!f) return;
-      var errBox = f.querySelector('.af-error');
-      function showErr(m) {
-        errBox.textContent = m;
-        errBox.style.display = 'block';
-        if (window.EDEN && EDEN.toast) EDEN.toast(m, 'error');
-      }
-      function postMove(fd, btn) {
-        return fetch('<?= e(url('process.move')) ?>', {
-          method: 'POST',
-          body: fd,
-          headers: { 'X-Requested-With': 'XMLHttpRequest' },
-          credentials: 'same-origin'
-        }).then(function (res) { return res.json().then(function (j) { return { ok: res.ok, j: j }; }); })
-          .then(function (r) {
-            if (!r.ok || r.j.ok === false) { throw new Error(r.j.error || '공정 이동에 실패했습니다.'); }
-            var d = (r.j && r.j.data) || {};
-            // 전체완료 게이트: 미충족 항목 경고 → 확인 후 사유 입력 시에만 예외 진행(차단 아님)
-            if (d.gate && d.gate.warnings) {
-              var reason = window.prompt('전체완료 조건 미충족 항목:\n · ' + d.gate.warnings.join('\n · ')
-                + '\n\n그래도 전체완료로 이동하려면 예외 진행 사유를 입력하세요.\n(취소하면 이동하지 않습니다)', '');
-              if (reason === null || !reason.trim()) {
-                showErr('전체완료 이동을 취소했습니다 (예외 진행 사유 미입력).');
-                btn.disabled = false;
-                return;
-              }
-              var fd2 = new FormData(f);
-              fd2.append('gate_confirm', '1');
-              fd2.append('gate_reason', reason.trim());
-              return postMove(fd2, btn);
-            }
-            if (window.EDEN && EDEN.toast) EDEN.toast('공정이 이동되었습니다.', 'success');
-            location.hash = '#process';
-            location.reload();
-          });
-      }
-      f.addEventListener('submit', function (e) {
-        e.preventDefault();
-        errBox.style.display = 'none';
-        var sel = f.querySelector('[name="to_stage_id"]');
-        if (!sel.value) { showErr('이동할 공정을 선택하세요.'); return; }
-        var cur = parseInt(f.getAttribute('data-cur-sort'), 10);
-        var opt = sel.options[sel.selectedIndex];
-        var to = parseInt(opt.getAttribute('data-sort'), 10);
-        // 준공검사(17)·하자보수(18) → 전체완료(19)는 권장 직행 흐름 — 건너뜀 확인 제외
-        var directFinish = opt.getAttribute('data-key') === 'full_complete' && cur >= 17;
-        if (!directFinish && cur >= 0 && to - cur >= 2 && !confirm('중간 공정을 건너뛰고 이동합니다. 계속하시겠습니까?')) return;
-        var btn = f.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        postMove(new FormData(f), btn)
-          .catch(function (err) { showErr(err.message); btn.disabled = false; });
-      });
-    })();
-    </script>
-  <?php elseif (in_array($p['status'], ['completed', 'settled', 'cancelled', 'terminated'], true)): ?>
-    <div class="muted mt-14">완료·정산·취소·파기된 프로젝트는 공정을 이동할 수 없습니다.</div>
-  <?php endif; ?>
+  <div class="mt-14">
+    <div class="muted mb-8">공정 진행률은 공정 보드의 카드 게이지에서 관리합니다.</div>
+    <a href="<?= e(url('process.board', ['type' => $ctType])) ?>" class="btn btn-outline btn-sm">공정 보드로 이동</a>
+  </div>
 </div>
 
 <?php

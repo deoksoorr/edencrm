@@ -240,8 +240,9 @@ class ProjectsController
              ORDER BY start_datetime ASC LIMIT 1",
             [':id' => $id]
         );
-        // 공정 탭: 단계 목록(진행 현황 + 공정 이동 select). 이동 자체는 process.move(ProcessService 경유) 재사용.
-        // R8-A: 프로젝트 공사 유형(미지정→painting) + 공통의 활성 단계만 — move() 서버 검증과 동일 집합.
+        // 공정 탭: 진행 현황 단계 목록(현재 위치 표시용). R14: 수동 이동 select 는 폐지 —
+        // 공정 진행은 공정 보드의 카드 게이지(process.progress.set, ProcessService::setStageProgress 경유)에서 조정한다.
+        // R8-A: 프로젝트 공사 유형(미지정→painting) + 공통의 활성 단계만 — gaugeStages()와 동일 기준 집합(공통 포함).
         $projConstructionType = Stages::normalizeConstructionType($project['construction_type'] ?? null);
         $processStages = Db::all(
             "SELECT id, stage_key, name, sort_order, color FROM process_stages
@@ -408,7 +409,6 @@ class ProjectsController
             'warrantyRepairs' => $warrantyRepairs,
             'warrantyPhotos'  => $warrantyPhotos,
             'auditRows'   => $auditRows,
-            'canProcessMove' => Rbac::can('process.move'),
             // R11: 입금·정산 탭
             'paySummary'        => $paySummary,
             'projectPayments'   => $projectPayments,

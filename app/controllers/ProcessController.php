@@ -42,19 +42,13 @@ class ProcessController
             }
         }
 
-        // R8-A: 보드 컬럼 = 선택 유형 + 공통(대기중·하자보수·전체완료) 활성 단계만
-        $stages = Db::all(
-            "SELECT * FROM process_stages
-             WHERE (process_type = :t OR process_type = 'common') AND is_active = 1
-             ORDER BY sort_order, id",
-            [':t' => $boardType]
-        );
-
         // 카드 정렬: 진입일 내림차순(신규·재진입 최상단). updated_at 정렬 금지(R3 커널).
+        // R14: 카드 게이지 상단에 표시할 현재 공정명(process_stage_name)을 위해 process_stages 조인.
         $projects = Db::all(
             "SELECT p.id, p.name, p.status, p.process_stage_id, p.process_entered_at, p.created_at, p.construction_type,
                     p.site_address, p.work_type, p.start_date, p.end_date, p.actual_end_date, p.progress, p.is_exception,
                     COALESCE(c.name, p.customer_name_snapshot) AS customer_name, su.name AS sales_name, sm.name AS site_manager_name,
+                    cs.name AS process_stage_name,
                     (SELECT COUNT(*) FROM project_assignments pa
                        WHERE pa.project_id = p.id AND pa.status = 'active') AS assign_count,
                     (SELECT GROUP_CONCAT(u.name ORDER BY u.name SEPARATOR ', ')
@@ -64,6 +58,7 @@ class ProcessController
              LEFT JOIN customers c ON c.id = p.customer_id
              LEFT JOIN users su ON su.id = p.sales_user_id
              LEFT JOIN users sm ON sm.id = p.site_manager_id
+             LEFT JOIN process_stages cs ON cs.id = p.process_stage_id
              WHERE p.deleted_at IS NULL AND p.status IN ($cardStatusIn) AND $typeCond AND $scopeSql
              ORDER BY p.process_entered_at DESC, p.created_at DESC, p.id DESC",
             $params
@@ -102,51 +97,56 @@ class ProcessController
             }
         }
 
-        $byStage = [];
+        // R14: 카드내 게이지 데이터 — 유형 실공정 + 프로젝트별 pct + 메모 수 + 상태 그룹 버킷
+        $gaugeStages = ProcessService::gaugeStages($boardType);
+        $pctByProject = [];
+        $memoCounts = [];
+        if ($ids) {
+            $in = implode(',', array_fill(0, count($ids), '?'));
+            foreach (Db::all("SELECT project_id, stage_id, pct FROM project_stage_progress WHERE project_id IN ($in)", $ids) as $r) {
+                $pctByProject[(int) $r['project_id']][(int) $r['stage_id']] = (int) $r['pct'];
+            }
+            foreach (Db::all("SELECT project_id, COUNT(*) c FROM project_memos WHERE project_id IN ($in) GROUP BY project_id", $ids) as $r) {
+                $memoCounts[(int) $r['project_id']] = (int) $r['c'];
+            }
+        }
+        $statusGroups = ['waiting' => [], 'active' => [], 'warranty' => [], 'done' => []];
         foreach ($projects as $p) {
-            $byStage[(int) $p['process_stage_id']][] = $p;
+            $statusGroups[self::statusGroup((string) $p['status'])][] = $p;
         }
 
-        // 그룹 매핑(단일 출처 Stages, R8-A 유형별): 대기중 / 착공준비 / 시공 / 마무리 / 하자보수 / 종결
+        // R14: 카드내 게이지의 공정그룹(착공준비/시공/마무리) 묶음 — 단일 출처(Stages), 유형별.
+        //      기존 보드 컬럼 그룹핑(byStage/groupCols)은 폐지 — 상태 그룹 섹션(statusGroups)으로 교체됐다.
         $s2g = Stages::processStageToGroup($boardType);
         $groupDefs = Stages::processGroups($boardType);
-        $groupCols = [];
-        foreach ($groupDefs as $gkey => $g) {
-            $groupCols[$gkey] = [];
-        }
-        foreach ($stages as &$st) {
-            $gkey = $s2g[$st['stage_key']] ?? 'prep';
-            $st['group'] = $gkey;
-            $st['group_color'] = $groupDefs[$gkey]['color'] ?? '#9ca3af';
-            $groupCols[$gkey][] = $st;
-        }
-        unset($st);
 
         // 상단 요약 — 대시보드와 동일 정의(delayedCond)를 보드 모집단에서 계산 (R11: 검수 대기 제거)
         $waitingId = ProcessService::waitingStageId();
-        // R10: 요약 정의 단일화 — 카드 이동 응답(move)과 동일 계산기를 사용해 화면·이동 후 숫자를 일치시킨다
+        // R10: 요약 정의 단일화 — 카드 게이지 응답(progressSet 등, boardSummaryFor 경유)과 동일 계산기를 사용해
+        //      화면·저장 후 숫자를 일치시킨다.
         $summary = self::computeSummary($projects, $waitingId);
         // R11: 유형별 위치 번호(1..N) — 그룹 범위 라벨·진행률 분모의 단일 출처(공정 마스터 기준 동적)
         $positions = Stages::processStagePositions($boardType);
 
         View::render('process/board', [
             'title'         => '공정 보드',
-            'stages'        => $stages,
             'positions'     => $positions,
-            'byStage'       => $byStage,
             'photos'        => $photos,
             'nextSchedules' => $nextSchedules,
             'groups'        => $groupDefs,
-            'groupCols'     => $groupCols,
+            's2g'           => $s2g,
+            'gaugeStages'   => $gaugeStages,
+            'pctByProject'  => $pctByProject,
+            'memoCounts'    => $memoCounts,
+            'statusGroups'  => $statusGroups,
             'summary'       => $summary,
             'waitingId'     => $waitingId,
             'statusLabels'  => StatusService::PROJECT_LABELS,
             'statusBadge'   => StatusService::PROJECT_BADGE,
-            'tabs'          => Stages::processTabs($boardType),
             'boardType'     => $boardType,
             'canMove'       => Rbac::can('process.move'),
             'canManage'     => Rbac::can('project.manage'),
-            'scripts'       => ['vendor/Sortable.min.js', 'js/process-board.js'],
+            'scripts'       => ['js/process-board.js'],
         ]);
     }
 
@@ -285,7 +285,8 @@ class ProcessController
     }
 
     /**
-     * 상단 요약 계산기(단일 정의) — board() 렌더와 move() 응답이 공유한다(R10).
+     * 상단 요약 계산기(단일 정의) — board() 렌더와 progressSet()/completeConfirm()/warrantySet() 의
+     * boardSummaryFor() 호출이 공유한다(R10 최초 도입, R14: move() 폐지에 따라 소비자 갱신).
      * R11: '검수 대기'(requires_confirm) 지표 제거 — 공정 잠금·확인 기능 폐지.
      * @param array $projects 보드 모집단 행(status/process_stage_id/end_date/actual_end_date 필요)
      */

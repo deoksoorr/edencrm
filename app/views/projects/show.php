@@ -4,7 +4,7 @@
  *  @var array $schedules @var array $workLogs @var array $photos @var array $docs
  *  @var array $statuses @var array $statusBadge @var array $statusHistory @var array $allowedTransitions @var bool $wl
  *  @var array|null $contract @var array|null $nextSchedule @var array $processStages
- *  @var array|null $auditRows @var bool $canProcessMove
+ *  @var array|null $auditRows
  *
  * R3 projdetail: 상단 요약(항상 표시) + 하단 6탭(개요/직원·일정/공정/지출/사진·문서/이력).
  * 탭 콘텐츠는 projects/_tab_*.php 파셜로 분리(변수 스코프 공유 include), 탭 전환은 순수 JS + URL hash 복원.
@@ -36,9 +36,8 @@ $contract      = $contract ?? null;
 $nextSchedule  = $nextSchedule ?? null;
 $processStages = $processStages ?? [];
 $auditRows     = $auditRows ?? null;
-// 공정 이동 UI: process.move 권한 + 종결 상태 아님(ProcessController::move 서버 검증과 동일 기준)
-$canMoveStage = ($canProcessMove ?? false)
-    && !in_array($p['status'], ['completed', 'settled', 'cancelled', 'terminated'], true);
+// R14: 공정 탭의 수동 이동 드롭다운(구 process.move) 폐지에 따라 $canMoveStage 가드도 제거 —
+// 공정 진행은 공정 보드의 카드 게이지(process.progress.set)에서만 조정한다.
 // 현재 공정 뱃지(색상은 process_stages.color — 형식 검증 후 사용, 아니면 기본색)
 $psName  = $p['process_stage_name'] ?? null;
 $psColor = preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($p['process_stage_color'] ?? '')) ? $p['process_stage_color'] : '#64748b';

@@ -1019,3 +1019,26 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
   .stage-row form{flex-wrap:wrap}
   .stage-name-input,.stage-desc-input,.stage-color-input{min-width:0;max-width:100%}
 }
+
+/* ── R14: 공정 보드 재구성 — 상태 그룹 섹션 + 카드내 게이지(슬라이더) + 메모 팝업 (반응형) ── */
+.sg-board{display:flex;flex-direction:column;gap:16px}
+.sg-group{border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--card,#fff);padding:12px}
+.sg-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sg-dot{width:10px;height:10px;border-radius:50%;background:var(--gc,#9ca3af)}
+.sg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:12px}
+.gauge-card{border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--card,#fff);border-left:3px solid var(--gc,var(--brand))}
+.gc-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.gc-progress{display:flex;align-items:center;gap:8px;margin:8px 0}
+.gc-progress .progress{flex:1}
+.gc-ggroup summary{cursor:pointer;font-weight:600;padding:6px 0}
+.gc-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.gc-name{flex:0 0 40%;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gc-slider{flex:1;accent-color:var(--brand);min-height:24px}
+.gc-slider:disabled{opacity:.5;cursor:not-allowed}
+.gc-val{flex:0 0 44px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums}
+.gc-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.memo-item{border-top:1px solid var(--line-2);padding:8px 0}
+.memo-add{display:flex;gap:6px;flex-wrap:wrap}
+.memo-add textarea{flex:1;min-width:180px}
+.empty-mini{color:var(--muted);font-size:13px;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
+@media(max-width:900px){.sg-cards{grid-template-columns:1fr}.gc-name{flex-basis:34%}}

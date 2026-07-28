@@ -1,20 +1,38 @@
 <?php
 /**
- * 공정 보드 — '대기중' 그룹 첫 고정 + 그룹 섹션(줄바꿈 배치)으로 무한 가로 스크롤 제거.
- * 원천은 projects.process_stage_id 단일. 컬럼=공정 단계, 카드 뱃지=프로젝트 상태(두 축 구분).
- * @var array $stages,$byStage,$photos,$nextSchedules,$groups,$groupCols,$summary,$tabs,$statusLabels,$statusBadge
+ * 공정 보드 — 상태 그룹(대기중/진행 중/하자보수/종결) 섹션 + 카드내 공정 게이지(슬라이더)로 재구성(R14).
+ * 원천은 projects.process_stage_id 단일. 섹션 = 프로젝트 상태(ProcessController::statusGroup),
+ * 카드 안의 게이지 행 = 실공정(ProcessService::gaugeStages) 단계별 진행률(project_stage_progress).
+ * 드래그 이동(구 process.move)은 R14 에서 폐지 — 게이지 저장(process.progress.set)이 보드 위치를
+ * 파생 이동시키고, 완료 확정(process.complete.confirm)·하자보수 전환(process.warranty.set)이
+ * 상태 축을 갱신한다. 필터 탭(#pcTabs)도 기존 공정그룹 축 대신 이 상태 그룹 축으로 재정의했다(R14).
+ * @var array $positions,$photos,$nextSchedules,$groups,$s2g,$gaugeStages,$pctByProject,$memoCounts,$statusGroups
+ * @var array $summary,$statusLabels,$statusBadge
  * @var int $waitingId @var bool $canMove @var bool $canManage @var string $boardType
  */
 $today = date('Y-m-d');
 $totalCount = (int) $summary['total'];
 $typeLabels = Stages::constructionTypes(); // R8-A: 도장/인테리어 최상위 탭
 $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
+
+// R14: 상태 그룹 섹션 정의(라벨·색) — 카드 게이지 보드의 단일 출처. 필터 탭(#pcTabs)도 이 4개 키를 그대로 쓴다
+// (구 공정그룹 축(대기중/착공 준비/시공/마무리·하자)은 보드 컬럼 자체가 폐지되어 더 이상 의미가 없다).
+$sgDefs = [
+    'waiting'  => ['name' => '대기중',   'color' => '#f59e0b'],
+    'active'   => ['name' => '진행 중',  'color' => '#3b82f6'],
+    'warranty' => ['name' => '하자보수', 'color' => '#ef4444'],
+    'done'     => ['name' => '종결',     'color' => '#0d9488'],
+];
+$tabs = ['all' => ['label' => '전체', 'groups' => array_keys($sgDefs)]];
+foreach ($sgDefs as $gkey => $g) {
+    $tabs[$gkey] = ['label' => $g['name'], 'groups' => [$gkey]];
+}
 ?>
 <div class="page page-wide" data-board data-board-type="<?= e($boardType) ?>" data-can-move="<?= $canMove ? '1' : '0' ?>" data-can-manage="<?= !empty($canManage) ? '1' : '0' ?>">
   <div class="page-head">
     <div>
       <div class="page-title">공정 보드</div>
-      <div class="page-sub"><?= e($boardTypeLabel) ?> 보드 <?= number_format($totalCount) ?>건(유형 미지정 포함) · 진행 예정·진행 중·일시 중단·하자보수 + 완료·정산 표시(이동 시 자동 재개) · 취소·파기 제외<?= $canMove ? '' : ' · 이동 권한이 없어 조회만 가능합니다.' ?></div>
+      <div class="page-sub"><?= e($boardTypeLabel) ?> 보드 <?= number_format($totalCount) ?>건(유형 미지정 포함) · 진행 예정·진행 중·일시 중단·하자보수 + 완료·정산 표시 · 취소·파기 제외<?= $canMove ? '' : ' · 게이지 조정 권한이 없어 조회만 가능합니다.' ?></div>
     </div>
     <?php if (can('settings.manage')): ?>
       <div class="page-actions">
@@ -36,7 +54,7 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
       <div class="kpi-label">전체 진행 프로젝트</div>
       <div class="kpi-value"><span data-summary="active"><?= number_format($summary["active"]) ?></span><span class="u">건</span></div>
     </div>
-    <div class="kpi accent-wait" title="'대기중' 공정 컬럼의 프로젝트 수(진행 예정 포함)">
+    <div class="kpi accent-wait" title="'대기중' 공정의 프로젝트 수(진행 예정 포함)">
       <div class="kpi-label">대기중</div>
       <div class="kpi-value"><span data-summary="waiting"><?= number_format($summary["waiting"]) ?></span><span class="u">건</span></div>
     </div>
@@ -48,7 +66,7 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
       <div class="kpi-label">지연 프로젝트</div>
       <div class="kpi-value"><span data-summary="delayed"><?= number_format($summary["delayed"]) ?></span><span class="u">건</span></div>
     </div>
-    <div class="kpi accent-ok" title="완료·정산 프로젝트 — 종결(전체완료) 컬럼에 노출되며, 다른 공정으로 이동하면 '진행 중'으로 자동 재개됩니다">
+    <div class="kpi accent-ok" title="완료·정산 프로젝트 — 종결 섹션에 노출되며, 게이지를 다시 내리면 '진행 중'으로 자동 재개됩니다">
       <div class="kpi-label">완료·정산</div>
       <div class="kpi-value"><span data-summary="done"><?= number_format($summary["done"]) ?></span><span class="u">건</span></div>
     </div>
@@ -69,107 +87,81 @@ $boardTypeLabel = $typeLabels[$boardType] ?? '도장';
     <div class="empty"><div class="empty-title">표시할 프로젝트가 없습니다.</div></div>
   <?php endif; ?>
 
-  <div class="pb-groups" id="processBoard">
-    <?php foreach ($groups as $gkey => $g): $cols = $groupCols[$gkey] ?? []; if (!$cols) { continue; } ?>
-      <?php
-        $groupCount = 0;
-        foreach ($cols as $stage) { $groupCount += count($byStage[(int) $stage['id']] ?? []); }
-        // R11: 그룹 범위 = 위치 번호(유형별 1..N, 공정 마스터 기준 동적) — sort_order 원값 표시 금지.
-        //      그룹 내 위치가 비연속(사이에 다른 그룹 공정 존재)이면 범위 대신 개수로 표기.
-        $gPos = [];
-        foreach ($cols as $stage) {
-            $gPos[] = (int) ($positions['pos'][(int) $stage['id']] ?? 0);
-        }
-        sort($gPos);
-        $contiguous = !$gPos || ($gPos[count($gPos) - 1] - $gPos[0] === count($gPos) - 1);
-        if ($gkey === 'waiting') {
-            $rangeLabel = '착공 전 대기';
-        } elseif (!$contiguous) {
-            $rangeLabel = count($gPos) . '개 공정';
-        } elseif (count($gPos) > 1) {
-            $rangeLabel = $gPos[0] . '~' . $gPos[count($gPos) - 1] . '단계';
-        } else {
-            $rangeLabel = ($gPos[0] ?? 0) . '단계';
-        }
-      ?>
-      <section class="pb-group" data-group="<?= e($gkey) ?>" style="--gc:<?= e($g['color']) ?>">
-        <div class="pb-group-head">
-          <span class="pb-group-name"><?= e($g['label']) ?></span>
-          <span class="pb-group-range"><?= e($rangeLabel) ?></span>
-          <span class="kanban-count" data-group-count><?= $groupCount ?></span>
-        </div>
-        <div class="pb-group-cols">
-          <?php foreach ($cols as $stage): $list = $byStage[(int) $stage['id']] ?? []; ?>
-          <div class="kanban-col" data-group="<?= e($stage['group']) ?>" style="--gc:<?= e($stage['group_color']) ?>">
-            <div class="kanban-col-head">
-              <div class="kanban-col-title">
-                <span class="kanban-caret" title="접기/펼치기">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                </span>
-                <span><?php $stagePos = (int) ($positions['pos'][(int) $stage['id']] ?? 0); ?><?= $stagePos > 0 ? $stagePos . '. ' : '' ?><?= e($stage['name']) ?></span>
-                <span class="kanban-count"><?= count($list) ?></span>
-              </div>
-            </div>
-            <div class="kanban-list" data-stage-id="<?= (int) $stage['id'] ?>">
-              <?php if (!$list): ?><div class="kanban-empty">프로젝트 없음</div><?php endif; ?>
-              <?php foreach ($list as $p):
-                $pid = (int) $p['id'];
-                $daysLeft = !empty($p['end_date']) ? (int) floor((strtotime($p['end_date']) - strtotime($today)) / 86400) : null;
-                // 지연 = 준공예정 경과 + 준공 미처리(대시보드 delayedCond 와 동일 기준)
-                $isDone = in_array($p['status'], ['completed', 'settled'], true); // R11: 완료·정산 카드도 이동 가능(자동 재개)
-                $isDelayed = !$isDone && $daysLeft !== null && $daysLeft < 0 && empty($p['actual_end_date']);
-                $isWarn = !$isDone && !$isDelayed && $daysLeft !== null && $daysLeft <= 7;
-                $statusCls = $isDone ? 'st-won pb-done' : ($isDelayed ? 'st-delayed' : ($isWarn ? 'st-warn' : 'st-normal'));
-                $ns = $nextSchedules[$pid] ?? null;
-                $isWaitingCol = (int) $stage['id'] === (int) $waitingId;
-              ?>
-              <div class="kanban-card <?= $statusCls ?>" data-project-id="<?= $pid ?>" data-status="<?= e($p['status']) ?>"
-                   data-href="<?= e(url('projects.show', ['id' => $pid])) ?>" title="클릭하면 프로젝트 상세로 이동">
-                <?php if (isset($photos[$pid])): ?>
-                  <div class="kanban-card-photo"><img src="<?= e(url('files.download', ['id' => $photos[$pid]])) ?>" alt="" loading="lazy"></div>
-                <?php endif; ?>
-                <div class="pc-top">
-                  <div class="pc-title"><a href="<?= e(url('projects.show', ['id' => $pid])) ?>"><?= e(Util::truncate($p['name'], 24)) ?></a></div>
-                  <?php if (empty($p['construction_type'])): /* R8-A: 미지정 배지 — project.manage 보유 시 클릭해 유형 지정 */ ?>
-                    <?php if (!empty($canManage)): ?>
-                      <button type="button" class="pc-ct-badge" data-settype="<?= $pid ?>" data-name="<?= e($p['name']) ?>"
-                              title="공사 유형 미지정 — 양쪽 보드에 표시됩니다. 클릭해 도장/인테리어 지정">유형 미지정</button>
-                    <?php else: ?>
-                      <span class="pc-ct-badge" title="공사 유형 미지정 — 양쪽 보드에 표시됩니다">유형 미지정</span>
-                    <?php endif; ?>
-                  <?php endif; ?>
-                  <span class="badge <?= e($statusBadge[$p['status']] ?? 'badge-muted') ?>" title="프로젝트 상태(공정 상태와 별개)"><?= e($statusLabels[$p['status']] ?? $p['status']) ?></span>
-                </div>
-                <div class="pc-sub">
-                  <span><?= e($p['customer_name'] ?: '-') ?><?php if (!empty($p['is_exception'])): ?> <span class="badge badge-warn fs-11" title="예외 프로젝트(계약 미연결 수동 생성)">예외</span><?php endif; ?></span>
-                  <span class="ellipsis" title="<?= e($p['site_address'] ?: '') ?>"><?= e($p['site_address'] ? Util::truncate($p['site_address'], 14) : '주소 미등록') ?></span>
-                </div>
-                <div class="pc-meta">
-                  <span class="m" title="담당 영업">영업 <?= e($p['sales_name'] ?: '담당 미지정') ?></span>
-                  <span class="m ellipsis" title="배정 직원<?= $p['assignee_names'] ? ': ' . e($p['assignee_names']) : '' ?>">배정 <?= $p['assignee_names'] ? e(Util::truncate($p['assignee_names'], 16)) . ' (' . (int) $p['assign_count'] . '명)' : '직원 미배정' ?></span>
-                </div>
-                <div class="pc-meta">
-                  <span class="m" title="예상 착공일">착공 <?= e($p['start_date'] ?: '착공일 미정') ?></span>
-                  <span class="m ellipsis" title="다음 일정<?= $ns ? ': ' . e($ns['title']) : '' ?>">일정 <?= $ns ? e($ns['event_date']) . ' ' . e(Stages::slotLabel($ns['slot'])) : '일정 미등록' ?></span>
-                </div>
-                <div class="progress"><div class="progress-bar <?= ((int) $p['progress']) >= 100 ? 'ok' : ($isDelayed ? 'danger' : '') ?>" style="width:<?= (int) $p['progress'] ?>%"></div></div>
-                <div class="pc-foot">
-                  <span title="생성일 · <?= $isWaitingCol ? '대기중' : '현재 공정' ?> 진입일">등록 <?= e(date('m.d', strtotime($p['created_at']))) ?> · 진입 <span data-entered-at><?= $p['process_entered_at'] ? e(date('m.d', strtotime($p['process_entered_at']))) : '-' ?></span></span>
-                  <span class="<?= $isDelayed ? 'text-danger' : ($isWarn ? 'text-warn' : '') ?>">
-                    <?php if ($daysLeft !== null): ?><?= $isDelayed ? abs($daysLeft) . '일 지연' : 'D-' . $daysLeft ?><?php else: ?><?= (int) $p['progress'] ?>%<?php endif; ?>
-                  </span>
-                </div>
-                <div class="pc-actions">
-                  <span class="muted pc-pct" data-progress-text><?= (int) $p['progress'] ?>%</span>
-                  <button type="button" class="btn btn-ghost btn-sm history-btn" data-project-id="<?= $pid ?>">이력</button>
-                </div>
+  <?php
+    // R14: 카드내 게이지의 공정그룹(착공준비/시공/마무리) 묶음 — 모든 카드가 동일 구조를 공유(값만 카드별로 다름)
+    $gaugeByGroup = [];
+    foreach ($gaugeStages as $i => $st) {
+        $gk = $s2g[$st['stage_key']] ?? 'build';
+        $st['pos'] = $i + 1;
+        $gaugeByGroup[$gk][] = $st;
+    }
+  ?>
+  <div class="sg-board" id="processBoard">
+    <?php foreach ($sgDefs as $gkey => $g): $list = $statusGroups[$gkey] ?? []; ?>
+    <section class="sg-group" data-group="<?= e($gkey) ?>" style="--gc:<?= e($g['color']) ?>">
+      <div class="sg-head"><span class="sg-dot"></span><b><?= e($g['name']) ?></b>
+        <span class="badge badge-muted sg-count" data-group-count="<?= e($gkey) ?>"><?= count($list) ?></span></div>
+      <div class="sg-cards" data-group-cards="<?= e($gkey) ?>">
+        <?php foreach ($list as $p): $pid = (int) $p['id'];
+          $pmap = $pctByProject[$pid] ?? [];
+          $isDone = in_array($p['status'], ['completed', 'settled'], true);
+          $mc = $memoCounts[$pid] ?? 0;
+          $ns = $nextSchedules[$pid] ?? null;
+        ?>
+        <div class="gauge-card" data-project-id="<?= $pid ?>" data-status="<?= e($p['status']) ?>">
+          <?php if (isset($photos[$pid])): ?>
+            <div class="kanban-card-photo"><img src="<?= e(url('files.download', ['id' => $photos[$pid]])) ?>" alt="" loading="lazy"></div>
+          <?php endif; ?>
+          <div class="gc-top">
+            <div class="pc-title"><a href="<?= e(url('projects.show', ['id' => $pid])) ?>"><?= e(Util::truncate($p['name'], 24)) ?></a></div>
+            <span class="badge <?= e($statusBadge[$p['status']] ?? 'badge') ?>" data-status-badge><?= e($statusLabels[$p['status']] ?? $p['status']) ?></span>
+          </div>
+          <div class="pc-sub">
+            <span><?= e($p['customer_name'] ?: '-') ?><?php if ((int) ($p['is_exception'] ?? 0) === 1): ?> <span class="badge badge-warn fs-11" title="예외 프로젝트(계약 미연결 수동 생성)">예외</span><?php endif; ?></span>
+            <span class="ellipsis" title="<?= e($p['site_address'] ?: '') ?>"><?= e($p['site_address'] ? Util::truncate($p['site_address'], 14) : '주소 미등록') ?></span>
+          </div>
+          <div class="pc-meta">
+            <span class="m" title="담당 영업">영업 <?= e($p['sales_name'] ?: '담당 미지정') ?></span>
+            <span class="m ellipsis" title="배정 직원<?= $p['assignee_names'] ? ': ' . e($p['assignee_names']) : '' ?>">배정 <?= $p['assignee_names'] ? e(Util::truncate($p['assignee_names'], 16)) . ' (' . (int) $p['assign_count'] . '명)' : '직원 미배정' ?></span>
+          </div>
+          <div class="pc-meta">
+            <span class="m" title="예상 착공일">착공 <?= e($p['start_date'] ?: '착공일 미정') ?></span>
+            <span class="m ellipsis" title="다음 일정<?= $ns ? ': ' . e($ns['title']) : '' ?>">일정 <?= $ns ? e($ns['event_date']) . ' ' . e(Stages::slotLabel($ns['slot'])) : '일정 미등록' ?></span>
+          </div>
+          <div class="gc-progress">
+            <div class="progress"><div class="progress-bar<?= (int) $p['progress'] >= 100 ? ' ok' : '' ?>" data-progress-bar style="width:<?= (int) $p['progress'] ?>%"></div></div>
+            <span class="gc-pct" data-progress-text><?= (int) $p['progress'] ?>%</span>
+            <span class="badge badge-stage" data-current-stage>현재: <?= e($p['process_stage_name'] ?? '대기중') ?></span>
+          </div>
+          <div class="gc-gauges">
+            <?php foreach ($gaugeByGroup as $ggk => $sts): $gdef = $groups[$ggk] ?? null; ?>
+            <details class="gc-ggroup" <?= $ggk === 'build' ? 'open' : '' ?>>
+              <summary><?= e($gdef['label'] ?? $ggk) ?> <span class="muted fs-12 gc-gsum" data-ggroup-sum="<?= e($ggk) ?>"></span></summary>
+              <?php foreach ($sts as $st): $v = $pmap[(int) $st['id']] ?? 0; ?>
+              <div class="gc-row" data-stage-row="<?= (int) $st['id'] ?>">
+                <span class="gc-name"><?= (int) $st['pos'] ?>. <?= e($st['name']) ?></span>
+                <input type="range" class="gc-slider" min="0" max="100" step="5" value="<?= $v ?>"
+                       data-stage-id="<?= (int) $st['id'] ?>" <?= $canMove ? '' : 'disabled' ?>>
+                <span class="gc-val" data-stage-val><?= $v ?>%</span>
               </div>
               <?php endforeach; ?>
-            </div>
+            </details>
+            <?php endforeach; ?>
           </div>
-          <?php endforeach; ?>
+          <div class="gc-actions">
+            <button type="button" class="btn btn-sm btn-outline gc-memo-btn">메모<?= $mc ? ' <span class="badge badge-muted">' . $mc . '</span>' : '' ?></button>
+            <?php if ($canMove && $p['status'] === 'warranty'): ?>
+              <button type="button" class="btn btn-sm btn-outline gc-warranty-btn" data-action="clear">하자보수 종료</button>
+            <?php elseif ($canMove && $isDone): ?>
+              <button type="button" class="btn btn-sm btn-ghost gc-warranty-btn" data-action="set">하자보수 전환</button>
+            <?php endif; ?>
+            <button type="button" class="btn btn-sm btn-ghost history-btn" data-project-id="<?= $pid ?>">이력</button>
+          </div>
         </div>
-      </section>
+        <?php endforeach; ?>
+        <?php if (!$list): ?><div class="empty-mini">프로젝트 없음</div><?php endif; ?>
+      </div>
+    </section>
     <?php endforeach; ?>
   </div>
 </div>
