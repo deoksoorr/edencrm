@@ -1111,3 +1111,39 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .gc-ggroup summary::-webkit-details-marker{display:none}
 .gc-ggroup summary::before{content:'▸';color:#94a3b8;font-size:11px;transition:transform .15s}
 .gc-ggroup[open] summary::before{transform:rotate(90deg)}
+
+/* ── R16 직원 업무 권한 매트릭스 ─────────────────────────────── */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.btn-xs{padding:2px 7px;font-size:11px;line-height:1.6}
+.perm-block{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2)}
+.perm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.perm-title{font-size:15px;font-weight:700;margin:0}
+.perm-bulk{display:flex;gap:6px}
+.perm-hint{font-size:12px;color:#64748b;margin:8px 0 14px;line-height:1.6}
+.perm-notice{margin-top:12px;padding:12px 14px;border:1px solid var(--line-2);border-radius:8px;background:#f8fafc;font-size:13px;color:#475569}
+.perm-section{margin-bottom:18px}
+.perm-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.perm-section-title{font-size:13px;font-weight:700;margin:0;color:#334155}
+.perm-table{width:100%;border-collapse:collapse;font-size:13px}
+.perm-table th,.perm-table td{border:1px solid var(--line-2);padding:7px 10px;text-align:center}
+.perm-table thead th{background:#f8fafc;font-weight:600;font-size:12px;color:#475569}
+.perm-table .perm-col-name{width:34%;text-align:left}
+.perm-table .perm-col-row{width:78px}
+.perm-name{text-align:left;font-weight:500}
+.perm-foot-label{color:#64748b;font-weight:600;font-size:12px}
+.perm-check{display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:4px}
+.perm-check input{width:16px;height:16px;cursor:pointer}
+.perm-na{color:#cbd5e1}
+.perm-foot-note{font-size:12px;color:#64748b;line-height:1.6;margin-top:4px}
+
+/* 모바일: 표 → 카드형 (가로 스크롤 대신 행 단위 카드) */
+@media(max-width:640px){
+  .perm-table thead,.perm-table tfoot{display:none}
+  .perm-table,.perm-table tbody,.perm-table tr,.perm-table th,.perm-table td{display:block;width:auto}
+  .perm-table tr{border:1px solid var(--line-2);border-radius:8px;margin-bottom:10px;padding:8px 10px}
+  .perm-table th,.perm-table td{border:0;padding:4px 0;text-align:left}
+  .perm-table .perm-name{font-weight:700;font-size:13px;padding-bottom:6px;border-bottom:1px solid var(--line-2);margin-bottom:4px}
+  .perm-table tbody td[data-label]{display:flex;align-items:center;justify-content:space-between}
+  .perm-table tbody td[data-label]::before{content:attr(data-label);font-size:12px;color:#64748b}
+  .perm-table .perm-col-row{padding-top:8px}
+}
