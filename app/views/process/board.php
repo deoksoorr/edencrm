@@ -8,7 +8,7 @@
  * 상태 축을 갱신한다. 필터 탭(#pcTabs)도 기존 공정그룹 축 대신 이 상태 그룹 축으로 재정의했다(R14).
  * @var array $positions,$photos,$nextSchedules,$groups,$s2g,$gaugeStages,$pctByProject,$memoCounts,$statusGroups
  * @var array $summary,$statusLabels,$statusBadge
- * @var int $waitingId @var bool $canMove @var bool $canManage @var string $boardType
+ * @var bool $canMove @var bool $canManage @var string $boardType
  */
 $today = date('Y-m-d');
 $totalCount = (int) $summary['total'];
@@ -114,6 +114,14 @@ foreach ($sgDefs as $gkey => $g) {
           <?php endif; ?>
           <div class="gc-top">
             <div class="pc-title"><a href="<?= e(url('projects.show', ['id' => $pid])) ?>"><?= e(Util::truncate($p['name'], 24)) ?></a></div>
+            <?php if (($p['construction_type'] ?? null) === null): /* R8-A: 미지정 배지 — project.manage 보유 시 클릭해 유형 지정. R14: 유형에 따라 게이지 단계셋이 갈리므로 게이지 보드에서도 필수 */ ?>
+              <?php if (!empty($canManage)): ?>
+                <button type="button" class="pc-ct-badge" data-settype="<?= $pid ?>" data-name="<?= e($p['name']) ?>"
+                        title="공사 유형 미지정 — 양쪽 보드에 표시됩니다. 클릭해 도장/인테리어 지정">유형 미지정</button>
+              <?php else: ?>
+                <span class="pc-ct-badge" title="공사 유형 미지정 — 양쪽 보드에 표시됩니다">유형 미지정</span>
+              <?php endif; ?>
+            <?php endif; ?>
             <span class="badge <?= e($statusBadge[$p['status']] ?? 'badge') ?>" data-status-badge><?= e($statusLabels[$p['status']] ?? $p['status']) ?></span>
           </div>
           <div class="pc-sub">

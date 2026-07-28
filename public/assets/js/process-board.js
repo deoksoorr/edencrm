@@ -87,17 +87,24 @@
         var pt = card.querySelector('[data-progress-text]');
         if (pt) pt.textContent = d.progress + '%';
       }
-      if (d.current_stage_name) {
-        var cs = card.querySelector('[data-current-stage]');
-        if (cs) cs.textContent = '현재: ' + d.current_stage_name;
-      }
+      var cs = card.querySelector('[data-current-stage]');
+      if (cs) cs.textContent = '현재: ' + (d.current_stage_name || '대기중');
       if (d.status) {
         card.dataset.status = d.status;
         var badge = card.querySelector('[data-status-badge]');
         if (badge) { badge.textContent = d.status_label; badge.className = 'badge ' + d.badge_class; }
         var target = document.querySelector('[data-group-cards="' + d.group + '"]');
         if (target && card.parentElement !== target) {
+          var source = card.parentElement;
           target.insertBefore(card, target.firstElementChild);
+          var targetEmpty = target.querySelector('.empty-mini');
+          if (targetEmpty) targetEmpty.remove();
+          if (source && !source.querySelector('.gauge-card')) {
+            var em = document.createElement('div');
+            em.className = 'empty-mini';
+            em.textContent = '프로젝트 없음';
+            source.appendChild(em);
+          }
           document.querySelectorAll('[data-group-count]').forEach(function (el) {
             var grp = el.dataset.groupCount;
             var wrap = document.querySelector('[data-group-cards="' + grp + '"]');
@@ -117,9 +124,8 @@
         var ok = await EDEN.confirm(setOn ? '이 프로젝트를 하자보수 상태로 전환할까요?' : '하자보수를 종료하고 완료로 복귀할까요?');
         if (!ok) return;
         try {
-          var d = await api('process.warranty.set', { project_id: card.dataset.projectId, action: btn.dataset.action });
-          applyCardState(card, d);
-          location.reload(); // 버튼 표시(전환/종료) 갱신 단순화
+          await api('process.warranty.set', { project_id: card.dataset.projectId, action: btn.dataset.action });
+          location.reload(); // 버튼 표시(전환/종료) 갱신 단순화 — 카드 DOM 갱신은 새로고침으로 대체(중간 반영 불필요)
         } catch (e) { toast(e.message, 'error'); }
       });
     });
@@ -200,6 +206,43 @@
         .catch(function (err) {
           toast((err && err.message) || '이력을 불러오지 못했습니다.', 'error');
         });
+    });
+
+    // ── R8-A: '유형 미지정' 배지 → 공사 유형(도장/인테리어) 지정 모달 (perm project.manage — 서버도 강제).
+    //    R14: 게이지 보드로 이식 — 유형에 따라 카드 게이지 단계셋이 달라지므로 전체 새로고침으로 재렌더한다. ──
+    document.addEventListener('click', function (e) {
+      var badge = e.target.closest('button[data-settype]');
+      if (!badge) return;
+      var projectId = badge.dataset.settype;
+      var name = badge.dataset.name || '';
+
+      function doSet(type, typeLabel, close, btn) {
+        btn.disabled = true;
+        api('process.settype', { project_id: projectId, construction_type: type })
+          .then(function (data) {
+            var msg = '공사 유형이 \'' + typeLabel + '\'(으)로 지정되었습니다.';
+            if (data && data.moved_to_waiting) msg += ' 공정이 \'대기중\'으로 재배치되었습니다.';
+            toast(msg, 'success');
+            close();
+            location.reload(); // 지정 후 해당 유형 탭·게이지 단계셋으로 재렌더 — 서버 상태 기준
+          })
+          .catch(function (err) {
+            toast((err && err.message) || '유형 지정에 실패했습니다.', 'error');
+            btn.disabled = false;
+          });
+      }
+
+      EDEN.modal({
+        title: '공사 유형 지정',
+        body: '<p style="margin:0;color:#4b5563">' + (name ? '<b>' + escapeHtml(name) + '</b><br>' : '')
+          + '이 프로젝트의 공사 유형을 지정합니다. 지정하면 해당 유형 보드에만 표시되며,<br>'
+          + '현재 공정이 다른 유형 전용 단계면 <b>\'대기중\'</b>으로 재배치됩니다(이력 기록).</p>',
+        buttons: [
+          { label: '취소', class: 'btn-outline', onClick: function (close) { close(); } },
+          { label: '도장', class: 'btn-primary', onClick: function (close, btn) { doSet('painting', '도장', close, btn); } },
+          { label: '인테리어', class: 'btn-primary', onClick: function (close, btn) { doSet('interior', '인테리어', close, btn); } },
+        ],
+      });
     });
 
     function escapeHtml(s) {

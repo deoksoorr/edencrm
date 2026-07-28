@@ -1030,6 +1030,7 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .gc-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .gc-progress{display:flex;align-items:center;gap:8px;margin:8px 0}
 .gc-progress .progress{flex:1}
+.gc-pct{font-size:12px;font-variant-numeric:tabular-nums}
 .gc-ggroup summary{cursor:pointer;font-weight:600;padding:6px 0}
 .gc-row{display:flex;align-items:center;gap:8px;padding:3px 0}
 .gc-name{flex:0 0 40%;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
