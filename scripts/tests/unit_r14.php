@@ -93,6 +93,19 @@ try {
     $p2 = Db::one("SELECT * FROM projects WHERE id=:id", [':id' => $lg]);
     t_int('레거시 fallback = expected_amount', 5000000, AccountingService::projectPaySummary($p2)['expected']);
 
+    // ── Task 6: salesPaidByUser — 담당영업 귀속 매출금액(입금) ──
+    $su = Db::insert('users', ['login_id' => 'r14sales', 'password_hash' => 'x', 'name' => 'R14영업',
+        'role_id' => 4, 'role_key' => 'staff', 'email' => 'r14s@t.t', 'status' => 'active']);
+    // 예외 직접 입금 1,100,000 → p.sales_user_id 귀속
+    $sp = Db::insert('projects', ['project_no' => 'R14-S1', 'name' => 'R14영업귀속', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 2000000,
+        'sales_user_id' => $su, 'status' => 'in_progress']);
+    Db::insert('payments', ['project_id' => $sp, 'pay_type' => 'down', 'amount' => 1100000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    // 환불 100,000 차감
+    Db::insert('payments', ['project_id' => $sp, 'pay_type' => 'refund', 'kind' => 'refund', 'amount' => 100000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    $map = AccountingService::salesPaidByUser(date('Y-m-01'), date('Y-m-t'));
+    t_int('담당영업 귀속 순입금(예외·환불 차감)', 1000000, $map[$su] ?? 0);
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

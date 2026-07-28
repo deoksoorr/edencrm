@@ -505,6 +505,36 @@ class AccountingService
     }
 
     /**
+     * R14: 담당 영업 귀속 매출금액(입금·현금 VAT 포함, 순입금 = 입금 − 환불, 취소 제외).
+     * 계약 입금 → 계약 담당(contracts.sales_user_id), 예외 직접 입금 → 프로젝트 담당(projects.sales_user_id).
+     * @return array<int,int> user_id => 순입금
+     */
+    public static function salesPaidByUser(string $from, string $to): array
+    {
+        $rows = Db::all(
+            "SELECT uid, COALESCE(SUM(amt), 0) AS s FROM (
+                SELECT c.sales_user_id AS uid,
+                       CASE WHEN pm.kind = 'refund' THEN -pm.amount ELSE pm.amount END AS amt
+                  FROM payments pm
+                  JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
+                 WHERE pm.status = 'paid' AND pm.paid_date BETWEEN :f1 AND :t1
+                   AND c.sales_user_id IS NOT NULL
+                UNION ALL
+                SELECT p.sales_user_id AS uid,
+                       CASE WHEN pm.kind = 'refund' THEN -pm.amount ELSE pm.amount END AS amt
+                  FROM payments pm
+                  JOIN projects p ON p.id = pm.project_id AND p.deleted_at IS NULL
+                 WHERE pm.status = 'paid' AND pm.paid_date BETWEEN :f2 AND :t2
+                   AND p.sales_user_id IS NOT NULL
+             ) t GROUP BY uid",
+            [':f1' => $from, ':t1' => $to, ':f2' => $from, ':t2' => $to]
+        );
+        $map = [];
+        foreach ($rows as $r) { $map[(int) $r['uid']] = (int) $r['s']; }
+        return $map;
+    }
+
+    /**
      * 직원별 참여 프로젝트 수 = 기여율>0 배정 기준(취소·파기·삭제 제외) — T9 대시보드 직원 성과.
      * @return array<int, int> uid ⇒ 참여 프로젝트 수
      */

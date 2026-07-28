@@ -204,6 +204,8 @@ class BonusController
             $byUser     = $byUser ?? AccountingService::employeeConfirmedByUser($from, $to);
             $paidByUser = $paidMap ?? AccountingService::employeePaidByUser($from, $to);
             $contractedByUser = AccountingService::contractedAmountByUser($from, $to);
+            $salesPaidByUser  = AccountingService::salesPaidByUser($from, $to);
+            $projCntByUser    = AccountingService::employeeProjectCountByUser();
             $bonusByUser = [];
             foreach (Db::all(
                 "SELECT user_id, COALESCE(SUM(confirmed_bonus),0) AS s FROM site_bonuses
@@ -225,6 +227,8 @@ class BonusController
                     'revenue'    => (int) ($byUser[$sid]['revenue'] ?? 0),
                     'profit'     => (int) ($byUser[$sid]['contrib'] ?? 0),
                     'bonus_paid' => (int) ($bonusByUser[$sid] ?? 0),
+                    'sales_paid' => (int) ($salesPaidByUser[$sid] ?? 0),
+                    'project_cnt' => (int) ($projCntByUser[$sid] ?? 0),
                 ];
             }
         }
