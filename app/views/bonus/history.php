@@ -11,7 +11,7 @@ $statusLabels = ['unpaid' => '미지급', 'partial' => '부분지급', 'paid' =>
 $diffFields   = [
     'user_id' => '직원', 'project_id' => '프로젝트', 'year' => '연도', 'half' => '반기',
     'base_amount' => '산정 대상 금액', 'calc_basis' => '산정 기준',
-    'contrib_revenue' => '적용 매출', 'contrib_profit' => '적용 순이익', 'calc_amount' => '산정액',
+    'contrib_revenue' => '기여도 반영 매출', 'contrib_profit' => '기여도 반영 순이익', 'calc_amount' => '산정액',
     'confirmed_bonus' => '확정 보너스', 'paid_amount' => '지급액(구)', 'pay_date' => '지급일', 'pay_status' => '상태',
     'paid_by' => '지급담당자', 'memo' => '메모',
 ];

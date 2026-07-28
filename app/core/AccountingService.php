@@ -114,7 +114,7 @@ class AccountingService
 
     /** 프로젝트 1건의 확정 매출(공급가액·VAT 제외, R12) = 순입금 × 공급가 비율.
      *  계약 연결은 계약 supply/총액 비율, 예외 프로젝트는 부가세율 환산(vatSupplyRatio).
-     *  프로젝트 상세 손익·보너스 산정 대상 매출이 공유한다. */
+     *  프로젝트 상세 손익·보너스 총매출이 공유한다. */
     public static function projectConfirmedRevenue(array $p): int
     {
         if (!empty($p['contract_id'])) {

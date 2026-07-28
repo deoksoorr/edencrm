@@ -149,7 +149,7 @@ foreach ($users as $u) {
         <?php endforeach; ?></tbody></table></div>
     </div>
     <div data-hy-panel="construction" hidden>
-      <div class="muted fs-12" style="padding:0 12px">배정·기여도 기준 — 순이익=기여도 반영 순이익 누적 · 보너스=지급완료 확정(취소 제외)</div>
+      <div class="muted fs-12" style="padding:0 12px">배정·기여도 기준 — 순이익=기여도 반영 순이익 누적 · 보너스=지급완료 확정(취소 제외) · 담당 프로젝트 수=현재 배정 기준(반기 무관)</div>
       <div class="table-wrap"><table class="data compact">
         <thead><tr><th>직원</th><th class="num">담당 프로젝트 수</th><th class="num">기여도 반영 순이익 누적</th><th class="num">보너스 지급</th></tr></thead>
         <tbody><?php foreach ($staffRows as $s): ?>
@@ -187,7 +187,7 @@ foreach ($users as $u) {
     <div class="table-wrap">
       <table class="data compact">
         <thead>
-          <tr><th>직원</th><th>프로젝트</th><th class="num">산정 대상 매출</th><th class="num">적용 매출</th><th class="num">적용 순이익</th><th class="num">산정액</th><th class="num">확정 보너스</th><th>지급일</th><th>지급 담당</th><th>상태</th><th>메모</th></tr>
+          <tr><th>직원</th><th>프로젝트</th><th class="num">총매출</th><th class="num">기여도 반영 매출</th><th class="num">기여도 반영 순이익</th><th class="num">산정액</th><th class="num">확정 보너스</th><th>지급일</th><th>지급 담당</th><th>상태</th><th>메모</th></tr>
         </thead>
         <tbody>
           <?php foreach ($bonuses as $b): $cancelled = $b['pay_status'] === 'cancelled'; ?>

@@ -66,10 +66,10 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
       <thead>
         <tr>
           <th>직원</th><th>프로젝트</th><th>반기</th>
-          <th class="num" title="확정 매출(공급가액·VAT 제외)">산정 대상 매출</th>
-          <th class="num" title="산정 대상 매출 × 기여율">적용 매출</th>
-          <th class="num" title="(확정 매출 − 지출) × 기여율 — 참고">적용 순이익</th>
-          <th class="num" title="적용 매출 × 보너스율 — 참고 계산값">산정액</th>
+          <th class="num" title="확정 매출(공급가액·VAT 제외)">총매출</th>
+          <th class="num" title="총매출 × 기여율">기여도 반영 매출</th>
+          <th class="num" title="(확정 매출 − 지출) × 기여율 — 참고">기여도 반영 순이익</th>
+          <th class="num" title="기여도 반영 매출 × 보너스율 — 참고 계산값">산정액</th>
           <th class="num" title="관리자가 확정한 실제 지급 금액 — 지급완료 시 이 금액만 지급">확정 보너스</th>
           <th>지급일</th><th>상태</th><th>지급담당자</th><th>메모</th>
           <?php if ($canManage): ?><th>관리</th><?php endif; ?>
@@ -192,15 +192,15 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
       '<input type="hidden" name="id" value="' + (b.id || 0) + '">' +
       '<div class="form-grid">' +
       projField + userField +
-      '<div class="field span2 muted fs-12" data-bonus-info>' + (isEdit ? '수정 저장 시 서버가 최신 입금·기여도 기준으로 재계산합니다. (지급처리는 재계산하지 않음)' : '프로젝트를 선택하면 계약 금액·누적 입금·산정 대상 매출·배정 직원이 자동 조회됩니다.') + '</div>' +
+      '<div class="field span2 muted fs-12" data-bonus-info>' + (isEdit ? '수정 저장 시 서버가 최신 입금·기여도 기준으로 재계산합니다. (지급처리는 재계산하지 않음)' : '프로젝트를 선택하면 계약 금액·누적 입금·총매출·배정 직원이 자동 조회됩니다.') + '</div>' +
       '<div class="field"><label class="field-label">연도</label><select name="year" class="select">' + years + '</select></div>' +
       '<div class="field"><label class="field-label">반기</label><select name="half" class="select">' +
         '<option value="1"' + ((b.half || CUR.half) === 1 ? ' selected' : '') + '>상반기</option>' +
         '<option value="2"' + ((b.half || CUR.half) === 2 ? ' selected' : '') + '>하반기</option></select></div>' +
-      '<div class="field"><label class="field-label">산정 대상 매출(원) <span class="muted">(확정 매출·공급가·VAT 제외)</span></label><input type="text" inputmode="numeric" name="base_amount" class="input" data-bonus-base value="' + (b.base_amount || '') + '"></div>' +
-      '<div class="field"><label class="field-label">적용 매출(원) <span class="muted">(매출 × 기여율/100)</span></label><input type="text" inputmode="numeric" name="contrib_revenue" class="input" data-bonus-contrib value="' + (b.contrib_revenue === 0 || b.contrib_revenue ? b.contrib_revenue : '') + '"></div>' +
-      '<div class="field"><label class="field-label">적용 순이익(원) <span class="muted">(참고 · (매출−지출)×기여율)</span></label><input type="text" inputmode="numeric" name="contrib_profit" class="input input-muted" data-bonus-profit value="' + (b.contrib_profit === 0 || b.contrib_profit ? b.contrib_profit : '') + '" readonly></div>' +
-      '<div class="field"><label class="field-label">보너스율(%) <span class="muted">(산정액 = 적용 매출 × 율/100)</span></label><input type="text" inputmode="decimal" name="bonus_rate" class="input" data-bonus-rate value="' + (b.bonus_rate === 0 || b.bonus_rate ? b.bonus_rate : '') + '" placeholder="예: 5"></div>' +
+      '<div class="field"><label class="field-label">총매출(원) <span class="muted">(확정 매출·공급가·VAT 제외)</span></label><input type="text" inputmode="numeric" name="base_amount" class="input" data-bonus-base value="' + (b.base_amount || '') + '"></div>' +
+      '<div class="field"><label class="field-label">기여도 반영 매출(원) <span class="muted">(매출 × 기여율/100)</span></label><input type="text" inputmode="numeric" name="contrib_revenue" class="input" data-bonus-contrib value="' + (b.contrib_revenue === 0 || b.contrib_revenue ? b.contrib_revenue : '') + '"></div>' +
+      '<div class="field"><label class="field-label">기여도 반영 순이익(원) <span class="muted">(참고 · (매출−지출)×기여율)</span></label><input type="text" inputmode="numeric" name="contrib_profit" class="input input-muted" data-bonus-profit value="' + (b.contrib_profit === 0 || b.contrib_profit ? b.contrib_profit : '') + '" readonly></div>' +
+      '<div class="field"><label class="field-label">보너스율(%) <span class="muted">(산정액 = 기여도 반영 매출 × 율/100)</span></label><input type="text" inputmode="decimal" name="bonus_rate" class="input" data-bonus-rate value="' + (b.bonus_rate === 0 || b.bonus_rate ? b.bonus_rate : '') + '" placeholder="예: 5"></div>' +
       '<div class="field"><label class="field-label">산정액(원) <span class="muted">(참고 계산값)</span></label><input type="text" inputmode="numeric" name="calc_amount" class="input input-muted" data-bonus-calc value="' + (b.calc_amount || '') + '" readonly></div>' +
       '<div class="field"><label class="field-label">확정 보너스(원) <b class="text-danger">*</b> <span class="muted">(실제 지급 금액 — 이 금액만 지급)</span></label><input type="text" inputmode="numeric" name="confirmed_bonus" class="input" data-bonus-confirmed value="' + (b.confirmed_bonus === 0 || b.confirmed_bonus ? b.confirmed_bonus : '') + '" placeholder="기본값=산정액"></div>' +
       '<div class="field span2"><label class="field-label">메모</label><input type="text" name="memo" class="input" maxlength="500" value="' + esc(b.memo) + '"></div>' +
@@ -246,7 +246,7 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
       '</form>';
   }
 
-  /** R10 연동 — 프로젝트 선택 시 서버(bonus.calc)에서 계약금액·누적입금·산정 대상 매출·배정 직원을 조회해
+  /** R10 연동 — 프로젝트 선택 시 서버(bonus.calc)에서 계약금액·누적입금·총매출·배정 직원을 조회해
    *  대상 직원 목록을 배정 직원으로 제한하고 산정 필드를 채운다. 저장 시 서버가 동일 산식으로 재계산. */
   function won(n) { return Number(n || 0).toLocaleString(); }
   function setLinked(form, linked) {
@@ -285,7 +285,7 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
     if (a) {
       contribEl.value = a.contrib_revenue;
       if (profitEl) profitEl.value = a.contrib_profit;
-      if (hint) hint.textContent = '자동 산정: ' + a.name + ' 기여율 ' + a.pct + '% → 적용 매출 ' + won(a.contrib_revenue) + '원 · 적용 순이익 ' + won(a.contrib_profit) + '원. 저장 시 서버가 최신 데이터로 재계산합니다.';
+      if (hint) hint.textContent = '자동 산정: ' + a.name + ' 기여율 ' + a.pct + '% → 기여도 반영 매출 ' + won(a.contrib_revenue) + '원 · 기여도 반영 순이익 ' + won(a.contrib_profit) + '원. 저장 시 서버가 최신 데이터로 재계산합니다.';
     } else if (uid) {
       contribEl.value = '';
       if (profitEl) profitEl.value = '';
@@ -319,10 +319,10 @@ $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 
       var d = await api('bonus.calc', { project_id: pidEl.value }, { method: 'GET' });
       form._calcData = d;
       if (info) {
-        info.innerHTML = '산정 대상 매출(확정 매출·공급가) <b>' + won(d.base) + '원</b> · 누적 입금(현금) ' + won(d.net_paid) + '원 · 순이익 ' + won(d.profit_base) + '원 · ' +
+        info.innerHTML = '총매출(확정 매출·공급가) <b>' + won(d.base) + '원</b> · 누적 입금(현금) ' + won(d.net_paid) + '원 · 순이익 ' + won(d.profit_base) + '원 · ' +
           '배정 ' + (d.assignees || []).length + '명(기여도 합 ' + d.pct_sum + '%)' +
           (d.is_exception ? ' <span class="muted">— 예외 프로젝트(직접 입금 기준)</span>' : (!d.has_contract ? ' <span class="text-danger">— 계약 미연결: 확정 매출 0원</span>' : '')) +
-          (Math.abs(d.pct_sum - 100) > 0.01 ? ' <span class="text-danger">— 기여도 합계가 100%가 아닙니다(적용 매출 합계 ≠ 산정 대상 매출)</span>' : '');
+          (Math.abs(d.pct_sum - 100) > 0.01 ? ' <span class="text-danger">— 기여도 합계가 100%가 아닙니다(기여도 반영 매출 합계 ≠ 총매출)</span>' : '');
       }
       form.querySelector('[data-bonus-base]').value = d.base;
       setLinked(form, true);

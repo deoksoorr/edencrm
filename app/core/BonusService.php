@@ -28,7 +28,7 @@ class BonusService
         }
         $revenue    = AccountingService::projectConfirmedRevenue($proj); // 확정매출(공급가·입금 기준)
         $base       = max(0, $revenue);
-        $profitBase = $revenue - (int) ($proj['actual_cost'] ?? 0);       // 적용 순이익 분자(음수 가능)
+        $profitBase = $revenue - (int) ($proj['actual_cost'] ?? 0);       // 기여도 반영 순이익 분자(음수 가능)
 
         $changed = 0;
         foreach ($rows as $b) {

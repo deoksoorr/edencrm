@@ -347,20 +347,20 @@ class BonusController
     }
 
     // ── 연동 산정 (R12 산식 — 프론트는 미리보기, 저장 시 서버가 동일 산식으로 재계산) ──
-    //   산정 대상 매출 = 프로젝트 확정 매출(공급가액·VAT 제외, 입금 기준) — 계약 입금/예외 프로젝트 직접 입금 공통.
-    //   기여도 적용 매출 = round(산정 대상 매출 × 기여율/100). 배정 기여율 합 100%면 잔여 원 단위를
-    //                    마지막 직원에게 배분해 Σ = 산정 대상 매출 보장.
-    //   적용 순이익 = round((프로젝트 확정 매출 − 프로젝트 확정 지출) × 기여율/100) — 참고·경고용.
-    //   산정액(참고) = round(기여도 적용 매출 × 보너스율/100).
+    //   총매출 = 프로젝트 확정 매출(공급가액·VAT 제외, 입금 기준) — 계약 입금/예외 프로젝트 직접 입금 공통.
+    //   기여도 반영 매출 = round(총매출 × 기여율/100). 배정 기여율 합 100%면 잔여 원 단위를
+    //                    마지막 직원에게 배분해 Σ = 총매출 보장.
+    //   기여도 반영 순이익 = round((프로젝트 확정 매출 − 프로젝트 확정 지출) × 기여율/100) — 참고·경고용.
+    //   산정액(참고) = round(기여도 반영 매출 × 보너스율/100).
     //   확정 보너스 = 관리자 확정 지급 금액(기본값 = 산정액, 수정 가능) — 지급완료 시 이 금액만 지급.
 
-    /** 프로젝트의 산정 대상 매출 = 확정 매출(공급가액·VAT 제외, 입금 기준). 예외 프로젝트 포함(R12). */
+    /** 프로젝트의 총매출 = 확정 매출(공급가액·VAT 제외, 입금 기준). 예외 프로젝트 포함(R12). */
     private static function projectBonusBase(array $p): int
     {
         return max(0, AccountingService::projectConfirmedRevenue($p));
     }
 
-    /** 프로젝트 순이익(확정 매출 공급가 − 확정 지출) — 적용 순이익 배분의 분자(음수 가능). */
+    /** 프로젝트 순이익(확정 매출 공급가 − 확정 지출) — 기여도 반영 순이익 배분의 분자(음수 가능). */
     private static function projectProfitBase(array $p): int
     {
         return AccountingService::projectConfirmedRevenue($p) - (int) ($p['actual_cost'] ?? 0);
@@ -380,8 +380,8 @@ class BonusController
     }
 
     /**
-     * 직원별 기여도 적용 매출 배분표. Σpct 가 100±0.01 이면 마지막 직원 = base − Σ(앞선 배분)으로
-     * 합계를 산정 대상 매출과 정확히 일치시킨다(§4 검증식).
+     * 직원별 기여도 반영 매출 배분표. Σpct 가 100±0.01 이면 마지막 직원 = base − Σ(앞선 배분)으로
+     * 합계를 총매출과 정확히 일치시킨다(§4 검증식).
      * @return array<int,int> user_id => contrib_revenue
      */
     private static function allocateContrib(int $base, array $assignees): array
@@ -408,7 +408,7 @@ class BonusController
 
     /**
      * 연동 산정 정보(JSON, bonus.manage) — 보너스 폼 자동 채움.
-     * 프로젝트 선택 직후 필요한 값 일체: 계약금액·누적입금(=산정 대상 매출)·배정 직원 목록(기여도·배분액 포함).
+     * 프로젝트 선택 직후 필요한 값 일체: 계약금액·누적입금(=총매출)·배정 직원 목록(기여도·배분액 포함).
      */
     public function calcInfo(): void
     {
@@ -450,7 +450,7 @@ class BonusController
         Response::json([
             'contract_amount' => (int) $p['contract_amount'],
             'net_paid'        => $netPaid,     // 누적 확정 입금(현금·VAT 포함) — 참고
-            'base'            => $base,        // 산정 대상 매출 = 확정 매출(공급가·VAT 제외)
+            'base'            => $base,        // 총매출 = 확정 매출(공급가·VAT 제외)
             'profit_base'     => $profitBase,  // 프로젝트 순이익(확정매출−지출)
             'project_cost'    => (int) ($p['actual_cost'] ?? 0),
             'has_contract'    => (int) ($p['contract_id'] ?? 0) > 0,
@@ -518,11 +518,11 @@ class BonusController
         $confirmedBonus = $posted('confirmed_bonus')
             ? $money('confirmed_bonus', 0)
             : (int) ($before['confirmed_bonus'] ?? 0);
-        // 기여도 적용 매출(R9-2) — 미전송 시 기존 값 유지(레거시 행은 NULL 유지)
+        // 기여도 반영 매출(R9-2) — 미전송 시 기존 값 유지(레거시 행은 NULL 유지)
         $contribRev = $posted('contrib_revenue')
             ? $money('contrib_revenue', 0)
             : ($before !== null && $before['contrib_revenue'] !== null ? (int) $before['contrib_revenue'] : null);
-        // 적용 순이익(R12) — 미전송 시 기존 값 유지, 재계산 시 서버가 산출
+        // 기여도 반영 순이익(R12) — 미전송 시 기존 값 유지, 재계산 시 서버가 산출
         $contribProfit = $before !== null && $before['contrib_profit'] !== null ? (int) $before['contrib_profit'] : null;
         // 보너스율(R10) — 0~100, 소수 2자리
         $bonusRate = $before !== null && $before['bonus_rate'] !== null ? (float) $before['bonus_rate'] : null;

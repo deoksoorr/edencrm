@@ -72,7 +72,7 @@
         total += addVal;
         total = Math.round(total * 100) / 100;
         if (total > 100.01) {
-          alert('기여도 합계가 ' + total + '%로 100%를 초과합니다. 저장할 수 없습니다.\n(기여도 적용 매출이 산정 대상 매출을 초과하게 됩니다)');
+          alert('기여도 합계가 ' + total + '%로 100%를 초과합니다. 저장할 수 없습니다.\n(기여도 반영 매출이 총매출을 초과하게 됩니다)');
           return false;
         }
         if (Math.abs(total - 100) > 0.01) {

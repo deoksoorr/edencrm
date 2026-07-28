@@ -25,7 +25,6 @@ class Nav
                 Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', null, 'book'] : null,
             ])),
             '분석' => [
-                ['performance.index', '직원 성과', null, 'trending'],
                 ['halfyear.index', '반기 보너스 지급 현황', null, 'bar'],
                 ['reports.index', '리포트', 'report.view', 'bar'],
             ],
