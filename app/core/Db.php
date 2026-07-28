@@ -11,7 +11,7 @@ class Db
     private static ?PDO $pdo = null;
 
     /**
-     * database/schema.sql 의 전체 테이블 목록(39개) — prefix rewrite 대상.
+     * database/schema.sql 의 전체 테이블 목록(46개) — prefix rewrite 대상.
      * 테이블을 신설하면 schema.sql 과 함께 반드시 여기에도 추가할 것.
      * (충돌 전수검사 2026-07-23: 컬럼명·별칭·SQL 내 문자열 리터럴·바인딩 플레이스홀더와
      *  겹치는 테이블명 없음 — r6-worklog ## [dbprefix] 참고)
@@ -19,7 +19,8 @@ class Db
     private const TABLES = [
         'attendance_marks', 'audit_logs', 'company_targets', 'contract_status_history',
         'contract_terminations', 'contracts', 'costs', 'customer_activities',
-        'customer_contacts', 'customers', 'departments', 'goal_history', 'goals',
+        'customer_contacts', 'customers', 'departments', 'employee_permissions',
+        'goal_history', 'goals',
         'holidays', 'leads',
         'login_attempts', 'notifications', 'payments', 'permissions', 'pipeline_stages',
         'process_stages', 'project_assignments', 'project_files', 'project_memos',

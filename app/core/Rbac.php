@@ -1,7 +1,16 @@
 <?php
 /**
  * 역할 기반 접근 제어. super_admin 은 항상 허용.
- * 권한은 role_permissions + user_permissions(개별 grant/deny) 를 합성한다.
+ *
+ * R16 이후 판정 원장은 employee_permissions(직원별 리소스 × 읽기·쓰기·삭제) 하나다.
+ * 호출부(라우터 perm 옵션·뷰 can() 헬퍼·컨트롤러)는 그대로 두고 판정 소스만 교체했다.
+ *  - super_admin            → 항상 true
+ *  - ADMIN_ONLY perm        → super_admin 외 항상 false (정산·분석·관리·휴지통)
+ *  - 레지스트리 미등록 키    → false (기본 거부. perm_key 오타도 거부로 수렴)
+ *  - 그 외                  → Perm::can(uid, resource, action)
+ *
+ * role_permissions/user_permissions 는 카탈로그·마이그레이션 소스로만 남기고
+ * 판정에는 더 이상 사용하지 않는다(역할이 아니라 직원별 권한이 진실).
  */
 class Rbac
 {
@@ -14,13 +23,21 @@ class Rbac
         if (!$user) {
             return false;
         }
-        if ($user['role'] === 'super_admin') {
+        if (Perm::isSuperAdmin($user)) {
             return true;
         }
-        return in_array($perm, self::perms(), true);
+        if (Perm::isAdminOnly($perm)) {
+            return false;                        // 최고운영자 전용 — 부여 수단 없음
+        }
+        $reg = Perm::registry();
+        if (!isset($reg[$perm])) {
+            return false;                        // 기본 거부
+        }
+        [$resource, $action] = $reg[$perm];
+        return Perm::can((int) $user['id'], $resource, $action);
     }
 
-    /** 현재 사용자의 유효 권한 집합. */
+    /** 현재 사용자의 유효 권한 집합(perm_key 목록). */
     public static function perms(): array
     {
         if (self::$permCache !== null) {
@@ -30,36 +47,16 @@ class Rbac
         if (!$user) {
             return self::$permCache = [];
         }
-        if ($user['role'] === 'super_admin') {
-            // 전체 권한
+        if (Perm::isSuperAdmin($user)) {
             return self::$permCache = Db::run("SELECT perm_key FROM permissions")->fetchAll(PDO::FETCH_COLUMN);
         }
-        // 역할 권한
-        $rolePerms = Db::run(
-            "SELECT p.perm_key FROM role_permissions rp
-             JOIN permissions p ON p.id = rp.permission_id
-             WHERE rp.role_id = :rid",
-            [':rid' => $user['role_id']]
-        )->fetchAll(PDO::FETCH_COLUMN);
-
-        // 사용자별 추가/제외
-        $grants = [];
-        $denies = [];
-        $rows = Db::all(
-            "SELECT p.perm_key, up.is_grant FROM user_permissions up
-             JOIN permissions p ON p.id = up.permission_id
-             WHERE up.user_id = :uid",
-            [':uid' => $user['id']]
-        );
-        foreach ($rows as $r) {
-            if ((int) $r['is_grant'] === 1) {
-                $grants[] = $r['perm_key'];
-            } else {
-                $denies[] = $r['perm_key'];
+        $eff = [];
+        foreach (Perm::registry() as $permKey => [$resource, $action]) {
+            if (Perm::can((int) $user['id'], $resource, $action)) {
+                $eff[] = $permKey;
             }
         }
-        $eff = array_diff(array_unique(array_merge($rolePerms, $grants)), $denies);
-        return self::$permCache = array_values($eff);
+        return self::$permCache = $eff;
     }
 
     /** 권한 없으면 403 (페이지 또는 JSON). */
@@ -87,5 +84,6 @@ class Rbac
     public static function reset(): void
     {
         self::$permCache = null;
+        Perm::reset();
     }
 }
