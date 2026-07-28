@@ -24,7 +24,7 @@
     const tr = document.createElement('tr');
     tr.className = 'item-row';
     tr.innerHTML =
-      '<td><input type="text" class="input" name="items[' + idx + '][name]" value="' + escapeAttr(data.name || '') + '"></td>' +
+      '<td><input type="text" class="input" name="items[' + idx + '][name]" maxlength="100" value="' + escapeAttr(data.name || '') + '"></td>' +
       '<td><input type="number" step="0.01" class="input num-input f-area" name="items[' + idx + '][area]" value="' + escapeAttr(data.area ?? '') + '"></td>' +
       '<td><input type="number" step="0.01" class="input num-input f-qty" name="items[' + idx + '][qty]" value="' + escapeAttr(data.qty ?? 1) + '"></td>' +
       '<td><input type="text" inputmode="decimal" class="input num-input money-input f-price" name="items[' + idx + '][unit_price]" value="' + escapeAttr(data.unit_price ?? 0) + '"></td>' +

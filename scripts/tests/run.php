@@ -1,6 +1,6 @@
 <?php
 /** 전체 회계 테스트 스위트 실행 + A~G 대사표. */
-$suites = ['unit_money', 'unit_profit', 'unit_p2_service', 'unit_settings', 'unit_feature_flag', 'unit_r3_contractflow', 'unit_r3_acctverify', 'db_schema', 'db_aggregations', 'unit_r3_schedstaff', 'unit_periodrange', 'unit_r4_bizreg', 'unit_r4_attendance', 'unit_r4_contracts', 'unit_r4_pipeline', 'unit_r5_quotecalc', 'unit_r6_attendance_marks', 'unit_r6_perf_bulk', 'unit_r6_notif_dedup', 'unit_r11_settlement', 'unit_r13', 'unit_r14'];
+$suites = ['unit_money', 'unit_profit', 'unit_p2_service', 'unit_settings', 'unit_feature_flag', 'unit_r3_contractflow', 'unit_r3_acctverify', 'db_schema', 'db_aggregations', 'unit_r3_schedstaff', 'unit_periodrange', 'unit_r4_bizreg', 'unit_r4_attendance', 'unit_r4_contracts', 'unit_r4_pipeline', 'unit_r5_quotecalc', 'unit_r6_attendance_marks', 'unit_r6_perf_bulk', 'unit_r6_notif_dedup', 'unit_r11_settlement', 'unit_r13', 'unit_r14', 'unit_r15'];
 $fail = 0;
 foreach ($suites as $s) {
     echo "\n=== $s ===\n";

@@ -221,7 +221,7 @@ class QuotesController
         $customerId = Util::postInt('customer_id', 0);
         $leadId = Util::postInt('lead_id', 0) ?: null;
         $status = Util::postStr('status', 'draft');
-        $validUntil = Util::nullIfEmpty(Util::postStr('valid_until'));
+        $validUntil = Util::dateOrNull(Util::postStr('valid_until'));
         $memo = Util::postStr('memo');
         $discount = (float) str_replace(',', '', Util::postStr('discount', '0'));
         $versionNote = Util::postStr('version_note');
@@ -240,7 +240,8 @@ class QuotesController
             $status = 'draft';
         }
 
-        $items = $this->parseItems($_POST['items'] ?? []);
+        // items 가 배열이 아닌 값(스칼라 문자열 등)으로 전송돼도 TypeError(500) 대신 빈 목록으로 처리
+        $items = $this->parseItems(is_array($_POST['items'] ?? null) ? $_POST['items'] : []);
         if (!$items) {
             Response::redirect('quotes.form', $id ? ['id' => $id] : [], '견적 항목을 최소 1개 이상 입력하세요.', 'error');
         }
@@ -250,67 +251,72 @@ class QuotesController
 
         $before = $id ? Db::one("SELECT * FROM quotes WHERE id=:id", [':id' => $id]) : null;
 
-        $newId = Db::transaction(function () use ($id, $customerId, $leadId, $status, $validUntil, $memo, $items, $subtotal, $vat, $discount, $total, $versionNote) {
-            if ($id > 0) {
-                $quote = Db::one("SELECT * FROM quotes WHERE id=:id AND deleted_at IS NULL FOR UPDATE", [':id' => $id]);
-                if (!$quote) {
-                    throw new RuntimeException('견적을 찾을 수 없습니다.');
+        try {
+            $newId = Db::transaction(function () use ($id, $customerId, $leadId, $status, $validUntil, $memo, $items, $subtotal, $vat, $discount, $total, $versionNote) {
+                if ($id > 0) {
+                    $quote = Db::one("SELECT * FROM quotes WHERE id=:id AND deleted_at IS NULL FOR UPDATE", [':id' => $id]);
+                    if (!$quote) {
+                        throw new RuntimeException('견적을 찾을 수 없습니다.');
+                    }
+                    $nextNo = (int) Db::val("SELECT COALESCE(MAX(version_no),0) FROM quote_versions WHERE quote_id=:qid FOR UPDATE", [':qid' => $id]) + 1;
+                    $quoteId = $id;
+                } else {
+                    $quoteNo = $this->nextQuoteNo();
+                    $quoteId = Db::insert('quotes', [
+                        'quote_no'    => $quoteNo,
+                        'lead_id'     => $leadId,
+                        'customer_id' => $customerId,
+                        'status'      => $status,
+                        'valid_until' => $validUntil,
+                        'memo'        => $memo,
+                    ]);
+                    $nextNo = 1;
                 }
-                $nextNo = (int) Db::val("SELECT COALESCE(MAX(version_no),0) FROM quote_versions WHERE quote_id=:qid FOR UPDATE", [':qid' => $id]) + 1;
-                $quoteId = $id;
-            } else {
-                $quoteNo = $this->nextQuoteNo();
-                $quoteId = Db::insert('quotes', [
-                    'quote_no'    => $quoteNo,
-                    'lead_id'     => $leadId,
-                    'customer_id' => $customerId,
-                    'status'      => $status,
-                    'valid_until' => $validUntil,
-                    'memo'        => $memo,
+
+                $versionId = Db::insert('quote_versions', [
+                    'quote_id'     => $quoteId,
+                    'version_no'   => $nextNo,
+                    'subtotal'     => $subtotal,
+                    'vat'          => $vat,
+                    'discount'     => $discount,
+                    'total_amount' => $total,
+                    'note'         => $versionNote !== '' ? $versionNote : null,
+                    'created_by'   => Auth::id(),
                 ]);
-                $nextNo = 1;
-            }
 
-            $versionId = Db::insert('quote_versions', [
-                'quote_id'     => $quoteId,
-                'version_no'   => $nextNo,
-                'subtotal'     => $subtotal,
-                'vat'          => $vat,
-                'discount'     => $discount,
-                'total_amount' => $total,
-                'note'         => $versionNote !== '' ? $versionNote : null,
-                'created_by'   => Auth::id(),
-            ]);
+                $sort = 1;
+                foreach ($items as $it) {
+                    Db::insert('quote_items', [
+                        'quote_version_id'  => $versionId,
+                        'name'              => $it['name'],
+                        'area'              => $it['area'],
+                        'qty'               => $it['qty'],
+                        'unit_price'        => $it['unit_price'],
+                        'material_cost'     => $it['material_cost'],
+                        'labor_cost'        => $it['labor_cost'],
+                        'equipment_cost'    => $it['equipment_cost'],
+                        'outsourcing_cost'  => $it['outsourcing_cost'],
+                        'etc_cost'          => $it['etc_cost'],
+                        'amount'            => $it['amount'],
+                        'sort_order'        => $sort++,
+                    ]);
+                }
 
-            $sort = 1;
-            foreach ($items as $it) {
-                Db::insert('quote_items', [
-                    'quote_version_id'  => $versionId,
-                    'name'              => $it['name'],
-                    'area'              => $it['area'],
-                    'qty'               => $it['qty'],
-                    'unit_price'        => $it['unit_price'],
-                    'material_cost'     => $it['material_cost'],
-                    'labor_cost'        => $it['labor_cost'],
-                    'equipment_cost'    => $it['equipment_cost'],
-                    'outsourcing_cost'  => $it['outsourcing_cost'],
-                    'etc_cost'          => $it['etc_cost'],
-                    'amount'            => $it['amount'],
-                    'sort_order'        => $sort++,
-                ]);
-            }
+                Db::update('quotes', [
+                    'customer_id'         => $customerId,
+                    'lead_id'             => $leadId,
+                    'status'              => $status,
+                    'valid_until'         => $validUntil,
+                    'memo'                => $memo,
+                    'current_version_id'  => $versionId,
+                ], 'id = :id', [':id' => $quoteId]);
 
-            Db::update('quotes', [
-                'customer_id'         => $customerId,
-                'lead_id'             => $leadId,
-                'status'              => $status,
-                'valid_until'         => $validUntil,
-                'memo'                => $memo,
-                'current_version_id'  => $versionId,
-            ], 'id = :id', [':id' => $quoteId]);
-
-            return $quoteId;
-        });
+                return $quoteId;
+            });
+        } catch (\Throwable $e) {
+            error_log('[QuotesController::save] ' . $e->getMessage());
+            Response::redirect('quotes.form', $id ? ['id' => $id] : [], '저장에 실패했습니다. 입력값을 확인해주세요.', 'error');
+        }
 
         $after = Db::one("SELECT * FROM quotes WHERE id=:id", [':id' => $newId]);
         Audit::log($id ? 'quote_update' : 'quote_create', 'quotes', $newId, $before, $after);
@@ -414,21 +420,24 @@ class QuotesController
             if (!is_array($row)) {
                 continue;
             }
-            $name = trim((string) ($row['name'] ?? ''));
+            $name = mb_substr(trim((string) ($row['name'] ?? '')), 0, 100);
             if ($name === '') {
                 continue;
             }
             $num = fn($k, $def = 0) => (float) str_replace(',', '', (string) ($row[$k] ?? $def));
+            // 금액 클램프(unit_price/각 비용/amount 는 DECIMAL(14,0) 컬럼 — 음수·비정상 초과값이
+            // DECIMAL 오버플로(SQL 오류→500)로 이어지는 것 방지). qty/area 는 DECIMAL(10,2)라 범위가 달라 별도 클램프하지 않음(기존 동작 유지).
+            $clampAmt = fn($v) => min(999999999999, max(0, $v));
             $qty = $num('qty', 1) ?: 1;
-            $unitPrice = $num('unit_price', 0);
+            $unitPrice = $clampAmt($num('unit_price', 0));
             $area = (isset($row['area']) && $row['area'] !== '') ? $num('area', 0) : null;
             // 기본금액 = 단가(원/㎡) × 면적 × 수량. 면적 미입력(개수 기준)이면 단가 × 수량.
             $areaFactor = ($area !== null && $area > 0) ? $area : 1;
-            $material    = $num('material_cost', 0);
-            $labor       = $num('labor_cost', 0);
-            $equipment   = $num('equipment_cost', 0);
-            $outsourcing = $num('outsourcing_cost', 0);
-            $etc         = $num('etc_cost', 0);
+            $material    = $clampAmt($num('material_cost', 0));
+            $labor       = $clampAmt($num('labor_cost', 0));
+            $equipment   = $clampAmt($num('equipment_cost', 0));
+            $outsourcing = $clampAmt($num('outsourcing_cost', 0));
+            $etc         = $clampAmt($num('etc_cost', 0));
             $out[] = [
                 'name'             => $name,
                 'area'             => $area,
@@ -440,7 +449,7 @@ class QuotesController
                 'outsourcing_cost' => $outsourcing,
                 'etc_cost'         => $etc,
                 // R5 확정 산식: 금액 = 기본금액 + 재료비+인건비+장비비+외주비+기타비 (서버가 최종 권위 — 클라이언트 값 신뢰 저장 금지)
-                'amount'           => round($areaFactor * $qty * $unitPrice + $material + $labor + $equipment + $outsourcing + $etc, 0),
+                'amount'           => $clampAmt(round($areaFactor * $qty * $unitPrice + $material + $labor + $equipment + $outsourcing + $etc, 0)),
             ];
         }
         return $out;

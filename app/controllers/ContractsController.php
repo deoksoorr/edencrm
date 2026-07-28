@@ -394,7 +394,7 @@ class ContractsController
         $id = Util::postInt('id', 0);
         $customerId = Util::postInt('customer_id', 0);
         $quoteId = Util::postInt('quote_id', 0) ?: null;
-        $contractDate = Util::nullIfEmpty(Util::postStr('contract_date'));
+        $contractDate = Util::dateOrNull(Util::postStr('contract_date'));
         $contractAmount = (float) str_replace(',', '', Util::postStr('contract_amount', '0'));
         $downPayment = (int) round((float) str_replace(',', '', Util::postStr('down_payment', '0')));
         $middlePayment = (int) round((float) str_replace(',', '', Util::postStr('middle_payment', '0')));
@@ -402,8 +402,8 @@ class ContractsController
         $downPct = (float) str_replace(',', '', Util::postStr('down_pct', '0'));
         $middlePct = (float) str_replace(',', '', Util::postStr('middle_pct', '0'));
         $balancePct = (float) str_replace(',', '', Util::postStr('balance_pct', '0'));
-        $startDate = Util::nullIfEmpty(Util::postStr('start_date'));
-        $endDate = Util::nullIfEmpty(Util::postStr('end_date'));
+        $startDate = Util::dateOrNull(Util::postStr('start_date'));
+        $endDate = Util::dateOrNull(Util::postStr('end_date'));
         $warranty = Util::postStr('warranty_period');
         $status = Util::postStr('status', 'draft');
         $specialTerms = Util::postStr('special_terms');
@@ -414,9 +414,9 @@ class ContractsController
         $constructionType = Util::postStr('construction_type'); // R8-A: 공사유형(구분) 도장/인테리어
         $memo = Util::postStr('memo');
         $adjustReason = Util::postStr('adjust_reason');
-        $downDue = Util::nullIfEmpty(Util::postStr('down_due_date'));
-        $middleDue = Util::nullIfEmpty(Util::postStr('middle_due_date'));
-        $balanceDue = Util::nullIfEmpty(Util::postStr('balance_due_date'));
+        $downDue = Util::dateOrNull(Util::postStr('down_due_date'));
+        $middleDue = Util::dateOrNull(Util::postStr('middle_due_date'));
+        $balanceDue = Util::dateOrNull(Util::postStr('balance_due_date'));
 
         $backTo = function (string $msg) use ($id): void {
             Response::redirect('contracts.form', $id ? ['id' => $id] : [], $msg, 'error');

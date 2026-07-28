@@ -614,7 +614,7 @@ class ProjectsController
         if ($isException && !$convertToNormal) {
             // 예외 프로젝트: 기존 고객 연결 또는 고객명 직접 입력 중 하나는 필수
             if ($customerId <= 0 && $customerNameInput === '') {
-                Response::error('고객을 선택하거나 고객명을 입력하세요.', 422);
+                Response::redirect('projects.form', $id ? ['id' => $id] : [], '고객을 선택하거나 고객명을 입력하세요.', 'error');
             }
         } elseif ($customerId <= 0) {
             // 일반 프로젝트(예외→일반 전환 포함): 기존 고객 연결 필수
@@ -630,7 +630,7 @@ class ProjectsController
                 [':cid' => $customerId]
             );
             if (!$customerName) {
-                Response::error('선택한 고객을 찾을 수 없습니다.', 422);
+                Response::redirect('projects.form', $id ? ['id' => $id] : [], '선택한 고객을 찾을 수 없습니다.', 'error');
             }
         }
         $snapshot = $customerId > 0
@@ -654,22 +654,24 @@ class ProjectsController
         $constructionType = array_key_exists($constructionType, Stages::constructionTypes()) ? $constructionType : null;
 
         $data = [
-            'name'               => $name,
+            'name'               => mb_substr($name, 0, 150),
             'customer_id'        => $customerId > 0 ? $customerId : null, // 예외 프로젝트는 미연결(NULL) 허용
             'is_exception'       => ($isException && !$convertToNormal) ? 1 : 0,
             'customer_name_snapshot' => $snapshot,
-            'site_address'       => Util::nullIfEmpty(Util::postStr('site_address')),
-            'work_type'          => Util::nullIfEmpty(Util::postStr('work_type')),
+            'site_address'       => Util::nullIfEmpty(mb_substr(Util::postStr('site_address'), 0, 255)),
+            'work_type'          => Util::nullIfEmpty(mb_substr(Util::postStr('work_type'), 0, 50)),
             'construction_type'  => $constructionType, // R8-A: 도장/인테리어(미지정 NULL 은 양쪽 보드 노출)
-            'contract_amount'    => (int) round((float) Util::postFloat('contract_amount', 0)),
-            'estimated_cost'     => (float) Util::postFloat('estimated_cost', 0),
+            // 금액 클램프(음수·비정상 초과값이 DECIMAL 오버플로/오입력으로 이어지는 것 방지)
+            'contract_amount'    => min(999999999999, max(0, (int) round((float) Util::postFloat('contract_amount', 0)))),
+            'estimated_cost'     => min(999999999999, max(0, (int) round((float) Util::postFloat('estimated_cost', 0)))),
             // process_stage_id 직접 세팅 금지(R3 커널) — 공정 이동은 공정 보드/ProcessService 로만
             'status'             => $status,
-            'contract_date'      => Util::nullIfEmpty(Util::postStr('contract_date')),
-            'start_date'         => Util::nullIfEmpty(Util::postStr('start_date')),
-            'end_date'           => Util::nullIfEmpty(Util::postStr('end_date')),
-            'actual_start_date'  => Util::nullIfEmpty(Util::postStr('actual_start_date')),
-            'actual_end_date'    => Util::nullIfEmpty(Util::postStr('actual_end_date')),
+            // 날짜: 단일 출처 Util::dateOrNull — 잘못된 입력(예: 'abc')이 DATE 컬럼 SQL 오류(500)로 번지는 것 방지
+            'contract_date'      => Util::dateOrNull(Util::postStr('contract_date')),
+            'start_date'         => Util::dateOrNull(Util::postStr('start_date')),
+            'end_date'           => Util::dateOrNull(Util::postStr('end_date')),
+            'actual_start_date'  => Util::dateOrNull(Util::postStr('actual_start_date')),
+            'actual_end_date'    => Util::dateOrNull(Util::postStr('actual_end_date')),
             'sales_user_id'      => $salesUserId > 0 ? $salesUserId : null,
             'site_manager_id'    => $siteManagerId > 0 ? $siteManagerId : null,
             'progress'           => $progress,
@@ -681,68 +683,74 @@ class ProjectsController
         $data['supply_amount'] = $split['supply'];
         $data['vat_amount']    = $split['vat'];
 
-        if ($id) {
-            // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
-            if ($constructionType === null) {
-                $data['construction_type'] = $before['construction_type'];
+        // 저장 write 구간(공정 초기화·감사로그 포함) — 예기치 못한 예외로 500 대신 폼 플래시 복귀
+        try {
+            if ($id) {
+                // R8-A: 공사유형 미전송·무효면 기존 값 유지(레거시 미지정 프로젝트의 다른 필드 수정 허용)
+                if ($constructionType === null) {
+                    $data['construction_type'] = $before['construction_type'];
+                }
+                $from = (string) $before['status'];
+                if (!in_array($from, self::FORM_STATUSES, true)) {
+                    // 종결·전환 전용 상태(완료/취소/파기/정산 등)는 폼에서 변경 불가 — 상태 전환 플로우로만
+                    $data['status'] = $status = $from;
+                } elseif ($from !== $status && !StatusService::projectTransitionAllowed($from, $status)) {
+                    // 허용되지 않는 전환은 무시(기존 상태 유지)
+                    $data['status'] = $status = $from;
+                }
+                // 담당 영업 잠금(R7 T2 확장): 관리자(super_admin) 외 변경 불가 — 성과·수주 귀속
+                // (projects.sales_user_id) 조작 경로 차단. 계약 화면(contracts.save)과 동일 기준·감사로그.
+                $beforeSales = $before['sales_user_id'] !== null ? (int) $before['sales_user_id'] : null;
+                if (!Rbac::isRole('super_admin')) {
+                    $data['sales_user_id'] = $beforeSales;
+                } elseif ($beforeSales !== $data['sales_user_id']) {
+                    Audit::log('project_sales_user_change', 'project', $id,
+                        ['sales_user_id' => $beforeSales], ['sales_user_id' => $data['sales_user_id']]);
+                }
+                Db::update('projects', $data, 'id = :id', [':id' => $id]);
+                if ($from !== $status) {
+                    StatusService::logProjectStatus($id, $from, $status, '프로젝트 수정 화면에서 변경');
+                }
+                Audit::log('project_update', 'project', $id, $before, $data);
+                // 예외→일반 전환: 별도 감사 로그(전환 전/후 고객 연결 상태 보존)
+                if ($convertToNormal) {
+                    Audit::log('project_exception_convert', 'project', $id,
+                        [
+                            'is_exception'           => 1,
+                            'customer_id'            => $before['customer_id'] !== null ? (int) $before['customer_id'] : null,
+                            'customer_name_snapshot' => $before['customer_name_snapshot'],
+                        ],
+                        [
+                            'is_exception'           => 0,
+                            'customer_id'            => $customerId,
+                            'customer_name_snapshot' => $snapshot,
+                            'converted_by'           => Auth::id(),
+                            'at'                     => date('Y-m-d H:i:s'),
+                        ]);
+                }
+                // R8-A: 공사 유형 변경 시 스테이지 정합 — 현재 공정이 다른 유형 전용 단계면 '대기중' 재배치
+                //       (process.settype 과 동일한 ProcessService 공통 헬퍼, 이력 is_auto=1 기록)
+                if (($before['construction_type'] ?? null) !== $data['construction_type']) {
+                    ProcessService::ensureStageMatchesType($id, Auth::id() ?: null);
+                }
+            } else {
+                $data['project_no']  = $this->generateProjectNo();
+                $data['actual_cost'] = 0;
+                $id = Db::insert('projects', $data);
+                // 예외 생성 프로젝트가 '진행 중'이면 공정 '대기중' 배치(ProcessService 경유 — 이력·entered_at 일관)
+                if ($status === 'in_progress') {
+                    ProcessService::initWaiting($id, Auth::id() ?: null, false, '예외 프로젝트 생성');
+                }
+                StatusService::logProjectStatus($id, null, $status, '예외 프로젝트 생성: ' . $createReason);
+                Audit::log('project_exception_create', 'project', $id, null, $data + [
+                    'create_reason' => mb_substr($createReason, 0, 500),
+                    'created_by'    => Auth::id(),
+                    'at'            => date('Y-m-d H:i:s'),
+                ]);
             }
-            $from = (string) $before['status'];
-            if (!in_array($from, self::FORM_STATUSES, true)) {
-                // 종결·전환 전용 상태(완료/취소/파기/정산 등)는 폼에서 변경 불가 — 상태 전환 플로우로만
-                $data['status'] = $status = $from;
-            } elseif ($from !== $status && !StatusService::projectTransitionAllowed($from, $status)) {
-                // 허용되지 않는 전환은 무시(기존 상태 유지)
-                $data['status'] = $status = $from;
-            }
-            // 담당 영업 잠금(R7 T2 확장): 관리자(super_admin) 외 변경 불가 — 성과·수주 귀속
-            // (projects.sales_user_id) 조작 경로 차단. 계약 화면(contracts.save)과 동일 기준·감사로그.
-            $beforeSales = $before['sales_user_id'] !== null ? (int) $before['sales_user_id'] : null;
-            if (!Rbac::isRole('super_admin')) {
-                $data['sales_user_id'] = $beforeSales;
-            } elseif ($beforeSales !== $data['sales_user_id']) {
-                Audit::log('project_sales_user_change', 'project', $id,
-                    ['sales_user_id' => $beforeSales], ['sales_user_id' => $data['sales_user_id']]);
-            }
-            Db::update('projects', $data, 'id = :id', [':id' => $id]);
-            if ($from !== $status) {
-                StatusService::logProjectStatus($id, $from, $status, '프로젝트 수정 화면에서 변경');
-            }
-            Audit::log('project_update', 'project', $id, $before, $data);
-            // 예외→일반 전환: 별도 감사 로그(전환 전/후 고객 연결 상태 보존)
-            if ($convertToNormal) {
-                Audit::log('project_exception_convert', 'project', $id,
-                    [
-                        'is_exception'           => 1,
-                        'customer_id'            => $before['customer_id'] !== null ? (int) $before['customer_id'] : null,
-                        'customer_name_snapshot' => $before['customer_name_snapshot'],
-                    ],
-                    [
-                        'is_exception'           => 0,
-                        'customer_id'            => $customerId,
-                        'customer_name_snapshot' => $snapshot,
-                        'converted_by'           => Auth::id(),
-                        'at'                     => date('Y-m-d H:i:s'),
-                    ]);
-            }
-            // R8-A: 공사 유형 변경 시 스테이지 정합 — 현재 공정이 다른 유형 전용 단계면 '대기중' 재배치
-            //       (process.settype 과 동일한 ProcessService 공통 헬퍼, 이력 is_auto=1 기록)
-            if (($before['construction_type'] ?? null) !== $data['construction_type']) {
-                ProcessService::ensureStageMatchesType($id, Auth::id() ?: null);
-            }
-        } else {
-            $data['project_no']  = $this->generateProjectNo();
-            $data['actual_cost'] = 0;
-            $id = Db::insert('projects', $data);
-            // 예외 생성 프로젝트가 '진행 중'이면 공정 '대기중' 배치(ProcessService 경유 — 이력·entered_at 일관)
-            if ($status === 'in_progress') {
-                ProcessService::initWaiting($id, Auth::id() ?: null, false, '예외 프로젝트 생성');
-            }
-            StatusService::logProjectStatus($id, null, $status, '예외 프로젝트 생성: ' . $createReason);
-            Audit::log('project_exception_create', 'project', $id, null, $data + [
-                'create_reason' => mb_substr($createReason, 0, 500),
-                'created_by'    => Auth::id(),
-                'at'            => date('Y-m-d H:i:s'),
-            ]);
+        } catch (\Throwable $e) {
+            error_log('[ProjectsController::save] ' . $e->getMessage());
+            Response::redirect('projects.form', $id ? ['id' => $id] : [], '저장에 실패했습니다. 입력값을 확인해주세요.', 'error');
         }
 
         Response::redirect('projects.show', ['id' => $id], '저장되었습니다.');

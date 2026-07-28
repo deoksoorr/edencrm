@@ -35,7 +35,7 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
           <?php endif; ?>
           <div class="field">
             <label class="field-label">프로젝트명<span class="req">*</span></label>
-            <input type="text" name="name" class="input" required value="<?= $val('name') ?>">
+            <input type="text" name="name" class="input" required maxlength="150" value="<?= $val('name') ?>">
           </div>
           <?php // 예외 모드(신규=예외 생성, 수정=is_exception 프로젝트): 고객 연결 선택 사항 + 고객명 직접 입력 허용
             $exMode = !$project || !empty($p['is_exception']); ?>
@@ -55,7 +55,7 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
           </div>
           <?php if ($exMode): ?>
           <div class="field">
-            <label class="field-label">고객명 직접 입력</label>
+            <label class="field-label">고객명 직접 입력<span class="req">*</span> <span class="field-hint">(고객 미선택 시 필수)</span></label>
             <input type="text" name="customer_name_snapshot" class="input" maxlength="150"
                    value="<?= $val('customer_name_snapshot') ?>" placeholder="예: 한빛아파트 입주자대표회의">
             <div class="field-hint">기존 고객을 연결하면 저장 시점 고객명이 자동 기록됩니다.</div>
@@ -71,11 +71,11 @@ $val = fn($k, $d = '') => e((string) ($p[$k] ?? $d));
           <?php endif; ?>
           <div class="field col-span-2">
             <label class="field-label">현장 주소</label>
-            <input type="text" name="site_address" class="input" value="<?= $val('site_address') ?>">
+            <input type="text" name="site_address" class="input" maxlength="255" value="<?= $val('site_address') ?>">
           </div>
           <div class="field">
             <label class="field-label">공사유형</label>
-            <input type="text" name="work_type" class="input" value="<?= $val('work_type') ?>" placeholder="예: 아파트외벽, 옥상방수">
+            <input type="text" name="work_type" class="input" maxlength="50" value="<?= $val('work_type') ?>" placeholder="예: 아파트외벽, 옥상방수">
           </div>
           <div class="field">
             <?php // R8-A: 공사유형(구분) — 공정 보드 도장/인테리어 탭 분류. 레거시 미지정 프로젝트만 '미지정' 옵션 노출.

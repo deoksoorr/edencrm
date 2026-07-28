@@ -64,6 +64,7 @@ $versionNote = '';
         <button type="button" class="btn btn-sm btn-outline" id="btnAddItem">+ 행 추가</button>
       </div>
       <div>
+        <div class="mb-8"><span class="muted fs-12">항목 1개 이상 필수 · 항목명 100자 이내</span></div>
         <div class="table-wrap">
           <table class="data" id="itemsTable">
             <thead>
