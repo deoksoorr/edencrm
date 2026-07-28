@@ -64,7 +64,9 @@ class ContractsController
             'last_paid'     => $lastPaid,
         ][$basis];
 
-        $where  = ['c.deleted_at IS NULL'];
+        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시).
+        $trash  = Util::int('trash', 0) === 1 && Rbac::can('contract.manage');
+        $where  = [$trash ? 'c.deleted_at IS NOT NULL' : 'c.deleted_at IS NULL'];
         $params = [];
         if ($q !== '') {
             $where[] = '(c.contract_no LIKE :kw OR cu.name LIKE :kw2)';
@@ -105,7 +107,7 @@ class ContractsController
 
         // 계약별 순입금/마지막 입금일/미수금 — AccountingService SQL 조각 재사용(단일 출처, 목록 1쿼리)
         $rows = Db::all(
-            "SELECT c.id, c.contract_no, c.contract_amount, c.payment_status, c.status,
+            "SELECT c.id, c.contract_no, c.contract_amount, c.payment_status, c.status, c.deleted_at,
                     c.start_date, c.end_date, cu.name AS customer_name,
                     " . AccountingService::PAID_SUM_SQL . " AS net_paid,
                     $lastPaid AS last_paid,
@@ -134,6 +136,7 @@ class ContractsController
                 // custom 일 때만 URL 에 날짜 유지(프리셋은 period 만으로 재계산 — 견적 탭과 동일)
                 'date_from'      => $period === 'custom' ? (string) ($range['from'] ?? '') : '',
                 'date_to'        => $period === 'custom' ? (string) ($range['to'] ?? '') : '',
+                'trash'          => $trash ? 1 : '',
             ],
             'basisOptions' => self::BASIS_OPTIONS,
             'sortLabels'   => self::SORT_LABELS,

@@ -41,7 +41,9 @@ class QuotesController
         }
         $range = Util::periodRange($period, $fromIn !== '' ? $fromIn : null, $toIn !== '' ? $toIn : null);
 
-        $where  = ['q.deleted_at IS NULL'];
+        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시).
+        $trash  = Util::int('trash', 0) === 1 && Rbac::can('quote.manage');
+        $where  = [$trash ? 'q.deleted_at IS NOT NULL' : 'q.deleted_at IS NULL'];
         $params = [];
         if ($q !== '') {
             $where[] = '(q.quote_no LIKE :kw OR c.name LIKE :kw2)';
@@ -78,7 +80,7 @@ class QuotesController
         $p = Util::paginate($total, $page, $perPage);
 
         $rows = Db::all(
-            "SELECT q.id, q.quote_no, q.status, q.valid_until, q.created_at,
+            "SELECT q.id, q.quote_no, q.status, q.valid_until, q.created_at, q.deleted_at,
                     c.name AS customer_name,
                     qv.total_amount
              FROM quotes q
@@ -103,6 +105,7 @@ class QuotesController
                 // custom 일 때만 URL 에 날짜 유지(프리셋은 period 만으로 재계산)
                 'date_from' => $period === 'custom' ? (string) ($range['from'] ?? '') : '',
                 'date_to'   => $period === 'custom' ? (string) ($range['to'] ?? '') : '',
+                'trash'     => $trash ? 1 : '',
             ],
             'statusLabels' => self::STATUS_LABELS,
             'statusBadge'  => self::STATUS_BADGE,

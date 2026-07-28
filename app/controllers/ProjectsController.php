@@ -55,8 +55,10 @@ class ProjectsController
         }
         $dir = strtolower(Util::str('dir', 'asc')) === 'desc' ? 'DESC' : 'ASC';
 
+        // R15: 휴지통 모드 — manage 권한 없으면 강제로 일반 목록으로 폴백(trash=1 무시). 데이터 범위(Scope)는 유지.
+        $trash = Util::int('trash', 0) === 1 && Rbac::can('project.manage');
         [$scopeSql, $params] = Scope::projectWhere('p');
-        $where = ['p.deleted_at IS NULL', $scopeSql];
+        $where = [$trash ? 'p.deleted_at IS NOT NULL' : 'p.deleted_at IS NULL', $scopeSql];
 
         if ($q !== '') {
             $like = '%' . $q . '%';
@@ -143,6 +145,7 @@ class ProjectsController
             'workTypes' => $workTypes,
             'statuses'  => self::STATUSES,
             'canFinance' => Rbac::can('finance.view') || Rbac::can('cost.manage'),
+            'trash'     => $trash,
         ]);
     }
 

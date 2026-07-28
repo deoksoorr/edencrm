@@ -28,6 +28,12 @@
       <?php if (can('contract.manage') && !in_array($contract['status'], ['terminated', 'cancelled'], true)): ?>
         <button type="button" class="btn btn-danger" id="btnTerminate">계약 파기</button>
       <?php endif; ?>
+      <?php if (can('contract.manage')): ?>
+        <form method="post" action="<?= e(url('contracts.delete')) ?>" style="display:inline"
+              onsubmit="return confirm('이 계약을 휴지통으로 이동하시겠습니까?');"><?= csrf_field() ?>
+          <input type="hidden" name="id" value="<?= (int) $contract['id'] ?>">
+          <button type="submit" class="btn btn-danger">삭제</button></form>
+      <?php endif; ?>
     </div>
   </div>
 

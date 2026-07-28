@@ -3,12 +3,17 @@
 <div class="page">
   <div class="page-head">
     <div>
-      <h1 class="page-title">견적 관리</h1>
+      <h1 class="page-title">견적 관리<?php if ($filters['trash']): ?> <span class="badge badge-muted">휴지통</span><?php endif; ?></h1>
       <div class="page-sub"><?= $filterOn ? '조회' : '전체' ?> <?= number_format($p['total']) ?>건 · 총액(VAT 포함) <?= money($sumTotal) ?>원</div>
     </div>
     <div class="page-actions">
-      <?php if (can('quote.manage')): ?>
-        <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">+ 견적 등록</a>
+      <?php if ($filters['trash']): ?>
+        <a href="<?= e(url('quotes.index')) ?>" class="btn btn-ghost">목록으로</a>
+      <?php else: ?>
+        <?php if (can('quote.manage')): ?>
+          <a href="<?= e(url('quotes.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
+          <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">+ 견적 등록</a>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -36,8 +41,8 @@
   <?php if (!$rows): ?>
     <div class="empty">
       <div class="empty-icon">▤</div>
-      <div class="empty-title">등록된 견적이 없습니다.</div>
-      <?php if (can('quote.manage')): ?>
+      <div class="empty-title"><?= $filters['trash'] ? '휴지통이 비어 있습니다.' : '등록된 견적이 없습니다.' ?></div>
+      <?php if (!$filters['trash'] && can('quote.manage')): ?>
         <a href="<?= e(url('quotes.form')) ?>" class="btn btn-primary">첫 견적 등록하기</a>
       <?php endif; ?>
     </div>
@@ -47,17 +52,32 @@
         <thead>
           <tr>
             <th>견적번호</th><th>고객</th><th class="num" title="공급가액 + 부가세 − 할인 · VAT 포함">총액(VAT 포함)</th><th>상태</th><th>유효기간</th><th>작성일</th>
+            <?php if ($filters['trash']): ?><th>삭제일</th><th>관리</th><?php endif; ?>
           </tr>
         </thead>
         <tbody>
           <?php foreach ($rows as $r): ?>
             <tr>
-              <td><a href="<?= e(url('quotes.show', ['id' => $r['id']])) ?>"><?= e($r['quote_no']) ?></a></td>
+              <td><?php if ($filters['trash']): ?><?= e($r['quote_no']) ?><?php else: ?><a href="<?= e(url('quotes.show', ['id' => $r['id']])) ?>"><?= e($r['quote_no']) ?></a><?php endif; ?></td>
               <td class="ellipsis"><?= e($r['customer_name']) ?></td>
               <td class="num"><?= money($r['total_amount'] !== null ? (float) $r['total_amount'] : null) ?></td>
               <td><span class="badge <?= e($statusBadge[$r['status']] ?? 'badge-muted') ?>"><?= e($statusLabels[$r['status']] ?? $r['status']) ?></span></td>
               <td><?= fmtdate($r['valid_until']) ?></td>
               <td><?= fmtdate($r['created_at']) ?></td>
+              <?php if ($filters['trash']): ?>
+                <td><?= fmtdate($r['deleted_at']) ?></td>
+                <td class="nowrap">
+                  <form method="post" action="<?= e(url('quotes.restore')) ?>" style="display:inline"><?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
+                  <?php if (is_role('super_admin')): ?>
+                  <form method="post" action="<?= e(url('quotes.purge')) ?>" style="display:inline"
+                        onsubmit="return confirm('완전삭제하면 되돌릴 수 없습니다. 진행할까요?');"><?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
+                  <?php endif; ?>
+                </td>
+              <?php endif; ?>
             </tr>
           <?php endforeach; ?>
         </tbody>

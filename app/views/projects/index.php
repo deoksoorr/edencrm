@@ -1,13 +1,13 @@
 <?php
 /** @var array $rows @var array $pg @var string $q @var string $status @var int $managerId
  *  @var string $workType @var bool $delayed @var string $regType @var string $payFilter @var string $sort @var string $dir
- *  @var array $managers @var array $workTypes @var array $statuses @var bool $canFinance
+ *  @var array $managers @var array $workTypes @var array $statuses @var bool $canFinance @var bool $trash
  */
 $today = date('Y-m-d');
 $base = [
     'q' => $q, 'status' => $status, 'manager_id' => $managerId ?: '', 'work_type' => $workType,
     'delayed' => $delayed ? '1' : '', 'reg_type' => $regType !== 'all' ? $regType : '',
-    'pay' => $payFilter, 'sort' => $sort, 'dir' => $dir,
+    'pay' => $payFilter, 'sort' => $sort, 'dir' => $dir, 'trash' => $trash ? '1' : '',
 ];
 // R11 입금·정산 필터 라벨(컨트롤러 화이트리스트와 동일 키)
 $payFilterLabels = [
@@ -28,14 +28,21 @@ function projSortArrow(string $key, string $sort, string $dir): string
 <div class="page">
   <div class="page-head">
     <div>
-      <h1 class="page-title">프로젝트</h1>
+      <h1 class="page-title">프로젝트<?php if ($trash): ?> <span class="badge badge-muted">휴지통</span><?php endif; ?></h1>
       <div class="page-sub">전체 <?= number_format($pg['total']) ?>건</div>
     </div>
     <div class="page-actions">
-      <?php /* r3-contractflow: 프로젝트는 계약 '진행' 전환 시 자동 생성 — 예외 생성은 최고 관리자 전용(라우트도 서버측 차단) */ ?>
-      <?php if (is_role('super_admin')): ?>
-        <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline"
-           title="프로젝트는 계약 '진행' 전환 시 자동 생성됩니다 — 계약 연결 없는 예외 프로젝트(하자보수·내부 작업)만 직접 생성">+ 예외 프로젝트 생성</a>
+      <?php if ($trash): ?>
+        <a href="<?= e(url('projects.index')) ?>" class="btn btn-ghost">목록으로</a>
+      <?php else: ?>
+        <?php if (can('project.manage')): ?>
+          <a href="<?= e(url('projects.index', ['trash' => 1])) ?>" class="btn btn-ghost">휴지통</a>
+        <?php endif; ?>
+        <?php /* r3-contractflow: 프로젝트는 계약 '진행' 전환 시 자동 생성 — 예외 생성은 최고 관리자 전용(라우트도 서버측 차단) */ ?>
+        <?php if (is_role('super_admin')): ?>
+          <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline"
+             title="프로젝트는 계약 '진행' 전환 시 자동 생성됩니다 — 계약 연결 없는 예외 프로젝트(하자보수·내부 작업)만 직접 생성">+ 예외 프로젝트 생성</a>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -86,10 +93,12 @@ function projSortArrow(string $key, string $sort, string $dir): string
   <?php if (!$rows): ?>
     <div class="empty">
       <div class="empty-icon">▤</div>
-      <div class="empty-title">조건에 맞는 프로젝트가 없습니다.</div>
-      <div class="muted fs-13">프로젝트는 계약을 '진행(계약 진행)' 상태로 전환하면 자동 생성됩니다.</div>
-      <?php if (is_role('super_admin')): ?>
-        <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline">예외 프로젝트 생성</a>
+      <div class="empty-title"><?= $trash ? '휴지통이 비어 있습니다.' : '조건에 맞는 프로젝트가 없습니다.' ?></div>
+      <?php if (!$trash): ?>
+        <div class="muted fs-13">프로젝트는 계약을 '진행(계약 진행)' 상태로 전환하면 자동 생성됩니다.</div>
+        <?php if (is_role('super_admin')): ?>
+          <a href="<?= e(url('projects.form')) ?>" class="btn btn-outline">예외 프로젝트 생성</a>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   <?php else: ?>
@@ -111,6 +120,7 @@ function projSortArrow(string $key, string $sort, string $dir): string
             <th class="num" title="예정 금액 − 누적 입금 (0 미만은 0)">미수금</th>
             <th title="입금 상태(예정 대비 순입금) · 정산 상태(공정과 분리된 정산 축)">입금·정산</th>
             <?php endif; ?>
+            <?php if ($trash): ?><th>삭제일</th><th>관리</th><?php endif; ?>
           </tr>
         </thead>
         <tbody>
@@ -124,8 +134,8 @@ function projSortArrow(string $key, string $sort, string $dir): string
               $barClass = $progress >= 100 ? 'ok' : ($isDelayed ? 'danger' : '');
             ?>
             <tr>
-              <td class="nowrap"><a href="<?= e(url('projects.show', ['id' => $p['id']])) ?>"><?= e($p['project_no']) ?></a></td>
-              <td class="wrap"><a href="<?= e(url('projects.show', ['id' => $p['id']])) ?>" title="<?= e($p['name']) ?>"><?= e(Util::truncate($p['name'], 30)) ?></a><?php if (!empty($p['is_exception'])): ?> <span class="badge badge-warn fs-11" title="예외 프로젝트 — 계약 연결 없이 수동 생성">예외</span><?php endif; ?></td>
+              <td class="nowrap"><?php if ($trash): ?><?= e($p['project_no']) ?><?php else: ?><a href="<?= e(url('projects.show', ['id' => $p['id']])) ?>"><?= e($p['project_no']) ?></a><?php endif; ?></td>
+              <td class="wrap"><?php if ($trash): ?><span title="<?= e($p['name']) ?>"><?= e(Util::truncate($p['name'], 30)) ?></span><?php else: ?><a href="<?= e(url('projects.show', ['id' => $p['id']])) ?>" title="<?= e($p['name']) ?>"><?= e(Util::truncate($p['name'], 30)) ?></a><?php endif; ?><?php if (!empty($p['is_exception'])): ?> <span class="badge badge-warn fs-11" title="예외 프로젝트 — 계약 연결 없이 수동 생성">예외</span><?php endif; ?></td>
               <td><?= e($p['customer_name'] ?: '-') ?></td>
               <td><span class="badge <?= $badgeClass ?>"><?= e($statuses[$p['status']] ?? $p['status']) ?></span></td>
               <td>
@@ -155,6 +165,20 @@ function projSortArrow(string $key, string $sort, string $dir): string
                 <span class="badge <?= e(AccountingService::PAY_STATUS_BADGE[$pstat]) ?> fs-11"><?= e(AccountingService::PAY_STATUS_LABELS[$pstat]) ?></span>
                 <span class="badge <?= e(StatusService::SETTLEMENT_BADGE[$sstat] ?? 'badge-muted') ?> fs-11"><?= e(StatusService::SETTLEMENT_LABELS[$sstat] ?? $sstat) ?></span>
               </td>
+              <?php endif; ?>
+              <?php if ($trash): ?>
+                <td class="nowrap"><?= fmtdate($p['deleted_at']) ?></td>
+                <td class="nowrap">
+                  <form method="post" action="<?= e(url('projects.restore')) ?>" style="display:inline"><?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
+                  <?php if (is_role('super_admin')): ?>
+                  <form method="post" action="<?= e(url('projects.purge')) ?>" style="display:inline"
+                        onsubmit="return confirm('완전삭제하면 되돌릴 수 없습니다. 진행할까요?');"><?= csrf_field() ?>
+                    <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
+                  <?php endif; ?>
+                </td>
               <?php endif; ?>
             </tr>
           <?php endforeach; ?>
