@@ -11,6 +11,8 @@
  * @var array $bonusTotals  {calc, confirmed, paid, unpaid} — cancelled 제외
  * @var array $staffRows    직원별 표(view_all 시)
  * @var bool  $isClosed     마감 반기 여부
+ * @var bool  $canManage    보너스 등록 권한(bonus.manage)
+ * @var array $formUsers    등록 모달 대상 직원 옵션(canManage 시에만 채움)
  */
 $statusLabels = ['unpaid' => '미지급', 'paid' => '지급완료', 'cancelled' => '취소'];
 $statusBadge  = ['unpaid' => 'badge-warn', 'paid' => 'badge-ok', 'cancelled' => 'badge-danger'];
@@ -29,6 +31,10 @@ foreach ($users as $u) {
       <div class="page-sub"><?= e(Util::halfLabel($f['year'], $f['half'])) ?><?= $scoped ? ' · ' . e($selUserName) . ' 귀속 기준' : ' · 전사 기준' ?></div>
     </div>
     <div class="page-actions">
+      <?php if (!empty($canManage)): ?>
+        <button type="button" class="btn btn-primary" data-bact="new">+ 보너스 등록</button>
+      <?php endif; ?>
+      <a href="<?= e(url('bonus.history', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">변경 이력</a>
       <a href="<?= e(url('bonus.index', ['year' => $f['year'], 'half' => $f['half']])) ?>" class="btn btn-outline">보너스 지급 현황</a>
     </div>
   </div>
@@ -210,3 +216,5 @@ foreach ($users as $u) {
     <?php endif; ?>
   </div>
 </div>
+
+<?php include __DIR__ . '/../bonus/_form_modal.php'; ?>

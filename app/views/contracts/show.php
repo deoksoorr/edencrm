@@ -162,7 +162,7 @@
                     <button type="button" class="btn btn-sm btn-outline btn-edit-pm"
                       data-id="<?= (int) $pm['id'] ?>" data-type="<?= e($pm['pay_type']) ?>" data-amount="<?= (int) $pm['amount'] ?>"
                       data-due="<?= e($pm['due_date'] ?? '') ?>" data-paid="<?= e($pm['paid_date'] ?? '') ?>"
-                      data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">수정</button>
+                      data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">입금내역 갱신</button>
                     <button type="button" class="btn btn-sm btn-ghost btn-del-pm" data-id="<?= (int) $pm['id'] ?>" title="물리 삭제 대신 취소 상태로 전환 — 내역·감사 추적 보존">취소</button>
                     <?php else: ?>
                     <span class="muted fs-12">취소됨</span>

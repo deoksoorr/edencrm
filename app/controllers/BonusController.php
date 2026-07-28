@@ -235,12 +235,18 @@ class BonusController
             }
         }
 
+        $canManage = Rbac::can('bonus.manage');
         View::render('halfyear/index', [
             'title'        => '반기 보너스 지급 현황',
             'f'            => $f,
             'years'        => self::yearOptions(),
             'users'        => $this->userOptions($f['canAll']),
             'projects'     => $this->projectOptions(),
+            'canManage'    => $canManage,
+            // 관리 모달 셀렉트용(활성 직원만 — save 검증과 동일 기준)
+            'formUsers'    => $canManage ? Db::all(
+                "SELECT id, name FROM users WHERE deleted_at IS NULL AND status='active' ORDER BY name"
+            ) : [],
             'revenueKpi'   => [
                 'contracted' => $contracted, 'paid' => $paid, 'revenue' => $revenue,
                 'receivable' => $receivable, 'projectCount' => $projectCount,
