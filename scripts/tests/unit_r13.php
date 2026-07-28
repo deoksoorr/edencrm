@@ -64,6 +64,17 @@ try {
     t_int('훅 경로 재계산: calc = 100,000', 100000, (int) $b2['calc_amount']);
     t_int('훅 경로 재계산: contrib_profit(손실/적용순이익) = 1,000,000', 1000000, (int) $b2['contrib_profit']);
 
+    // ── Task 5 (fix): hold/refunding 조기반환 위로 이동 — hold 상태에서도 보너스는 재계산되어야 함 ──
+    // $bp 를 정산 보류(hold)로 전환한 뒤 환불(550,000)이 발생해도, 보너스 재계산은 스킵되면 안 되고
+    // settlement_status 는 수동 상태(hold)가 그대로 유지되어야 한다(공정/정산 축 분리).
+    Db::update('projects', ['settlement_status' => 'hold'], 'id = :id', [':id' => $bp]);
+    Db::insert('payments', ['project_id' => $bp, 'pay_type' => 'refund', 'kind' => 'refund', 'amount' => 550000, 'status' => 'paid', 'paid_date' => date('Y-m-d')]);
+    $holdReturn = StatusService::recalcProjectSettlement($bp);
+    $b3 = Db::one("SELECT * FROM site_bonuses WHERE id = :id", [':id' => $bid]);
+    t_int('hold 상태에서도 보너스 재계산: base_amount = 500,000(고착 아님)', 500000, (int) $b3['base_amount']);
+    t_int('hold 상태에서도 보너스 재계산: calc_amount = 50,000', 50000, (int) $b3['calc_amount']);
+    t_true("hold 상태에서도 recalcProjectSettlement 반환값 = 'hold'(수동 상태 보존)", $holdReturn === 'hold');
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();
