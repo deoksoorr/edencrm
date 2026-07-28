@@ -134,9 +134,9 @@ foreach ($users as $u) {
   <div class="hy-split mb-14">
     <div class="card">
       <div class="card-head"><div class="card-title">계약 실적</div></div>
-      <div class="muted fs-12" style="padding:0 12px">건수·계약금액=담당 영업 수주(공급가) · 매출금액=담당 계약·예외 프로젝트 입금(현금·VAT 포함, 환불 차감)</div>
+      <div class="muted fs-12" style="padding:0 12px">계약 건수·계약 금액=담당 영업 수주(공급가) · 매출 금액(입금액)=담당 계약·예외 프로젝트 입금(현금·VAT 포함, 환불 차감)</div>
       <div class="table-wrap"><table class="data compact">
-        <thead><tr><th>직원</th><th class="num">건수</th><th class="num">계약금액</th><th class="num">매출금액(입금)</th></tr></thead>
+        <thead><tr><th>직원</th><th class="num">계약 건수</th><th class="num">계약 금액</th><th class="num">매출 금액(입금액)</th></tr></thead>
         <tbody><?php foreach ($staffRows as $s): ?>
           <tr><td><a href="<?= e(url('staff.show', ['id' => $s['user_id'], 'year' => $f['year'], 'half' => $f['half']])) ?>"><?= e($s['name']) ?></a></td>
             <td class="num mono"><?= (int) $s['contract_cnt'] ?>건</td>
@@ -146,13 +146,22 @@ foreach ($users as $u) {
     </div>
     <div class="card">
       <div class="card-head"><div class="card-title">공사 실적</div></div>
-      <div class="muted fs-12" style="padding:0 12px">배정·기여도 기준 — 순이익=기여도 반영 순이익 누적 · 보너스=지급완료 확정(취소 제외) · 담당 프로젝트 수=현재 배정 기준(반기 무관)</div>
+      <div class="muted fs-12" style="padding:0 12px">배정·기여도 기준 — 공사 건수=현재 배정 기준(반기 무관) · 순이익=기여도 반영 누적(입금 기준)</div>
       <div class="table-wrap"><table class="data compact">
-        <thead><tr><th>직원</th><th class="num">담당 프로젝트 수</th><th class="num">기여도 반영 순이익 누적</th><th class="num">보너스 지급</th></tr></thead>
+        <thead><tr><th>직원</th><th class="num">공사 건수</th><th class="num">기여도 반영 누적 순이익</th></tr></thead>
         <tbody><?php foreach ($staffRows as $s): ?>
           <tr><td><a href="<?= e(url('staff.show', ['id' => $s['user_id'], 'year' => $f['year'], 'half' => $f['half']])) ?>"><?= e($s['name']) ?></a></td>
             <td class="num mono"><?= (int) $s['project_cnt'] ?>건</td>
-            <td class="num mono<?= (int) $s['profit'] < 0 ? ' text-danger' : '' ?>"><?= moneyCell($s['profit']) ?></td>
+            <td class="num mono<?= (int) $s['profit'] < 0 ? ' text-danger' : '' ?>"><?= moneyCell($s['profit']) ?></td></tr>
+        <?php endforeach; ?></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-title">보너스 지급 누계</div></div>
+      <div class="muted fs-12" style="padding:0 12px">선택 반기의 지급완료 확정 보너스 누계(취소 제외)</div>
+      <div class="table-wrap"><table class="data compact">
+        <thead><tr><th>직원</th><th class="num">액수</th></tr></thead>
+        <tbody><?php foreach ($staffRows as $s): ?>
+          <tr><td><a href="<?= e(url('staff.show', ['id' => $s['user_id'], 'year' => $f['year'], 'half' => $f['half']])) ?>"><?= e($s['name']) ?></a></td>
             <td class="num mono"><?= moneyCell($s['bonus_paid']) ?></td></tr>
         <?php endforeach; ?></tbody></table></div>
     </div>

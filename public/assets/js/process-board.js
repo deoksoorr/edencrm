@@ -52,21 +52,41 @@
 
     // ── R14: 게이지 저장(디바운스) + 즉시 반영 ──
     var timers = {};
+    function queueSave(card, stageId, pct) {
+      var key = card.dataset.projectId + ':' + stageId;
+      clearTimeout(timers[key]);
+      timers[key] = setTimeout(function () { saveGauge(card, stageId, pct); }, 400);
+    }
     boardEl.querySelectorAll('.gc-slider').forEach(function (sl) {
       sl.addEventListener('input', function () {
         var row = sl.closest('.gc-row');
-        row.querySelector('[data-stage-val]').textContent = sl.value + '%';
+        var num = row.querySelector('.gc-num');
+        if (num) num.value = sl.value;
         var card = sl.closest('.gauge-card');
-        var key = card.dataset.projectId + ':' + sl.dataset.stageId;
-        clearTimeout(timers[key]);
-        timers[key] = setTimeout(function () { saveGauge(card, sl); }, 400);
+        renderWorking(card);
+        queueSave(card, sl.dataset.stageId, sl.value);
+      });
+    });
+    // R14-3: 모바일 숫자 직접 입력 — 슬라이더와 양방향 동기, 동일 디바운스 저장
+    boardEl.querySelectorAll('.gc-num').forEach(function (num) {
+      num.addEventListener('input', function () {
+        var v = Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
+        var row = num.closest('.gc-row');
+        var sl = row.querySelector('.gc-slider');
+        if (sl) sl.value = v;
+        var card = num.closest('.gauge-card');
+        renderWorking(card);
+        queueSave(card, num.dataset.stageId, v);
+      });
+      num.addEventListener('blur', function () { // 범위 밖 입력 정규화
+        num.value = Math.max(0, Math.min(100, parseInt(num.value, 10) || 0));
       });
     });
 
-    async function saveGauge(card, sl) {
+    async function saveGauge(card, stageId, pct) {
       try {
         var data = await api('process.progress.set', {
-          project_id: card.dataset.projectId, stage_id: sl.dataset.stageId, pct: sl.value,
+          project_id: card.dataset.projectId, stage_id: stageId, pct: pct,
         });
         applyCardState(card, data);
         if (data.all_done && card.dataset.status !== 'completed' && card.dataset.status !== 'settled') {
@@ -87,8 +107,7 @@
         var pt = card.querySelector('[data-progress-text]');
         if (pt) pt.textContent = d.progress + '%';
       }
-      var cs = card.querySelector('[data-current-stage]');
-      if (cs) cs.textContent = '현재: ' + (d.current_stage_name || '대기중');
+      renderWorking(card); // R14-3: 진행 중 공정 칩 갱신(단일 '현재' 칩 폐지)
       if (d.status) {
         card.dataset.status = d.status;
         var badge = card.querySelector('[data-status-badge]');
@@ -114,6 +133,33 @@
         }
       }
       if (d.summary) updateSummary(d.summary);
+    }
+
+    // R14-3: 진행 중 공정(0<pct<100) 전체 칩 렌더 — 게이지 바 하단, 슬라이더/숫자 값 기준
+    function renderWorking(card) {
+      var box = card.querySelector('[data-work-chips]');
+      if (!box) return;
+      box.textContent = '';
+      var working = 0, done = 0, total = 0;
+      card.querySelectorAll('.gc-row .gc-slider').forEach(function (sl) {
+        total++;
+        var v = parseInt(sl.value, 10) || 0;
+        if (v >= 100) done++;
+        if (v > 0 && v < 100) {
+          working++;
+          var name = ((sl.closest('.gc-row').querySelector('.gc-name') || {}).textContent || '').replace(/^\s*\d+\.\s*/, '');
+          var s = document.createElement('span');
+          s.className = 'badge badge-stage';
+          s.textContent = name + ' ' + v + '%';
+          box.appendChild(s);
+        }
+      });
+      if (!working) {
+        var m = document.createElement('span');
+        m.className = 'badge badge-muted';
+        m.textContent = total && done === total ? '전 공정 완료' : '작업 전';
+        box.appendChild(m);
+      }
     }
 
     // ── 하자보수 버튼 ──

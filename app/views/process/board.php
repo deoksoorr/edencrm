@@ -138,8 +138,26 @@ foreach ($sgDefs as $gkey => $g) {
           </div>
           <div class="gc-progress">
             <div class="progress"><div class="progress-bar<?= (int) $p['progress'] >= 100 ? ' ok' : '' ?>" data-progress-bar style="width:<?= (int) $p['progress'] ?>%"></div></div>
+          </div>
+          <?php
+          // R14-3: 동시 진행 공정 전체 표시(0<pct<100) — 게이지 바 아래 배치(사장 지시)
+          $workingChips = [];
+          $doneCnt = 0;
+          foreach ($gaugeStages as $wst) {
+              $wv = $pmap[(int) $wst['id']] ?? 0;
+              if ($wv >= 100) { $doneCnt++; }
+              if ($wv > 0 && $wv < 100) { $workingChips[] = ['name' => $wst['name'], 'pct' => $wv]; }
+          }
+          ?>
+          <div class="gc-working">
             <span class="gc-pct" data-progress-text><?= (int) $p['progress'] ?>%</span>
-            <span class="badge badge-stage" data-current-stage>현재: <?= e($p['process_stage_name'] ?? '대기중') ?></span>
+            <span class="gc-work-chips" data-work-chips>
+              <?php if ($workingChips): foreach ($workingChips as $wc): ?>
+                <span class="badge badge-stage"><?= e($wc['name']) ?> <?= (int) $wc['pct'] ?>%</span>
+              <?php endforeach; else: ?>
+                <span class="badge badge-muted"><?= count($gaugeStages) && $doneCnt === count($gaugeStages) ? '전 공정 완료' : '작업 전' ?></span>
+              <?php endif; ?>
+            </span>
           </div>
           <div class="gc-gauges">
             <?php foreach ($gaugeByGroup as $ggk => $sts): $gdef = $groups[$ggk] ?? null; ?>
@@ -150,7 +168,8 @@ foreach ($sgDefs as $gkey => $g) {
                 <span class="gc-name"><?= (int) $st['pos'] ?>. <?= e($st['name']) ?></span>
                 <input type="range" class="gc-slider" min="0" max="100" step="5" value="<?= $v ?>"
                        data-stage-id="<?= (int) $st['id'] ?>" <?= $canMove ? '' : 'disabled' ?>>
-                <span class="gc-val" data-stage-val><?= $v ?>%</span>
+                <input type="number" class="gc-num" data-stage-val min="0" max="100" step="5" value="<?= $v ?>"
+                       inputmode="numeric" data-stage-id="<?= (int) $st['id'] ?>" <?= $canMove ? '' : 'disabled' ?>><span class="gc-unit">%</span>
               </div>
               <?php endforeach; ?>
             </details>
