@@ -150,124 +150,138 @@ class ProcessController
         ]);
     }
 
-    /** 공정 이동 (perm process.move 는 라우터가 강제). */
-    public function move(): void
+    /** R14: 상태 → 보드 상태그룹 키(waiting/active/warranty/done). */
+    public static function statusGroup(string $status): string
     {
-        $projectId = (int) Util::postInt('project_id', 0);
-        $toStageId = (int) Util::postInt('to_stage_id', 0);
-        $reason    = Util::nullIfEmpty(Util::postStr('reason', ''));
+        if ($status === 'preparing') return 'waiting';
+        if ($status === 'warranty') return 'warranty';
+        if (in_array($status, ['completed', 'settled'], true)) return 'done';
+        return 'active'; // in_progress·paused
+    }
 
-        if (!$projectId || !$toStageId) {
-            Response::error('잘못된 요청입니다.', 400);
-        }
-        if (!Scope::canAccessProject($projectId)) {
-            Response::error('이 프로젝트에 접근할 권한이 없습니다.', 403);
-        }
-
-        $project = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
+    /** 접근 가드 — 보드 대상(스코프·삭제 제외) 프로젝트 로드, 실패 시 JSON 에러. */
+    private function guardBoardProject(int $projectId): array
+    {
+        [$scopeSql, $params] = Scope::projectWhere('p');
+        $project = Db::one("SELECT p.* FROM projects p WHERE p.id = :id AND p.deleted_at IS NULL AND $scopeSql",
+            array_merge([':id' => $projectId], $params));
         if (!$project) {
-            Response::error('프로젝트를 찾을 수 없습니다.', 404);
+            Response::error('프로젝트를 찾을 수 없거나 접근 권한이 없습니다.', 404);
         }
-        // R11: 잠금 제거 — 완료·정산 카드도 자유 이동(이동 시 자동 재개). 취소·파기만 차단(보드 비노출 상태).
-        if (in_array($project['status'], ['cancelled', 'terminated'], true)) {
-            Response::error('취소·파기된 프로젝트는 공정을 이동할 수 없습니다.', 400);
+        return $project;
+    }
+
+    /** R14: 카드 게이지 저장 — 파생 결과(배지·현재공정 라벨 포함)를 즉시 반영용으로 반환. */
+    public function progressSet(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0));
+        try {
+            $r = ProcessService::setStageProgress((int) $project['id'], (int) Util::postInt('stage_id', 0),
+                (int) Util::postInt('pct', 0), Auth::id());
+        } catch (RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
         }
+        $cur = Db::one("SELECT id, name, color FROM process_stages WHERE id = :id", [':id' => $r['current_stage_id']]);
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        Response::json([
+            'pct' => $r['pct'], 'progress' => $r['progress'], 'status' => $r['status'],
+            'status_label' => StatusService::PROJECT_LABELS[$r['status']] ?? $r['status'],
+            'badge_class' => StatusService::PROJECT_BADGE[$r['status']] ?? 'badge',
+            'group' => self::statusGroup($r['status']),
+            'current_stage_id' => $r['current_stage_id'],
+            'current_stage_name' => $cur['name'] ?? '대기중',
+            'current_stage_color' => $cur['color'] ?? '#64748b',
+            'all_done' => $r['all_done'],
+            'summary' => $this->boardSummaryFor($type),
+        ]);
+    }
 
-        $toStage = Db::one("SELECT * FROM process_stages WHERE id = :id", [':id' => $toStageId]);
-        if (!$toStage) {
-            Response::error('대상 공정 단계를 찾을 수 없습니다.', 400);
-        }
-
-        // R8-A: 대상 스테이지가 프로젝트 공사 유형 집합(유형+공통, 활성)에 속해야 이동 가능
-        $projType = Stages::normalizeConstructionType($project['construction_type'] ?? null);
-        $typeOk = Db::val(
-            "SELECT 1 FROM process_stages
-             WHERE id = :id AND (process_type = :t OR process_type = 'common') AND is_active = 1",
-            [':id' => $toStageId, ':t' => $projType]
-        );
-        if ($typeOk === null) {
-            Response::error('다른 공사 유형의 공정입니다.', 422);
-        }
-
-        $fromStageId = $project['process_stage_id'] ? (int) $project['process_stage_id'] : null;
-        if ($fromStageId === $toStageId) {
-            Response::json([
-                'project_id'    => $projectId,
-                'from_stage_id' => $fromStageId,
-                'to_stage_id'   => $toStageId,
-                'moved'         => false,
-                'progress'      => (int) $project['progress'],
-            ]);
-        }
-        $fromStage = $fromStageId ? Db::one("SELECT * FROM process_stages WHERE id = :id", [':id' => $fromStageId]) : null;
-
-        // R11: 위치 번호(유형별 1..N, 대기중 0) 단일 출처 — sort_order 원값(구멍·오프셋) 사용 금지.
-        $positions = Stages::processStagePositions($projType);
-        $toPos = $positions['pos'][$toStageId] ?? 0;
-
-        $skipWarn = false;
-        if ($fromStage) {
-            $fromPos = $positions['pos'][$fromStageId] ?? 0;
-            if ($toPos - $fromPos >= 2) {
-                $skipWarn = true;
-            }
-            // 마무리(finish)·하자보수(defect) 그룹 → 전체완료는 권장 직행 흐름 — 건너뜀 경고 제외(그룹 기준, R11)
-            if ($toStage['stage_key'] === 'full_complete'
-                && in_array($fromStage['stage_group'] ?? '', ['finish', 'defect'], true)) {
-                $skipWarn = false;
+    /** R14: 전 공정 100% 확인 후 완료 확정 — 서버 재검증. */
+    public function completeConfirm(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0));
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $stages = ProcessService::gaugeStages($type);
+        foreach ($stages as $st) {
+            $v = (int) (Db::val("SELECT pct FROM project_stage_progress WHERE project_id = :p AND stage_id = :s",
+                [':p' => (int) $project['id'], ':s' => (int) $st['id']]) ?? 0);
+            if ($v < 100) {
+                Response::error('아직 100%가 아닌 공정이 있어 완료 처리할 수 없습니다: ' . $st['name'], 422);
             }
         }
+        if (!in_array($project['status'], ['completed', 'settled'], true)) {
+            Db::transaction(function () use ($project) {
+                StatusService::applyProjectStatus($project, 'completed', ['reason' => '공정 게이지 전체 100% 완료 확인']);
+            });
+        }
+        Response::json(['status' => 'completed', 'status_label' => StatusService::PROJECT_LABELS['completed'],
+            'badge_class' => StatusService::PROJECT_BADGE['completed'], 'group' => 'done',
+            'summary' => $this->boardSummaryFor($type)]);
+    }
 
-        // 진행률 자동 산정 = 위치 번호 ÷ 실공정 수(대기중 0%) — 유형별 독립, 새 공정 추가 시 자동 반영.
-        $progress = max(0, min(100, (int) round($toPos / $positions['total'] * 100)));
-
-        // 공정 이동은 반드시 ProcessService 경유(직접 UPDATE 금지) — 수동 이동 is_auto=0,
-        // process_entered_at 갱신으로 재진입 카드가 컬럼 최상단에 온다.
-        // T8 상태=공정 연동: 공정 시작(preparing·paused → 실공정 이동) → '진행 중',
-        // 종결(full_complete) → '완료', 하자보수(warranty_repair) → '하자보수' 자동 전환
-        // (StatusService::boardStatusFor 단일 출처).
-        // R11: 완료·정산 카드를 실공정(하자보수·전체완료 제외)으로 되돌리면 '진행 중'으로
-        // 자동 재개(잠금 제거 — 이력·사유 기록).
-        Db::transaction(function () use ($projectId, $toStageId, $reason, $progress, $toStage, $project) {
-            ProcessService::moveStage($projectId, $toStageId, Auth::id(), $reason, false);
-            Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
-            // R13: 보드 이동 → 상태 동기화(규칙 단일 출처 StatusService::boardStatusFor).
-            $target = StatusService::boardStatusFor($toStage['stage_key'], $project['status']);
-            if ($target !== null && $target !== $project['status']) {
-                $reasonMap = [
-                    'completed'   => '공정 보드 종결(전체완료) 자동 완료',
-                    'warranty'    => '공정 보드 하자보수 이동 자동 전환',
-                    'in_progress' => '공정 시작(보드 이동) 자동 전환',
-                ];
-                StatusService::applyProjectStatus($project, $target, ['reason' => $reasonMap[$target] ?? '보드 이동 자동 전환']);
-            } elseif ($toStage['stage_key'] !== 'full_complete'
-                && $toStage['stage_key'] !== 'warranty_repair'
-                && in_array($project['status'], ['completed', 'settled'], true)) {
-                // 종결/하자 외 실공정으로 되돌림 → 재개
-                StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 보드 이동 재개(종결 해제)']);
+    /** R14: 하자보수 전환/해제(해제=완료 복귀) — 카드 버튼. */
+    public function warrantySet(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0));
+        $on = Util::postStr('action', 'set') !== 'clear';
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        Db::transaction(function () use ($project, $on) {
+            if ($on && $project['status'] !== 'warranty') {
+                StatusService::applyProjectStatus($project, 'warranty', ['reason' => '보드 하자보수 전환(버튼)']);
+                $wr = ProcessService::stageIdByKey('warranty_repair');
+                if ($wr !== null) {
+                    ProcessService::moveStage((int) $project['id'], $wr, Auth::id(), '하자보수 전환 보드 이동', true);
+                }
+            } elseif (!$on && $project['status'] === 'warranty') {
+                StatusService::applyProjectStatus($project, 'completed', ['reason' => '하자보수 종료(완료 복귀)']);
             }
         });
+        $status = $on ? 'warranty' : 'completed';
+        Response::json(['status' => $status, 'status_label' => StatusService::PROJECT_LABELS[$status],
+            'badge_class' => StatusService::PROJECT_BADGE[$status], 'group' => self::statusGroup($status),
+            'summary' => $this->boardSummaryFor($type)]);
+    }
 
-        Audit::log('process_move', 'project', $projectId,
-            ['from_stage_id' => $fromStageId],
-            ['to_stage_id' => $toStageId, 'reason' => $reason, 'progress' => $progress]);
+    /** R14: 카드 메모 목록(일자 내림차순, 최근 50). */
+    public function memoList(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0) ?: (int) ($_GET['project_id'] ?? 0));
+        $rows = Db::all(
+            "SELECT m.id, m.memo_date, m.content, m.created_at, u.name AS user_name
+             FROM project_memos m LEFT JOIN users u ON u.id = m.created_by
+             WHERE m.project_id = :p ORDER BY m.memo_date DESC, m.id DESC LIMIT 50",
+            [':p' => (int) $project['id']]
+        );
+        Response::json(['memos' => $rows, 'count' => count($rows)]);
+    }
 
-        // R10: 이동 직후 화면 동기화 — 최신 상태·상단 요약을 응답에 포함(클라이언트가 서버 값으로 재동기화)
-        $after = Db::one('SELECT status FROM projects WHERE id = :id', [':id' => $projectId]);
-        $viewType = Stages::normalizeConstructionType(Util::postStr('board_type', '') ?: $projType);
+    /** R14: 카드 메모 등록. */
+    public function memoSave(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0));
+        $date = Util::dateOrNull(Util::postStr('memo_date')) ?? date('Y-m-d');
+        $content = trim(mb_substr(Util::postStr('content', ''), 0, 1000));
+        if ($content === '') {
+            Response::error('메모 내용을 입력하세요.', 422);
+        }
+        $id = Db::insert('project_memos', ['project_id' => (int) $project['id'], 'memo_date' => $date,
+            'content' => $content, 'created_by' => Auth::id() ?: null]);
+        Audit::log('project_memo_create', 'project_memos', $id, null, ['memo_date' => $date, 'content' => $content]);
+        Response::json(['id' => $id]);
+    }
 
-        Response::json([
-            'project_id'       => $projectId,
-            'from_stage_id'    => $fromStageId,
-            'to_stage_id'      => $toStageId,
-            'moved'            => true,
-            'progress'         => $progress,
-            'entered_at'       => date('Y-m-d H:i'),
-            'skip_warn'        => $skipWarn,
-            'status'           => $after['status'] ?? $project['status'],
-            'is_done'          => in_array($after['status'] ?? '', self::BOARD_DONE_STATUSES, true),
-            'summary'          => $this->boardSummaryFor($viewType),
-        ]);
+    /** R14: 카드 메모 삭제(물리 — 경량 메모, 감사 로그 보존). */
+    public function memoDelete(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        $memo = Db::one("SELECT * FROM project_memos WHERE id = :id", [':id' => $id]);
+        if (!$memo) {
+            Response::error('메모를 찾을 수 없습니다.', 404);
+        }
+        $this->guardBoardProject((int) $memo['project_id']);
+        Db::run("DELETE FROM project_memos WHERE id = :id", [':id' => $id]);
+        Audit::log('project_memo_delete', 'project_memos', $id, $memo, null);
+        Response::json(['id' => $id]);
     }
 
     /**

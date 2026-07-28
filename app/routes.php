@@ -84,7 +84,12 @@ return [
 
     // ── 공정 보드 (T6) ──
     'process.board'     => ['ProcessController', 'board'],
-    'process.move'      => ['ProcessController', 'move',   'perm' => 'process.move', 'method' => 'POST'],
+    'process.progress.set'    => ['ProcessController', 'progressSet', 'perm' => 'process.move', 'method' => 'POST'],
+    'process.complete.confirm'=> ['ProcessController', 'completeConfirm', 'perm' => 'process.move', 'method' => 'POST'],
+    'process.warranty.set'    => ['ProcessController', 'warrantySet', 'perm' => 'process.move', 'method' => 'POST'],
+    'process.memo.list'       => ['ProcessController', 'memoList'],
+    'process.memo.save'       => ['ProcessController', 'memoSave', 'perm' => 'process.move', 'method' => 'POST'],
+    'process.memo.delete'     => ['ProcessController', 'memoDelete', 'perm' => 'process.move', 'method' => 'POST'],
     'process.history'   => ['ProcessController', 'history'],
     'process.history.update' => ['ProcessController', 'historyUpdate', 'perm' => 'process.move', 'method' => 'POST'],
     // 하자보수 CRUD (R4 T3 — warranty_repairs, 사진은 project_files entity_type='warranty_repair' 재사용)

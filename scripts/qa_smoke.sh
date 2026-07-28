@@ -59,7 +59,7 @@ check "guest customers.index" 302 "$(code -c "$JNONE" "$B?r=customers.index")"
 
 echo "== CSRF 없는 POST(419 기대) =="
 check "no-csrf customers.save" 419 "$(code -b "$JADMIN" -H 'X-Requested-With: XMLHttpRequest' -d 'x=1' "$B?r=customers.save")"
-check "no-csrf process.move"   419 "$(code -b "$JADMIN" -H 'X-Requested-With: XMLHttpRequest' -d 'x=1' "$B?r=process.move")"
+check "no-csrf process.progress.set" 419 "$(code -b "$JADMIN" -H 'X-Requested-With: XMLHttpRequest' -d 'x=1' "$B?r=process.progress.set")"
 
 echo "== 잘못된 라우트(404 기대) =="
 check "bad route" 404 "$(code -b "$JADMIN" "$B?r=nonexistent.route")"
