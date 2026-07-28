@@ -55,6 +55,9 @@ return [
     'quotes.save'       => ['QuotesController', 'save',   'perm' => 'quote.manage', 'method' => 'POST'],
     'quotes.print'      => ['QuotesController', 'printView', 'perm' => 'quote.view'],
     'quotes.delete'     => ['QuotesController', 'delete', 'perm' => 'quote.manage', 'method' => 'POST'],
+    // R15: 휴지통 복원·완전삭제(완전삭제는 컨트롤러에서 super_admin 403 추가 가드)
+    'quotes.restore'    => ['QuotesController', 'restore', 'perm' => 'quote.manage', 'method' => 'POST'],
+    'quotes.purge'      => ['QuotesController', 'purge',   'perm' => 'quote.manage', 'method' => 'POST'],
 
     // ── 계약 (T5) ──
     'contracts.index'   => ['ContractsController', 'index',  'perm' => 'contract.view'],
@@ -64,6 +67,10 @@ return [
     'contracts.save'    => ['ContractsController', 'save',   'perm' => 'contract.manage', 'method' => 'POST'],
     'contracts.toproject'=> ['ContractsController', 'toProject', 'perm' => 'project.manage', 'method' => 'POST'],
     'contracts.terminate'=> ['ContractsController', 'terminate', 'perm' => 'contract.manage', 'method' => 'POST'],
+    // R15: 소프트삭제 + 휴지통 복원·완전삭제(완전삭제는 컨트롤러에서 super_admin 403 추가 가드)
+    'contracts.delete'  => ['ContractsController', 'delete',  'perm' => 'contract.manage', 'method' => 'POST'],
+    'contracts.restore' => ['ContractsController', 'restore', 'perm' => 'contract.manage', 'method' => 'POST'],
+    'contracts.purge'   => ['ContractsController', 'purge',   'perm' => 'contract.manage', 'method' => 'POST'],
     'payments.save'     => ['ContractsController', 'savePayment', 'perm' => 'payment.manage', 'method' => 'POST'],
     'payments.delete'   => ['ContractsController', 'deletePayment', 'perm' => 'payment.manage', 'method' => 'POST'],
 
@@ -73,6 +80,9 @@ return [
     'projects.form'     => ['ProjectsController', 'form',   'perm' => 'project.manage'],
     'projects.save'     => ['ProjectsController', 'save',   'perm' => 'project.manage', 'method' => 'POST'],
     'projects.delete'   => ['ProjectsController', 'delete', 'perm' => 'project.manage', 'method' => 'POST'],
+    // R15: 휴지통 복원·완전삭제(완전삭제는 컨트롤러에서 super_admin 403 추가 가드)
+    'projects.restore'  => ['ProjectsController', 'restore', 'perm' => 'project.manage', 'method' => 'POST'],
+    'projects.purge'    => ['ProjectsController', 'purge',   'perm' => 'project.manage', 'method' => 'POST'],
     'projects.transition'=> ['ProjectsController', 'transition', 'perm' => 'project.manage', 'method' => 'POST'],
     'projects.upload'   => ['ProjectsController', 'upload', 'method' => 'POST'],
     'files.download'    => ['ProjectsController', 'download'],

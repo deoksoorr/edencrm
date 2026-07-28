@@ -381,7 +381,71 @@ class QuotesController
         if (Response::wantsJson()) {
             Response::json(['id' => $id]);
         }
-        Response::redirect('quotes.index', [], '견적이 삭제되었습니다.');
+        Response::redirect('quotes.index', [], '견적이 휴지통으로 이동되었습니다.');
+    }
+
+    /** 완전삭제 차단 사유(연결 계약 존재 시, 삭제분 포함 — FK RESTRICT 기준). 없으면 null. */
+    public static function purgeBlockReason(int $quoteId): ?string
+    {
+        $n = (int) Db::val("SELECT COUNT(*) FROM contracts WHERE quote_id = :id", [':id' => $quoteId]);
+        return $n > 0 ? "연결된 기록(계약 {$n}건)이 있어 완전삭제할 수 없습니다. 기록 보존을 위해 휴지통에 유지하세요." : null;
+    }
+
+    /**
+     * 견적 완전삭제 실행(정적, 테스트/액션 공용) — quote_items → quote_versions → quotes 순 물리 삭제.
+     * 이미 트랜잭션 안이면 그대로 참여(중첩 begin 금지 — ContractProjectService::withTransaction 패턴).
+     */
+    public static function purgeQuote(int $id): void
+    {
+        $run = function () use ($id) {
+            Db::run(
+                "DELETE FROM quote_items WHERE quote_version_id IN (SELECT id FROM quote_versions WHERE quote_id = :id)",
+                [':id' => $id]
+            );
+            Db::run("DELETE FROM quote_versions WHERE quote_id = :id", [':id' => $id]);
+            Db::run("DELETE FROM quotes WHERE id = :id", [':id' => $id]);
+        };
+        if (Db::pdo()->inTransaction()) {
+            $run();
+        } else {
+            Db::transaction($run);
+        }
+    }
+
+    /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 견적만. */
+    public function purge(): void
+    {
+        if (!Rbac::isRole('super_admin')) {
+            Audit::log('access_denied', 'quotes', null, null, ['action' => 'quote_purge']);
+            http_response_code(403);
+            View::renderError(403, '접근 권한 없음', '완전삭제는 최고 관리자만 가능합니다.');
+            return;
+        }
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM quotes WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('quotes.index', ['trash' => 1], '휴지통에 있는 견적만 완전삭제할 수 있습니다.', 'error');
+        }
+        $reason = self::purgeBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('quotes.index', ['trash' => 1], $reason, 'error');
+        }
+        self::purgeQuote($id);
+        Audit::log('quote_purge', 'quotes', $id, $row, null);
+        Response::redirect('quotes.index', ['trash' => 1], '완전삭제되었습니다.');
+    }
+
+    /** 복원(휴지통 → 정상). */
+    public function restore(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM quotes WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('quotes.index', ['trash' => 1], '휴지통에 있는 견적만 복원할 수 있습니다.', 'error');
+        }
+        Db::update('quotes', ['deleted_at' => null], 'id = :id', [':id' => $id]);
+        Audit::log('quote_restore', 'quotes', $id, $row, null);
+        Response::redirect('quotes.index', ['trash' => 1], '견적이 복원되었습니다.');
     }
 
     /** 고객별 영업기회 목록 AJAX(GET) — 견적 폼의 고객 변경 시 서버 쿼리로 재조회(프론트 필터링 금지). */

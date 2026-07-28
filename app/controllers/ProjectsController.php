@@ -766,7 +766,82 @@ class ProjectsController
         }
         Db::update('projects', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
         Audit::log('project_delete', 'project', $id, $before, null);
-        Response::redirect('projects.index', [], '삭제되었습니다.');
+        Response::redirect('projects.index', [], '프로젝트가 휴지통으로 이동되었습니다.');
+    }
+
+    /** 완전삭제 차단 사유(참조 존재 시) — RESTRICT 부모 나열. 없으면 null. */
+    public static function purgeBlockReason(int $projectId): ?string
+    {
+        $refs = [];
+        foreach ([
+            ['payments', 'project_id', '입금'], ['costs', 'project_id', '비용'],
+            ['site_bonuses', 'project_id', '보너스'], ['project_files', 'project_id', '파일'],
+            ['schedules', 'project_id', '일정'], ['work_logs', 'project_id', '작업일지'],
+            ['project_assignments', 'project_id', '직원 배정'],
+        ] as [$t, $col, $label]) {
+            $n = (int) Db::val("SELECT COUNT(*) FROM `$t` WHERE `$col` = :id", [':id' => $projectId]);
+            if ($n > 0) { $refs[] = "{$label} {$n}건"; }
+        }
+        return $refs ? ('연결된 기록(' . implode(', ', $refs) . ')이 있어 완전삭제할 수 없습니다. 기록 보존을 위해 휴지통에 유지하세요.') : null;
+    }
+
+    /**
+     * 복원 차단 사유 — 계약 연결(contract_id) 프로젝트인데 동일 계약에 이미 live 프로젝트가 있으면 차단.
+     * projects.contract_id 는 UNIQUE(uq_projects_contract) 제약이라 정상 흐름에서는 이 상태가
+     * 생기지 않지만(ContractProjectService 가 소프트삭제 점유 시 자동생성을 거부), 방어적으로 유지한다.
+     * 없으면 null.
+     */
+    public static function restoreBlockReason(int $projectId): ?string
+    {
+        $row = Db::one("SELECT contract_id FROM projects WHERE id = :id", [':id' => $projectId]);
+        if (!$row || $row['contract_id'] === null) {
+            return null;
+        }
+        $other = Db::val(
+            "SELECT id FROM projects WHERE contract_id = :cid AND deleted_at IS NULL AND id <> :id LIMIT 1",
+            [':cid' => $row['contract_id'], ':id' => $projectId]
+        );
+        return $other !== null ? '동일 계약에 이미 진행 중인 프로젝트가 있어 복원할 수 없습니다. 관리자에게 문의하세요.' : null;
+    }
+
+    /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 프로젝트만. */
+    public function purge(): void
+    {
+        if (!Rbac::isRole('super_admin')) {
+            Audit::log('access_denied', 'project', null, null, ['action' => 'project_purge']);
+            http_response_code(403);
+            View::renderError(403, '접근 권한 없음', '완전삭제는 최고 관리자만 가능합니다.');
+            return;
+        }
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('projects.index', ['trash' => 1], '휴지통에 있는 프로젝트만 완전삭제할 수 있습니다.', 'error');
+        }
+        $reason = self::purgeBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('projects.index', ['trash' => 1], $reason, 'error');
+        }
+        Db::run("DELETE FROM projects WHERE id = :id", [':id' => $id]); // 이력·게이지·메모는 FK CASCADE
+        Audit::log('project_purge', 'project', $id, $row, null);
+        Response::redirect('projects.index', ['trash' => 1], '완전삭제되었습니다.');
+    }
+
+    /** 복원(휴지통 → 정상). */
+    public function restore(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM projects WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('projects.index', ['trash' => 1], '휴지통에 있는 프로젝트만 복원할 수 있습니다.', 'error');
+        }
+        $reason = self::restoreBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('projects.index', ['trash' => 1], $reason, 'error');
+        }
+        Db::update('projects', ['deleted_at' => null], 'id = :id', [':id' => $id]);
+        Audit::log('project_restore', 'project', $id, $row, null);
+        Response::redirect('projects.index', ['trash' => 1], '프로젝트가 복원되었습니다.');
     }
 
     /** 파일 업로드(문서/현장사진) — 로그인만 필요, IDOR 은 Scope 로 직접 가드. */

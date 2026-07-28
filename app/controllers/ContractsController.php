@@ -890,6 +890,81 @@ class ContractsController
             $result['created'] ? '프로젝트로 전환되었습니다.' : '연결된 프로젝트가 이미 존재합니다.');
     }
 
+    /** 소프트삭제 차단 사유(프로젝트로 전환된 계약) — 없으면 null. */
+    public static function deleteBlockReason(int $contractId): ?string
+    {
+        $pid = Db::val("SELECT id FROM projects WHERE contract_id = :c AND deleted_at IS NULL LIMIT 1", [':c' => $contractId]);
+        return $pid !== null ? '프로젝트로 전환된 계약입니다. 먼저 해당 프로젝트를 삭제(휴지통)하세요.' : null;
+    }
+
+    /** 소프트 삭제(휴지통) — 프로젝트로 전환된 계약은 차단(견적 delete 패턴 준용). */
+    public function delete(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        $contract = Db::one("SELECT * FROM contracts WHERE id = :id AND deleted_at IS NULL", [':id' => $id]);
+        if (!$contract) {
+            Response::redirect('contracts.index', [], '계약을 찾을 수 없습니다.', 'error');
+        }
+        $reason = self::deleteBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('contracts.show', ['id' => $id], $reason, 'error');
+        }
+        Db::update('contracts', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
+        Audit::log('contract_delete', 'contracts', $id, $contract, null);
+        Response::redirect('contracts.index', [], '계약이 휴지통으로 이동되었습니다.');
+    }
+
+    /** 완전삭제 차단 사유(참조 존재 시, 삭제분 포함 — FK RESTRICT 기준). 없으면 null. */
+    public static function purgeBlockReason(int $contractId): ?string
+    {
+        $refs = [];
+        foreach ([
+            ['payments', 'contract_id', '입금'],
+            ['projects', 'contract_id', '프로젝트'],
+            ['contract_terminations', 'contract_id', '파기 이력'],
+        ] as [$t, $col, $label]) {
+            $n = (int) Db::val("SELECT COUNT(*) FROM `$t` WHERE `$col` = :id", [':id' => $contractId]);
+            if ($n > 0) { $refs[] = "{$label} {$n}건"; }
+        }
+        return $refs ? ('연결된 기록(' . implode(', ', $refs) . ')이 있어 완전삭제할 수 없습니다. 기록 보존을 위해 휴지통에 유지하세요.') : null;
+    }
+
+    /** 완전삭제(super_admin 전용) — 휴지통(deleted_at IS NOT NULL)에 있는 계약만. */
+    public function purge(): void
+    {
+        if (!Rbac::isRole('super_admin')) {
+            Audit::log('access_denied', 'contracts', null, null, ['action' => 'contract_purge']);
+            http_response_code(403);
+            View::renderError(403, '접근 권한 없음', '완전삭제는 최고 관리자만 가능합니다.');
+            return;
+        }
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM contracts WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('contracts.index', ['trash' => 1], '휴지통에 있는 계약만 완전삭제할 수 있습니다.', 'error');
+        }
+        $reason = self::purgeBlockReason($id);
+        if ($reason !== null) {
+            Response::redirect('contracts.index', ['trash' => 1], $reason, 'error');
+        }
+        Db::run("DELETE FROM contracts WHERE id = :id", [':id' => $id]); // 상태 이력(contract_status_history)은 FK CASCADE
+        Audit::log('contract_purge', 'contracts', $id, $row, null);
+        Response::redirect('contracts.index', ['trash' => 1], '완전삭제되었습니다.');
+    }
+
+    /** 복원(휴지통 → 정상). */
+    public function restore(): void
+    {
+        $id = (int) Util::postInt('id', 0);
+        $row = Db::one("SELECT * FROM contracts WHERE id = :id AND deleted_at IS NOT NULL", [':id' => $id]);
+        if (!$row) {
+            Response::redirect('contracts.index', ['trash' => 1], '휴지통에 있는 계약만 복원할 수 있습니다.', 'error');
+        }
+        Db::update('contracts', ['deleted_at' => null], 'id = :id', [':id' => $id]);
+        Audit::log('contract_restore', 'contracts', $id, $row, null);
+        Response::redirect('contracts.index', ['trash' => 1], '계약이 복원되었습니다.');
+    }
+
     public function savePayment(): void
     {
         $id = Util::postInt('id', 0);
