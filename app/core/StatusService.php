@@ -136,6 +136,26 @@ class StatusService
         return in_array($to, self::PROJECT_TRANSITIONS[$from] ?? [], true);
     }
 
+    /**
+     * R13: 공정 보드 이동 시 프로젝트 상태 목표 결정. null=상태 전환 없음.
+     * 규칙: 전체완료→completed / 하자보수→warranty / (대기중·전체완료 외 실공정)+preparing|paused→in_progress.
+     * 완료·정산에서 실공정으로 되돌리는 '재개'는 호출부(ProcessController)에서 별도 처리.
+     */
+    public static function boardStatusFor(string $toStageKey, string $currentStatus): ?string
+    {
+        if ($toStageKey === 'full_complete') {
+            return in_array($currentStatus, ['completed', 'settled'], true) ? null : 'completed';
+        }
+        if ($toStageKey === 'warranty_repair') {
+            return $currentStatus === 'warranty' ? null : 'warranty';
+        }
+        if ($toStageKey !== ProcessService::WAITING_KEY
+            && in_array($currentStatus, ['preparing', 'paused'], true)) {
+            return 'in_progress';
+        }
+        return null;
+    }
+
     public static function reasonRequired(string $from, string $to): bool
     {
         return in_array($from . '>' . $to, self::REASON_REQUIRED, true);

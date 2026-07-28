@@ -88,6 +88,17 @@ try {
     t_true('완료 상태', $after['status'] === 'completed');
     t_int('완료 → 공정 전체완료 자동 이동', $fc, (int) $after['process_stage_id']);
 
+    // ── Task 7: 하자보수 드래그 자동전환 + paused→in_progress 보강 ──
+    $wrId = ProcessService::stageIdByKey('warranty_repair');
+    $prep = ProcessService::stageIdByKey('prep'); // 착공준비(도장)
+    t_true("stageIdByKey('warranty_repair') 존재", $wrId !== null);
+    // 이 테스트는 컨트롤러 트랜잭션 로직을 직접 부르기 어려우므로, 규칙 함수화한 StatusService 헬퍼로 검증한다(Step 3에서 도입).
+    t_true('완료→하자보수 매핑 규칙', StatusService::boardStatusFor('warranty_repair', 'completed') === 'warranty');
+    t_true('대기중 외 실공정 이동 + preparing → in_progress', StatusService::boardStatusFor('prep', 'preparing') === 'in_progress');
+    t_true('paused → 실공정 이동 시 in_progress', StatusService::boardStatusFor('prep', 'paused') === 'in_progress');
+    t_true('전체완료 이동 → completed', StatusService::boardStatusFor('full_complete', 'in_progress') === 'completed');
+    t_null('대기중 이동은 상태전환 없음', StatusService::boardStatusFor('waiting', 'preparing'));
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

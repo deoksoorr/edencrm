@@ -228,19 +228,20 @@ class ProcessController
         Db::transaction(function () use ($projectId, $toStageId, $reason, $progress, $toStage, $project) {
             ProcessService::moveStage($projectId, $toStageId, Auth::id(), $reason, false);
             Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
-            if ($toStage['stage_key'] === 'full_complete'
-                && !in_array($project['status'], ['completed', 'settled'], true)) {
-                StatusService::applyProjectStatus($project, 'completed',
-                    ['reason' => '공정 보드 종결(전체완료) 자동 완료']);
+            // R13: 보드 이동 → 상태 동기화(규칙 단일 출처 StatusService::boardStatusFor).
+            $target = StatusService::boardStatusFor($toStage['stage_key'], $project['status']);
+            if ($target !== null && $target !== $project['status']) {
+                $reasonMap = [
+                    'completed'   => '공정 보드 종결(전체완료) 자동 완료',
+                    'warranty'    => '공정 보드 하자보수 이동 자동 전환',
+                    'in_progress' => '공정 시작(보드 이동) 자동 전환',
+                ];
+                StatusService::applyProjectStatus($project, $target, ['reason' => $reasonMap[$target] ?? '보드 이동 자동 전환']);
             } elseif ($toStage['stage_key'] !== 'full_complete'
+                && $toStage['stage_key'] !== 'warranty_repair'
                 && in_array($project['status'], ['completed', 'settled'], true)) {
-                StatusService::applyProjectStatus($project, 'in_progress',
-                    ['reason' => '공정 보드 이동 재개(종결 해제)']);
-            } elseif ($toStage['stage_key'] !== ProcessService::WAITING_KEY
-                && $toStage['stage_key'] !== 'full_complete'
-                && $project['status'] === 'preparing') {
-                StatusService::applyProjectStatus($project, 'in_progress',
-                    ['reason' => '공정 시작(보드 이동) 자동 전환']);
+                // 종결/하자 외 실공정으로 되돌림 → 재개
+                StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '공정 보드 이동 재개(종결 해제)']);
             }
         });
 
