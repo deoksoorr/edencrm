@@ -160,7 +160,23 @@
         m.textContent = total && done === total ? '전 공정 완료' : '작업 전';
         box.appendChild(m);
       }
+      updateGroupSums(card);
     }
+
+    // R14-6: 공정그룹(착공준비/시공/마무리) 제목 옆 평균 % 표시
+    function updateGroupSums(card) {
+      card.querySelectorAll('.gc-ggroup').forEach(function (det) {
+        var span = det.querySelector('[data-ggroup-sum]');
+        if (!span) return;
+        var sum = 0, cnt = 0;
+        det.querySelectorAll('.gc-slider').forEach(function (sl) {
+          sum += parseInt(sl.value, 10) || 0;
+          cnt++;
+        });
+        span.textContent = cnt ? Math.round(sum / cnt) + '%' : '';
+      });
+    }
+    boardEl.querySelectorAll('.gauge-card').forEach(updateGroupSums); // 초기 표시
 
     // ── R14-4: 상태 그룹 간 드래그 이동(핸들 방식 — 슬라이더·버튼과 충돌 없음) ──
     boardEl.querySelectorAll('.gc-drag').forEach(function (handle) {

@@ -106,6 +106,19 @@ try {
     $map = AccountingService::salesPaidByUser(date('Y-m-01'), date('Y-m-t'));
     t_int('담당영업 귀속 순입금(예외·환불 차감)', 1000000, $map[$su] ?? 0);
 
+    // ── R14-6 회귀: 완료(진행률 100 강제) 후 재개 동기화 → 게이지 평균·현재 공정 복원 ──
+    $rp = Db::insert('projects', ['project_no' => 'R14-R1', 'name' => 'R14재개복원', 'customer_id' => null,
+        'is_exception' => 1, 'customer_name_snapshot' => 'x', 'contract_amount' => 0,
+        'construction_type' => 'painting', 'status' => 'preparing',
+        'process_stage_id' => ProcessService::waitingStageId()]);
+    ProcessService::setStageProgress($rp, $first, 40, null);
+    $prow = Db::one("SELECT * FROM projects WHERE id=:id", [':id' => $rp]);
+    StatusService::applyProjectStatus($prow, 'completed', ['reason' => '회귀 완료']);
+    t_int('완료 시 progress=100(정책 유지)', 100, (int) Db::val("SELECT progress FROM projects WHERE id=:id", [':id' => $rp]));
+    ProcessService::syncStageFromGauges($rp, null);
+    t_int('재개 동기화 → progress 게이지 평균 복원', (int) round(40 / $n), (int) Db::val("SELECT progress FROM projects WHERE id=:id", [':id' => $rp]));
+    t_int('재개 동기화 → 현재 공정 복원', $first, (int) Db::val("SELECT process_stage_id FROM projects WHERE id=:id", [':id' => $rp]));
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

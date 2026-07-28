@@ -1094,3 +1094,20 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .memo-item .memo-date{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;margin-bottom:4px}
 .memo-item .memo-del{margin-left:auto}
 .memo-body{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+/* R14-6 게이지 카드 간격 통일·정돈 */
+.gauge-card{padding:14px}
+.gauge-card .pc-sub,.gauge-card .pc-meta{margin:3px 0;gap:10px}
+.gc-progress{margin-top:10px}
+.gc-working{margin:6px 0 10px}
+.gc-gauges{border-top:1px solid var(--line-2);margin-top:2px}
+.gc-ggroup summary{padding:9px 0 5px;font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px}
+.gc-ggroup summary .gc-gsum{margin-left:auto;font-weight:500;color:#64748b}
+.gc-ggroup{border-bottom:1px solid var(--line-2)}
+.gc-ggroup:last-child{border-bottom:0}
+.gc-row{padding:4px 0;gap:10px}
+.gc-name{flex:0 0 34%;color:#475569;font-size:12.5px}
+.gc-actions{margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2)}
+.gc-ggroup summary{list-style:none}
+.gc-ggroup summary::-webkit-details-marker{display:none}
+.gc-ggroup summary::before{content:'▸';color:#94a3b8;font-size:11px;transition:transform .15s}
+.gc-ggroup[open] summary::before{transform:rotate(90deg)}

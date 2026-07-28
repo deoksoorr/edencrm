@@ -272,11 +272,13 @@ class ProcessController
                 if ($wr !== null) {
                     ProcessService::moveStage($pid, $wr, Auth::id(), '하자보수 드래그 보드 이동', true);
                 }
+                ProcessService::recalcProgressFromGauges($pid); // 완료의 100 강제 잔존 방지
             } elseif ($group === 'waiting') {
                 if ($cur !== 'preparing') {
                     StatusService::applyProjectStatus($project, 'preparing', ['reason' => '보드 그룹 드래그 대기 복귀']);
                 }
                 ProcessService::moveStage($pid, ProcessService::waitingStageId(), Auth::id(), '대기중 드래그 보드 이동', true);
+                ProcessService::recalcProgressFromGauges($pid);
             } else { // active — 진행 재개 + 게이지 기준 현재 공정 재동기
                 if (!in_array($cur, ['in_progress', 'paused'], true)) {
                     StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '보드 그룹 드래그 진행 재개']);
@@ -284,11 +286,13 @@ class ProcessController
                 ProcessService::syncStageFromGauges($pid, Auth::id());
             }
         });
-        $status = (string) Db::val("SELECT status FROM projects WHERE id = :id", [':id' => (int) $project['id']]);
+        $row = Db::one("SELECT status, progress FROM projects WHERE id = :id", [':id' => (int) $project['id']]);
+        $status = (string) $row['status'];
         Response::json(['status' => $status,
             'status_label' => StatusService::PROJECT_LABELS[$status] ?? $status,
             'badge_class' => StatusService::PROJECT_BADGE[$status] ?? 'badge',
             'group' => self::statusGroup($status),
+            'progress' => (int) $row['progress'],
             'summary' => $this->boardSummaryFor($type)]);
     }
 

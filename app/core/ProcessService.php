@@ -88,7 +88,10 @@ class ProcessService
         return self::moveStage($projectId, self::waitingStageId(), $userId, '공사 유형 지정에 따른 보드 재배치', true);
     }
 
-    /** R14-4: 게이지 값으로 현재 공정 재파생(그룹 드래그 재개 등) — pct>0 최후방, 없으면 대기중. */
+    /**
+     * R14-4/6: 게이지 값으로 현재 공정·진행률 재파생(그룹 드래그 재개 등) — pct>0 최후방, 없으면 대기중.
+     * 완료 정책이 progress=100 을 강제하므로, 재개 시 반드시 게이지 평균으로 복원한다(100%/0% 불일치 방지).
+     */
     public static function syncStageFromGauges(int $projectId, ?int $userId): void
     {
         $project = Db::one("SELECT id, construction_type FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
@@ -107,6 +110,29 @@ class ProcessService
             }
         }
         self::moveStage($projectId, $target ?? self::waitingStageId(), $userId, '게이지 파생 공정 재동기', true);
+        self::recalcProgressFromGauges($projectId);
+    }
+
+    /** R14-6: projects.progress = 게이지 평균 재계산·저장(완료의 100 강제 해제 복원 등). @return int 평균 */
+    public static function recalcProgressFromGauges(int $projectId): int
+    {
+        $project = Db::one("SELECT id, construction_type FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
+        if (!$project) {
+            return 0;
+        }
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $ids = array_map(static fn($s) => (int) $s['id'], self::gaugeStages($type));
+        $pctMap = [];
+        foreach (Db::all("SELECT stage_id, pct FROM project_stage_progress WHERE project_id = :p", [':p' => $projectId]) as $r) {
+            $pctMap[(int) $r['stage_id']] = (int) $r['pct'];
+        }
+        $sum = 0;
+        foreach ($ids as $sid) {
+            $sum += $pctMap[$sid] ?? 0;
+        }
+        $progress = count($ids) ? (int) round($sum / count($ids)) : 0;
+        Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);
+        return $progress;
     }
 
     /** R14: 게이지 대상 실공정(유형·활성, 공통 예약 자동 제외 — common 은 process_type 불일치) 위치순. */
