@@ -8,7 +8,31 @@ class Nav
     /** [section => [ [route, label, perm(optional), icon] ... ] ] */
     public static function items(): array
     {
-        return [
+        // R16: 분석·관리 영역은 최고운영자 전용이다.
+        // 다만 반기 보너스·목표는 '본인 것'을 보는 화면이라 일반 직원에게도 남긴다
+        // (컨트롤러가 본인 스코프를 강제한다). 이때 '분석'·'관리' 라는 머리글 아래 두면
+        // 일반 직원에게 관리 영역이 있는 것처럼 보이므로, 중립 그룹 '내 정보'로 옮긴다.
+        $isSuper = Perm::isSuperAdmin();
+
+        $analytics = $isSuper
+            ? ['분석' => [
+                ['reports.index', '리포트', 'report.view', 'bar'], // R14-2: 리포트를 반기 위로(사장 지시)
+                ['halfyear.index', '반기 보너스 지급 현황', null, 'bar'],
+              ],
+              '관리' => [
+                ['staff.index', '직원 관리', 'staff.view', 'id'],
+                ['targets.index', '목표 관리', null, 'target'],
+                ['settings.index', '시스템 설정', 'settings.manage', 'settings'],
+                ['audit.index', '감사 로그', 'audit.view', 'shield'],
+              ]]
+            : ['내 정보' => array_values(array_filter([
+                // 리포트·손익(전사 열람)을 부여받은 직원에게만 노출
+                Rbac::can('report.view') ? ['reports.index', '리포트', 'report.view', 'bar'] : null,
+                ['halfyear.index', '내 보너스', null, 'bar'],
+                ['targets.index', '내 목표', null, 'target'],
+              ]))];
+
+        return array_merge([
             '' => [
                 ['home', '대시보드', null, 'grid'],
             ],
@@ -25,17 +49,7 @@ class Nav
                 ['schedule.index', '일정', 'schedule.view_all', 'calendar'],
                 Settings::enabled('feature_worklog') ? ['worklogs.index', '작업일지', 'worklog.view_all', 'book'] : null,
             ])),
-            '분석' => [
-                ['reports.index', '리포트', 'report.view', 'bar'], // R14-2: 리포트를 반기 위로(사장 지시)
-                ['halfyear.index', '반기 보너스 지급 현황', null, 'bar'],
-            ],
-            '관리' => [
-                ['staff.index', '직원 관리', 'staff.view', 'id'],
-                ['targets.index', '목표 관리', null, 'target'], // R9: 직원도 본인 공개 목표 열람(컨트롤러 스코프)
-                ['settings.index', '시스템 설정', 'settings.manage', 'settings'],
-                ['audit.index', '감사 로그', 'audit.view', 'shield'],
-            ],
-        ];
+        ], $analytics);
     }
 
     /** 현재 라우트가 속한 최상위 그룹 판단용. */
