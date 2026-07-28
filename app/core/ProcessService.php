@@ -88,6 +88,27 @@ class ProcessService
         return self::moveStage($projectId, self::waitingStageId(), $userId, '공사 유형 지정에 따른 보드 재배치', true);
     }
 
+    /** R14-4: 게이지 값으로 현재 공정 재파생(그룹 드래그 재개 등) — pct>0 최후방, 없으면 대기중. */
+    public static function syncStageFromGauges(int $projectId, ?int $userId): void
+    {
+        $project = Db::one("SELECT id, construction_type FROM projects WHERE id = :id AND deleted_at IS NULL", [':id' => $projectId]);
+        if (!$project) {
+            return;
+        }
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $pctMap = [];
+        foreach (Db::all("SELECT stage_id, pct FROM project_stage_progress WHERE project_id = :p", [':p' => $projectId]) as $r) {
+            $pctMap[(int) $r['stage_id']] = (int) $r['pct'];
+        }
+        $target = null;
+        foreach (self::gaugeStages($type) as $st) {
+            if (($pctMap[(int) $st['id']] ?? 0) > 0) {
+                $target = (int) $st['id'];
+            }
+        }
+        self::moveStage($projectId, $target ?? self::waitingStageId(), $userId, '게이지 파생 공정 재동기', true);
+    }
+
     /** R14: 게이지 대상 실공정(유형·활성, 공통 예약 자동 제외 — common 은 process_type 불일치) 위치순. */
     public static function gaugeStages(string $constructionType): array
     {

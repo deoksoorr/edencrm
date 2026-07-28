@@ -86,6 +86,7 @@ return [
     'process.progress.set'    => ['ProcessController', 'progressSet', 'perm' => 'process.move', 'method' => 'POST'],
     'process.complete.confirm'=> ['ProcessController', 'completeConfirm', 'perm' => 'process.move', 'method' => 'POST'],
     'process.warranty.set'    => ['ProcessController', 'warrantySet', 'perm' => 'process.move', 'method' => 'POST'],
+    'process.group.set'       => ['ProcessController', 'groupSet', 'perm' => 'process.move', 'method' => 'POST'],
     'process.memo.list'       => ['ProcessController', 'memoList'],
     'process.memo.save'       => ['ProcessController', 'memoSave', 'perm' => 'process.move', 'method' => 'POST'],
     'process.memo.delete'     => ['ProcessController', 'memoDelete', 'perm' => 'process.move', 'method' => 'POST'],

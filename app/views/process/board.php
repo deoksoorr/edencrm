@@ -113,6 +113,9 @@ foreach ($sgDefs as $gkey => $g) {
             <div class="kanban-card-photo"><img src="<?= e(url('files.download', ['id' => $photos[$pid]])) ?>" alt="" loading="lazy"></div>
           <?php endif; ?>
           <div class="gc-top">
+            <?php if ($canMove): /* R14-4: 그룹 드래그 손잡이 — 하자보수·종결 등 상태 그룹 간 이동(슬라이더 충돌 방지용 핸들 방식) */ ?>
+              <span class="gc-drag" draggable="true" title="드래그해서 대기중·진행 중·하자보수·종결 그룹으로 이동">⠿</span>
+            <?php endif; ?>
             <div class="pc-title"><a href="<?= e(url('projects.show', ['id' => $pid])) ?>"><?= e(Util::truncate($p['name'], 24)) ?></a></div>
             <?php if (($p['construction_type'] ?? null) === null): /* R8-A: 미지정 배지 — project.manage 보유 시 클릭해 유형 지정. R14: 유형에 따라 게이지 단계셋이 갈리므로 게이지 보드에서도 필수 */ ?>
               <?php if (!empty($canManage)): ?>

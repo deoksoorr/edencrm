@@ -242,6 +242,56 @@ class ProcessController
             'summary' => $this->boardSummaryFor($type)]);
     }
 
+    /**
+     * R14-4: 상태 그룹 드래그 이동(자유 이동 정책 — 사장 지시: 하자보수·종결은 드래그 작업).
+     * waiting→preparing+대기중 / active→in_progress 재개+게이지 파생 공정 / warranty→하자보수 컬럼 / done→완료(전체완료 자동).
+     */
+    public function groupSet(): void
+    {
+        $project = $this->guardBoardProject((int) Util::postInt('project_id', 0));
+        if (in_array($project['status'], ['cancelled', 'terminated'], true)) {
+            Response::error('취소·파기 프로젝트는 이동할 수 없습니다.', 422);
+        }
+        $group = Util::postStr('group', '');
+        if (!in_array($group, ['waiting', 'active', 'warranty', 'done'], true)) {
+            Response::error('잘못된 그룹입니다.', 422);
+        }
+        $type = Stages::normalizeConstructionType($project['construction_type'] ?? null);
+        $cur = (string) $project['status'];
+        Db::transaction(function () use ($project, $group, $cur) {
+            $pid = (int) $project['id'];
+            if ($group === 'done') {
+                if (!in_array($cur, ['completed', 'settled'], true)) {
+                    StatusService::applyProjectStatus($project, 'completed', ['reason' => '보드 그룹 드래그 종결']);
+                }
+            } elseif ($group === 'warranty') {
+                if ($cur !== 'warranty') {
+                    StatusService::applyProjectStatus($project, 'warranty', ['reason' => '보드 그룹 드래그 하자보수 전환']);
+                }
+                $wr = ProcessService::stageIdByKey('warranty_repair');
+                if ($wr !== null) {
+                    ProcessService::moveStage($pid, $wr, Auth::id(), '하자보수 드래그 보드 이동', true);
+                }
+            } elseif ($group === 'waiting') {
+                if ($cur !== 'preparing') {
+                    StatusService::applyProjectStatus($project, 'preparing', ['reason' => '보드 그룹 드래그 대기 복귀']);
+                }
+                ProcessService::moveStage($pid, ProcessService::waitingStageId(), Auth::id(), '대기중 드래그 보드 이동', true);
+            } else { // active — 진행 재개 + 게이지 기준 현재 공정 재동기
+                if (!in_array($cur, ['in_progress', 'paused'], true)) {
+                    StatusService::applyProjectStatus($project, 'in_progress', ['reason' => '보드 그룹 드래그 진행 재개']);
+                }
+                ProcessService::syncStageFromGauges($pid, Auth::id());
+            }
+        });
+        $status = (string) Db::val("SELECT status FROM projects WHERE id = :id", [':id' => (int) $project['id']]);
+        Response::json(['status' => $status,
+            'status_label' => StatusService::PROJECT_LABELS[$status] ?? $status,
+            'badge_class' => StatusService::PROJECT_BADGE[$status] ?? 'badge',
+            'group' => self::statusGroup($status),
+            'summary' => $this->boardSummaryFor($type)]);
+    }
+
     /** R14: 카드 메모 목록(일자 내림차순, 최근 50). */
     public function memoList(): void
     {

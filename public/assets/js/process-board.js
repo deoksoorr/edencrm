@@ -162,6 +162,36 @@
       }
     }
 
+    // ── R14-4: 상태 그룹 간 드래그 이동(핸들 방식 — 슬라이더·버튼과 충돌 없음) ──
+    boardEl.querySelectorAll('.gc-drag').forEach(function (handle) {
+      handle.addEventListener('dragstart', function (e) {
+        var card = handle.closest('.gauge-card');
+        if (!card) { e.preventDefault(); return; }
+        e.dataTransfer.setData('text/plain', card.dataset.projectId);
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
+      });
+      handle.addEventListener('dragend', function () {
+        var card = handle.closest('.gauge-card');
+        if (card) card.classList.remove('dragging');
+      });
+    });
+    boardEl.querySelectorAll('[data-group-cards]').forEach(function (zone) {
+      zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('drop-over'); });
+      zone.addEventListener('dragleave', function () { zone.classList.remove('drop-over'); });
+      zone.addEventListener('drop', async function (e) {
+        e.preventDefault();
+        zone.classList.remove('drop-over');
+        var pid = e.dataTransfer.getData('text/plain');
+        var card = boardEl.querySelector('.gauge-card[data-project-id="' + pid + '"]');
+        if (!card || card.parentElement === zone) return;
+        try {
+          var d = await api('process.group.set', { project_id: pid, group: zone.dataset.groupCards });
+          applyCardState(card, d); // 응답 그룹 기준으로 카드 이동·카운트·배지 동기
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    });
+
     // ── 하자보수 버튼 ──
     boardEl.querySelectorAll('.gc-warranty-btn').forEach(function (btn) {
       btn.addEventListener('click', async function () {
