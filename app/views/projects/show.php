@@ -100,6 +100,8 @@ $recentEvents = array_slice($recentEvents, 0, 5);
       <a href="<?= e(url('projects.index')) ?>" class="btn btn-outline">목록</a>
       <?php if ($canManage): ?>
         <?php foreach ($allowedTransitions as $to):
+          // R13: 진행 시작·하자보수 전환 버튼 제거 — 진행 시작/하자보수는 공정 보드 이동으로 자동 처리.
+          if (in_array($to, ['in_progress', 'warranty'], true)) { continue; }
           $tLabel = $fromToLabels[$p['status'] . '>' . $to] ?? $transitionLabels[$to] ?? ($statuses[$to] ?? $to);
           $tClass = in_array($to, ['cancelled', 'terminated'], true) ? 'btn-danger'
                   : (in_array($to, ['completed', 'settled', 'in_progress'], true) ? 'btn-primary' : 'btn-outline');
