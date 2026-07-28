@@ -221,9 +221,10 @@
       }).join('') || '<div class="empty-mini">메모 없음</div>';
       var form = canMove
         ? '<form class="form memo-form">' +
-          '<div class="memo-add"><input type="date" name="memo_date" class="input" value="' + today() + '">' +
-          '<textarea name="content" class="input" rows="2" maxlength="1000" placeholder="오늘 작업 내용"></textarea>' +
-          '<button type="submit" class="btn btn-sm btn-primary">등록</button></div></form>'
+          '<div class="memo-row"><span class="memo-lbl">작업일</span><input type="date" name="memo_date" class="input memo-date-input" value="' + today() + '"></div>' +
+          '<textarea name="content" class="input" rows="3" maxlength="1000" placeholder="오늘 작업 내용을 적어주세요 (예: 3층 1차 퍼티 완료, 자재 반입)"></textarea>' +
+          '<div class="memo-actions"><button type="submit" class="btn btn-primary">등록</button></div>' +
+          '</form>'
         : '';
       var body = form + '<div class="memo-list">' + items + '</div>';
       var m = EDEN.modal({ title: '작업 메모', body: body, footer: false });

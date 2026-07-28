@@ -1075,3 +1075,22 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .gc-drag:active{cursor:grabbing}
 .gauge-card.dragging{opacity:.5}
 .sg-cards.drop-over{outline:2px dashed #3b82f6;outline-offset:-4px;border-radius:8px;background:#eff6ff}
+/* R14-5 카드 상단(드래그 핸들)·메모 팝업 디자인 정리 */
+.gc-top{display:flex;align-items:center;gap:8px;justify-content:flex-start}
+.gc-top .pc-title{flex:1;min-width:0;margin-bottom:0}
+.gc-top .pc-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc-drag{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#94a3b8;font-size:16px;cursor:grab;user-select:none;touch-action:none}
+.gc-drag:hover{background:#eff6ff;border-color:#bfdbfe;color:#3b82f6}
+.gc-drag:active{cursor:grabbing}
+.gc-top .badge{flex:0 0 auto}
+.memo-form{display:flex;flex-direction:column;gap:8px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line-2)}
+.memo-row{display:flex;align-items:center;gap:8px}
+.memo-lbl{font-size:12.5px;color:var(--muted);flex:0 0 auto}
+.memo-date-input{width:170px}
+.memo-form textarea{resize:vertical}
+.memo-actions{display:flex;justify-content:flex-end}
+.memo-list{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto}
+.memo-item{border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:#fafbfc}
+.memo-item .memo-date{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;margin-bottom:4px}
+.memo-item .memo-del{margin-left:auto}
+.memo-body{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
