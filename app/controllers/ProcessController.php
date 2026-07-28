@@ -223,8 +223,11 @@ class ProcessController
 
         // 공정 이동은 반드시 ProcessService 경유(직접 UPDATE 금지) — 수동 이동 is_auto=0,
         // process_entered_at 갱신으로 재진입 카드가 컬럼 최상단에 온다.
-        // T8 상태=공정 연동: 공정 시작(대기중 이탈) → '진행 중', 종결(full_complete) → '완료' 자동 전환.
-        // R11: 완료·정산 카드를 실공정으로 되돌리면 '진행 중'으로 자동 재개(잠금 제거 — 이력·사유 기록).
+        // T8 상태=공정 연동: 공정 시작(preparing·paused → 실공정 이동) → '진행 중',
+        // 종결(full_complete) → '완료', 하자보수(warranty_repair) → '하자보수' 자동 전환
+        // (StatusService::boardStatusFor 단일 출처).
+        // R11: 완료·정산 카드를 실공정(하자보수·전체완료 제외)으로 되돌리면 '진행 중'으로
+        // 자동 재개(잠금 제거 — 이력·사유 기록).
         Db::transaction(function () use ($projectId, $toStageId, $reason, $progress, $toStage, $project) {
             ProcessService::moveStage($projectId, $toStageId, Auth::id(), $reason, false);
             Db::update('projects', ['progress' => $progress], 'id = :id', [':id' => $projectId]);

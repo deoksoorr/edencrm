@@ -77,7 +77,6 @@ class SettlementController
         }
         $method = Util::postStr('method', '');
         $method = array_key_exists($method, AccountingService::PAYMENT_METHODS) ? $method : null;
-        $payerName = Util::nullIfEmpty(mb_substr(Util::postStr('payer_name', ''), 0, 100));
         $memo = Util::nullIfEmpty(mb_substr(Util::postStr('memo', ''), 0, 255));
         $dueDate = Util::dateOrNull(Util::postStr('due_date'));
         $paidDate = Util::dateOrNull(Util::postStr('paid_date'));

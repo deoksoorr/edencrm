@@ -209,6 +209,9 @@ $payRowLabels = ['pending' => '대기', 'paid' => '입금완료', 'cancelled' =>
       (isRefund
         ? '<div class="field"><label class="field-label">유형</label><input type="text" class="input" value="환불" readonly><input type="hidden" name="pay_type" value="refund"></div>'
         : '<div class="field"><label class="field-label">유형 <span class="req">*</span></label><select name="pay_type" class="select" required>' +
+            ((pm.pay_type && ['down', 'middle', 'balance'].indexOf(pm.pay_type) === -1)
+              ? '<option value="' + esc(pm.pay_type) + '" selected>' + (pm.pay_type === 'etc' ? '기타' : esc(pm.pay_type)) + '</option>'
+              : '') +
             ['down', 'middle', 'balance'].map(function (k) {
               var lbl = { down: '계약금', middle: '중도금', balance: '잔금' }[k];
               return '<option value="' + k + '"' + (pm.pay_type === k ? ' selected' : '') + '>' + lbl + '</option>';
@@ -273,9 +276,8 @@ $payRowLabels = ['pending' => '대기', 'paid' => '입금완료', 'cancelled' =>
   });
 
   // ── 정산 상태 컨트롤 ──
-  var LABELS = { settle: '정산 완료 처리', hold: '정산 보류', refunding: '환불 진행', release: '자동 계산 복귀' };
+  var LABELS = { hold: '정산 보류', refunding: '환불 진행', release: '자동 계산 복귀' };
   var CONFIRMS = {
-    settle: '이 프로젝트를 정산 완료 처리하시겠습니까? 미수금 0원 + 대기 건 없음 조건을 서버가 다시 검증합니다.',
     hold: '정산 보류로 전환하시겠습니까? 자동 정산 계산이 중지됩니다.',
     refunding: '환불 진행 상태로 전환하시겠습니까?',
     release: '수동 정산 상태를 해제하고 입금 기준 자동 계산으로 되돌리시겠습니까?',
