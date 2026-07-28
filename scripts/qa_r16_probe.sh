@@ -148,10 +148,10 @@ chk "일반직원의 보너스 저장 차단" 403 "$(pcode "$JC" "$TC" bonus.sav
 
 echo
 echo "════════ CSRF · 세션 ════════"
-chkin "CSRF 토큰 없는 POST 거부" "403,419,400" \
+chkin "CSRF 토큰 없는 POST 거부" "403,400" \
   "$(curl -s -o /dev/null -w '%{http_code}' -b "$JC" -H 'X-Requested-With: XMLHttpRequest' \
      --data-urlencode "id=1" "$B?r=quotes.delete")"
-chkin "잘못된 CSRF 토큰 거부" "403,419,400" \
+chkin "잘못된 CSRF 토큰 거부" "403,400" \
   "$(pcode "$JC" "INVALID_TOKEN_VALUE" quotes.delete "id=1")"
 JX=$(mktemp)
 chkin "비로그인 휴지통 접근 차단" "302,403" "$(gcode "$JX" "quotes.index&trash=1")"
