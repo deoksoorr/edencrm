@@ -1,4 +1,8 @@
-<?php /** @var array|null $staff @var array $departments @var array $roles */ ?>
+<?php /**
+ * @var array|null $staff @var array $departments @var array $roles
+ * @var array $permResources @var array $permSections @var array $permCurrent
+ * @var bool  $permTargetIsSuper
+ */ ?>
 <div class="page page-narrow">
   <div class="page-head">
     <h1 class="page-title"><?= $staff ? '직원 정보 수정' : '직원 등록' ?></h1>
@@ -80,6 +84,10 @@
           </div>
           <?php endif; ?>
         </div>
+
+        <?php /* R16: 업무 권한 매트릭스(영업·현장·분석 × 읽기·쓰기·삭제) */ ?>
+        <?php require __DIR__ . '/_permissions.php'; ?>
+
         <div class="btn-group">
           <button type="submit" class="btn btn-primary">저장</button>
           <a href="<?= e(url('staff.index')) ?>" class="btn btn-outline">취소</a>

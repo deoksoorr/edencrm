@@ -223,11 +223,20 @@ class StaffController
                 return;
             }
         }
+        // R16: 업무 권한 매트릭스. 최고운영자는 항상 전체 권한이므로 편집 대상이 아니다.
+        $targetIsSuper = $staff !== null && ($staff['role_key'] ?? '') === Perm::SUPER_ROLE;
+
         View::render('staff/form', [
             'title'       => $id > 0 ? '직원 정보 수정' : '직원 등록',
             'staff'       => $staff,
             'departments' => Db::all('SELECT id, name FROM departments ORDER BY sort_order'),
             'roles'       => Db::all('SELECT id, role_key, name FROM roles ORDER BY id'),
+            'scripts'     => ['js/perm-matrix.js'],
+            // 권한 매트릭스용
+            'permResources'      => Perm::resources(),
+            'permSections'       => Perm::sections(),
+            'permCurrent'        => $id > 0 ? Perm::snapshot($id) : [],
+            'permTargetIsSuper'  => $targetIsSuper,
         ]);
     }
 
@@ -324,6 +333,37 @@ class StaffController
             $logData = $data;
             unset($logData['password_hash']);
             Audit::log('create', 'users', $id, null, $logData);
+        }
+
+        // ── R16: 업무 권한 매트릭스 저장 ──
+        // 최고운영자만 도달한다(라우트 perm staff.manage = ADMIN_ONLY).
+        // 대상이 최고운영자면 저장하지 않는다 — 항상 전체 권한이며 실수로 제거될 수 없어야 한다.
+        if ($role['role_key'] !== Perm::SUPER_ROLE) {
+            $posted = $_POST['perms'] ?? [];
+            $matrix = [];
+            if (is_array($posted)) {
+                foreach ($posted as $resourceKey => $acts) {
+                    if (!is_string($resourceKey) || !is_array($acts)) {
+                        continue;
+                    }
+                    $matrix[$resourceKey] = [
+                        'can_read'   => !empty($acts['read']),
+                        'can_write'  => !empty($acts['write']),
+                        'can_delete' => !empty($acts['delete']),
+                    ];
+                }
+            }
+            // 미등록 키 거부·종속 규칙 재검증은 Perm::save() 가 서버측에서 다시 수행한다.
+            try {
+                $diff = Perm::save($id, $matrix, Auth::id());
+                if ($diff['before'] !== $diff['after']) {
+                    Audit::log('permission_change', 'employee_permissions', $id,
+                        $diff['before'], $diff['after']);
+                }
+            } catch (\Throwable $e) {
+                error_log('[staff.save perms] ' . $e->getMessage());
+                Response::error('직원 정보는 저장했으나 업무 권한 저장에 실패했습니다. 다시 시도해 주세요.', 500);
+            }
         }
 
         Response::json(['id' => $id, 'temp_password' => $tempPassword]);
