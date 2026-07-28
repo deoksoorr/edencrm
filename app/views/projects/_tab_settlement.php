@@ -13,7 +13,6 @@ $settleStatus = (string) ($p['settlement_status'] ?? 'unsettled');
 $settleLabel = StatusService::SETTLEMENT_LABELS[$settleStatus] ?? $settleStatus;
 $settleBadge = StatusService::SETTLEMENT_BADGE[$settleStatus] ?? 'badge-muted';
 $payRowLabels = ['pending' => '대기', 'paid' => '입금완료', 'cancelled' => '취소'];
-$canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
 ?>
 <div class="card pad">
   <div class="section-head">
@@ -21,8 +20,8 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
       <span class="section-desc">확정 매출은 실제 입금액(순입금)만 반영 — 미입금 제외·환불/취소 차감</span></div>
   </div>
   <div class="kv-row">
-    <div class="kv" title="<?= $isExceptionLedger ? '정산 예정 금액 — 예외 프로젝트 직접 입력(수정 이력 보존)' : '연결 계약 총액(VAT 포함)' ?>">
-      <div class="kv-label">예정 금액<?= $isExceptionLedger ? '(정산 예정)' : '(계약 총액)' ?></div>
+    <div class="kv" title="<?= $isExceptionLedger ? '계약 총액 — 예외 프로젝트 직접 입력(수정 이력 보존)·전액 입금 판정 기준' : '연결 계약 총액(VAT 포함)' ?>">
+      <div class="kv-label">계약 총액</div>
       <div class="kv-value">
         <?php if ($ps['expected_set'] || !$isExceptionLedger): ?><?= moneyCell($ps['expected']) ?>
         <?php else: ?><span class="badge badge-warn" title="예정 금액이 입력되지 않아 미수금·완납 판정을 할 수 없습니다">미설정</span><?php endif; ?>
@@ -46,10 +45,7 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
 
   <?php if ($canPayment): ?>
   <div class="ta-r mt-8" id="settleActions">
-    <?php if ($settleStatus !== 'settled'): ?>
-      <button type="button" class="btn btn-sm btn-primary" data-settle-action="settle"
-              <?= $canSettle ? '' : 'disabled title="미수금 0원 + 대기 건 정리 후 처리 가능"' ?>>정산 완료 처리</button>
-    <?php endif; ?>
+    <?php /* R13: 전액 입금 시 '전액 입금 완료' 자동 처리 — 수동 버튼 제거 */ ?>
     <?php if ($settleStatus !== 'hold'): ?>
       <button type="button" class="btn btn-sm btn-outline" data-settle-action="hold">정산 보류</button>
     <?php endif; ?>
@@ -88,7 +84,7 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
     <div class="table-wrap">
       <table class="data">
         <thead><tr>
-          <th>구분</th><th class="num">금액</th><th>방식</th><th>입금자명</th><th>예정일</th><th>입금일</th>
+          <th>구분</th><th class="num">금액</th><th>방식</th><th>예정일</th><th>입금일</th>
           <th>상태</th><th>메모</th><th>등록자</th>
           <?php if ($isExceptionLedger && $canPayment): ?><th>관리</th><?php endif; ?>
         </tr></thead>
@@ -101,7 +97,6 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
                   <?php else: ?><?= e($payTypeLabels[$pm['pay_type']] ?? $pm['pay_type']) ?><?php endif; ?></td>
               <td class="num mono<?= $isRefund ? ' text-danger' : '' ?>"><?= $isRefund ? '−' : '' ?><?= $isCancelled ? '<s>' . money($pm['amount']) . '</s>' : money($pm['amount']) ?></td>
               <td><?= e($payMethods[$pm['method'] ?? ''] ?? '-') ?></td>
-              <td><?= e($pm['payer_name'] ?: '-') ?></td>
               <td class="nowrap"><?= fmtdate($pm['due_date']) ?></td>
               <td class="nowrap"><?= fmtdate($pm['paid_date']) ?></td>
               <td><span class="badge <?= $pm['status'] === 'paid' ? 'badge-ok' : ($isCancelled ? 'badge-muted' : 'badge-warn') ?>"<?= $isCancelled ? ' title="취소된 내역 — 집계 제외(기록 보존)"' : '' ?>><?= e($payRowLabels[$pm['status']] ?? $pm['status']) ?></span></td>
@@ -112,9 +107,9 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
                   <?php if (!$isCancelled): ?>
                     <button type="button" class="btn btn-sm btn-outline btn-edit-ppm"
                       data-id="<?= (int) $pm['id'] ?>" data-kind="<?= e($pm['kind']) ?>" data-amount="<?= (int) $pm['amount'] ?>"
-                      data-method="<?= e($pm['method'] ?? '') ?>" data-payer="<?= e($pm['payer_name'] ?? '') ?>"
+                      data-method="<?= e($pm['method'] ?? '') ?>" data-paytype="<?= e($pm['pay_type'] ?? '') ?>"
                       data-due="<?= e($pm['due_date'] ?? '') ?>" data-paid="<?= e($pm['paid_date'] ?? '') ?>"
-                      data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">수정</button>
+                      data-status="<?= e($pm['status']) ?>" data-memo="<?= e($pm['memo'] ?? '') ?>">입금내역 갱신</button>
                     <button type="button" class="btn btn-sm btn-ghost btn-del-ppm" data-id="<?= (int) $pm['id'] ?>"
                       title="물리 삭제 대신 취소 상태로 전환 — 내역·감사 추적 보존">취소</button>
                   <?php else: ?><span class="muted fs-12">취소됨</span><?php endif; ?>
@@ -211,7 +206,13 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
       '<div class="form-grid">' +
       '<div class="field"><label class="field-label">금액 <span class="req">*</span></label><input type="text" inputmode="decimal" name="amount" class="input" value="' + esc(pm.amount || '') + '" required></div>' +
       '<div class="field"><label class="field-label">입금 방식</label><select name="method" class="select">' + methodOpts + '</select></div>' +
-      '<div class="field"><label class="field-label">입금자명</label><input type="text" name="payer_name" class="input" value="' + esc(pm.payer || '') + '" maxlength="100"></div>' +
+      (isRefund
+        ? '<div class="field"><label class="field-label">유형</label><input type="text" class="input" value="환불" readonly><input type="hidden" name="pay_type" value="refund"></div>'
+        : '<div class="field"><label class="field-label">유형 <span class="req">*</span></label><select name="pay_type" class="select" required>' +
+            ['down', 'middle', 'balance'].map(function (k) {
+              var lbl = { down: '계약금', middle: '중도금', balance: '잔금' }[k];
+              return '<option value="' + k + '"' + (pm.pay_type === k ? ' selected' : '') + '>' + lbl + '</option>';
+            }).join('') + '</select></div>') +
       (isRefund
         ? '<div class="field"><label class="field-label">환불일</label><input type="date" name="paid_date" class="input" value="' + esc(pm.paid || '') + '"></div>'
         : '<div class="field"><label class="field-label">상태</label><select name="status" class="select">' + statusOpts + '</select></div>' +
@@ -237,7 +238,7 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
       EDEN.modal({
         title: btn.dataset.kind === 'refund' ? '환불 수정' : '입금 수정',
         body: payFormHtml({
-          id: btn.dataset.id, amount: btn.dataset.amount, method: btn.dataset.method, payer: btn.dataset.payer,
+          id: btn.dataset.id, amount: btn.dataset.amount, method: btn.dataset.method, pay_type: btn.dataset.paytype,
           due: btn.dataset.due, paid: btn.dataset.paid, status: btn.dataset.status, memo: btn.dataset.memo,
         }, btn.dataset.kind), footer: false,
       });
@@ -259,12 +260,12 @@ $canSettle = $ps['outstanding'] <= 0 && $ps['pendingCnt'] === 0;
   var expBtn = document.getElementById('btnEditExpected');
   if (expBtn) expBtn.addEventListener('click', function () {
     EDEN.modal({
-      title: '정산 예정 금액 수정',
+      title: '계약 총액 수정',
       body: '<form data-ajax action-route="projects.expected.save" data-reload class="form">' +
         '<input type="hidden" name="_csrf" value="' + (window.EDEN.CSRF || '') + '">' +
         '<input type="hidden" name="project_id" value="' + PROJECT_ID + '">' +
-        '<div class="field"><label class="field-label">정산 예정 금액(원)</label>' +
-        '<input type="text" inputmode="decimal" name="expected_amount" class="input" value="<?= $p['expected_amount'] !== null ? (int) $p['expected_amount'] : '' ?>" placeholder="비워두면 미설정"></div>' +
+        '<div class="field"><label class="field-label">계약 총액(원) <span class="req">*</span></label>' +
+        '<input type="text" inputmode="decimal" name="expected_amount" class="input" required value="<?= $p['expected_amount'] !== null ? (int) $p['expected_amount'] : '' ?>" placeholder="전액 입금 판정 기준 금액"></div>' +
         '<div class="muted fs-13 mt-8">수정 전·후 금액과 수정자가 변경 이력에 남습니다.</div>' +
         '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">저장</button></div></form>',
       footer: false,

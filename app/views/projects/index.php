@@ -12,7 +12,7 @@ $base = [
 // R11 입금·정산 필터 라벨(컨트롤러 화이트리스트와 동일 키)
 $payFilterLabels = [
     'none' => '미입금', 'partial' => '일부 입금', 'paid' => '완납',
-    'outstanding' => '미수금 있음', 'settled' => '정산 완료', 'hold' => '정산 보류',
+    'outstanding' => '미수금 있음', 'settled' => '전액 입금 완료', 'hold' => '정산 보류',
 ];
 function projSortUrl(string $key, string $sort, string $dir, array $base): string
 {
