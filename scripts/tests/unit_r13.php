@@ -75,6 +75,19 @@ try {
     t_int('hold 상태에서도 보너스 재계산: calc_amount = 50,000', 50000, (int) $b3['calc_amount']);
     t_true("hold 상태에서도 recalcProjectSettlement 반환값 = 'hold'(수동 상태 보존)", $holdReturn === 'hold');
 
+    // ── Task 6: 완료 → 전체완료 자동 이동 ──
+    $wid = ProcessService::waitingStageId();
+    $fc  = ProcessService::stageIdByKey('full_complete');
+    t_true("stageIdByKey('full_complete') 존재", $fc !== null);
+    $cp = Db::insert('projects', ['project_no' => 'R13-C1', 'name' => 'R13완료', 'customer_id' => null,
+        'is_exception' => 0, 'customer_name_snapshot' => '직접', 'contract_amount' => 0,
+        'status' => 'in_progress', 'process_stage_id' => $wid]);
+    $cpRow = Db::one("SELECT * FROM projects WHERE id = :id", [':id' => $cp]);
+    StatusService::applyProjectStatus($cpRow, 'completed', ['reason' => '테스트 완료']);
+    $after = Db::one("SELECT status, process_stage_id FROM projects WHERE id = :id", [':id' => $cp]);
+    t_true('완료 상태', $after['status'] === 'completed');
+    t_int('완료 → 공정 전체완료 자동 이동', $fc, (int) $after['process_stage_id']);
+
     $pdo->rollBack();
 } catch (\Throwable $e) {
     $pdo->rollBack();

@@ -259,6 +259,11 @@ class StatusService
                 $data['actual_end_date'] = $date;
             }
             $data['progress'] = 100;
+            // R13: 완료 처리 시 공정 보드 카드를 '전체완료'로 자동 이동(상태→보드 동기화). 같은 단계면 no-op.
+            $fcId = ProcessService::stageIdByKey('full_complete');
+            if ($fcId !== null) {
+                ProcessService::moveStage((int) $project['id'], $fcId, $opts['actor_id'] ?? null, '완료 처리 자동 종결', true);
+            }
             // 준공 훅(R3 acctverify): 연결 계약의 잔금 pending 예정행에 수금 예정일이 없으면 준공일로 자동 세팅
             // — due_date NULL 이면 입금 예정·미수금 독촉 알림이 영원히 침묵하는 문제 방지. paid·환불 행 불변.
             if (!empty($project['contract_id'])) {

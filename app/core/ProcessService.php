@@ -20,6 +20,13 @@ class ProcessService
         return (int) $id;
     }
 
+    /** stage_key 로 공정 단계 ID 조회(없으면 null). */
+    public static function stageIdByKey(string $key): ?int
+    {
+        $id = Db::val("SELECT id FROM process_stages WHERE stage_key = :k", [':k' => $key]);
+        return $id !== null ? (int) $id : null;
+    }
+
     /**
      * 공정 미배치 프로젝트를 '대기중'으로 초기 배치한다(멱등 — 이미 공정이 있으면 no-op).
      * 계약 자동 생성·데이터 보정 등 자동 흐름은 $auto=true 로 호출한다.

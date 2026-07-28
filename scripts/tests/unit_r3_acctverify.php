@@ -9,7 +9,7 @@
  */
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/lib.php';
-foreach (['Auth', 'Audit', 'StatusService'] as $c) {
+foreach (['Auth', 'Audit', 'StatusService', 'ProcessService'] as $c) {
     require_once APP_PATH . '/core/' . $c . '.php';
 }
 
