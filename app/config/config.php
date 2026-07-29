@@ -28,8 +28,13 @@ $config = array_merge([
     'TIMEZONE'        => 'Asia/Seoul',
     'SESSION_NAME'    => 'eden_crm_sid',
     'SESSION_IDLE'    => 3600,        // 유휴 자동 로그아웃(초) — 설정값으로 덮임
-    'LOGIN_MAX'       => 5,           // 로그인 연속 실패 허용
+    'LOGIN_MAX'       => 5,           // 로그인 연속 실패 허용(계정 기준)
     'LOCK_MINUTES'    => 15,          // 잠금 시간(분)
+    // IP 기준 스로틀 — 계정 잠금만으로는 패스워드 스프레이(아이디를 바꿔가며 시도)와
+    // 타 계정 잠금 유발(관리자 계정 DoS)을 막지 못한다.
+    'LOGIN_IP_MAX'    => 20,          // 같은 IP 의 실패 허용 횟수
+    'LOGIN_IP_WINDOW' => 600,         // 관측 구간(초)
+    'LOGIN_IP_BLOCK'  => 600,         // 초과 시 차단 시간(초)
     'UPLOAD_MAX'      => 10 * 1024 * 1024,  // 업로드 최대 크기(바이트)
     'PAGE_SIZE'       => 20,
     // 운영 공유 DB 테이블 prefix(Db 레이어 SQL rewrite). '' 이면 rewrite 미작동(로컬 기본).

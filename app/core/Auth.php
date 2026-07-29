@@ -22,6 +22,16 @@ class Auth
         $loginId = trim($loginId);
         $ip = Util::clientIp();
 
+        // ── IP 기준 스로틀 ──
+        // 계정 잠금은 '한 계정을 노린 대입'만 막는다. 아이디를 바꿔가며 시도하는
+        // 패스워드 스프레이와, 남의 계정을 일부러 잠가버리는 DoS 는 IP 기준으로 막아야 한다.
+        if (self::ipThrottled($ip)) {
+            $reason = '로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.';
+            self::recordAttempt($loginId, $ip, false);
+            Audit::log('login_throttled', 'users', null, null, ['ip' => $ip]);
+            return false;
+        }
+
         // 잠금 여부 확인 (계정 기준)
         $user = Db::one(
             "SELECT * FROM users WHERE login_id = :lid AND deleted_at IS NULL LIMIT 1",
@@ -84,6 +94,36 @@ class Auth
         self::$cachedUser = null;
         Audit::log('login', 'users', (int) $user['id'], null, null);
         return true;
+    }
+
+    /**
+     * 같은 IP 의 최근 실패가 임계치를 넘었는지. login_attempts 는 이미 기록되고 있었으나
+     * 아무 곳에서도 사용되지 않아 실질 방어가 없었다(감사에서 발견).
+     * 성공한 로그인은 카운트하지 않으므로 정상 사용자는 영향을 받지 않는다.
+     */
+    private static function ipThrottled(string $ip): bool
+    {
+        if ($ip === '') {
+            return false;
+        }
+        $max    = (int) ($GLOBALS['config']['LOGIN_IP_MAX'] ?? 20);
+        $window = (int) ($GLOBALS['config']['LOGIN_IP_WINDOW'] ?? 600);
+        if ($max <= 0) {
+            return false;                      // 0 이하면 비활성
+        }
+        try {
+            $n = (int) Db::val(
+                "SELECT COUNT(*) FROM login_attempts
+                  WHERE ip = :ip AND success = 0
+                    AND created_at > DATE_SUB(NOW(), INTERVAL :sec SECOND)",
+                [':ip' => $ip, ':sec' => $window]
+            );
+            return $n >= $max;
+        } catch (\Throwable $e) {
+            // 스로틀 판정 실패가 로그인을 막지 않도록 한다(가용성 우선).
+            error_log('[auth.throttle] ' . $e->getMessage());
+            return false;
+        }
     }
 
     private static function recordAttempt(string $loginId, string $ip, bool $success): void

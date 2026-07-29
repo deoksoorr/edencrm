@@ -13,6 +13,39 @@ require APP_PATH . '/bootstrap.php';    // 코어 로드·세션·설정 overrid
 // 기술 스택 노출 최소화 — X-Powered-By(PHP 버전) 제거(핑거프린팅 축소). 호스트 expose_php 설정과 이중.
 header_remove('X-Powered-By');
 
+// ── 보안 헤더 ────────────────────────────────────────────────────────────────
+// .htaccess(Apache) 에도 일부가 있으나, 웹서버 설정에 의존하지 않도록 앱에서도 내보낸다.
+// 외부 CDN 을 쓰지 않고 Chart.js 까지 전부 자체 호스팅(public/assets/vendor)이라
+// default-src 'self' 로 묶을 수 있다.
+//
+// script/style 의 'unsafe-inline' 은 뷰 22개가 인라인 <script> 를 쓰기 때문에 현재 불가피하다.
+// 그럼에도 아래 지시어는 실질적인 방어가 된다:
+//   object-src 'none'   플러그인 기반 실행 차단
+//   base-uri 'self'     <base> 주입으로 상대경로를 외부로 돌리는 공격 차단
+//   form-action 'self'  폼 전송 대상 하이재킹 차단(자격증명 탈취)
+//   frame-ancestors     클릭재킹 차단(X-Frame-Options 상위 호환)
+//   connect-src 'self'  XHR/fetch 외부 유출 경로 차단
+// (인라인 스크립트를 nonce 로 전환하면 'unsafe-inline' 을 제거할 수 있다 — 후속 과제)
+header("Content-Security-Policy: "
+    . "default-src 'self'; "
+    . "script-src 'self' 'unsafe-inline'; "
+    . "style-src 'self' 'unsafe-inline'; "
+    . "img-src 'self' data: blob:; "
+    . "font-src 'self' data:; "
+    . "connect-src 'self'; "
+    . "object-src 'none'; "
+    . "base-uri 'self'; "
+    . "form-action 'self'; "
+    . "frame-ancestors 'self'");
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()');
+// HSTS 는 HTTPS 응답에서만 의미가 있다(로컬 http 개발 환경을 깨뜨리지 않도록 분기).
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+
 $routes = require APP_PATH . '/routes.php';
 
 $routeKey = $_GET['r'] ?? 'home';
