@@ -102,8 +102,10 @@ button{font-family:inherit}
 
 /* ── 폼 ── */
 .form{display:flex;flex-direction:column;gap:14px}
-.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-.form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+/* minmax(0,1fr): 그리드 트랙의 기본 최소폭은 min-content 라, 표·긴 무단어 문자열이 트랙을 밀어
+   컨테이너 밖으로 터진다(그리드 블로우아웃). 전 그리드에 0 최소폭을 명시해 축소를 허용한다. */
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.form-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .field{display:flex;flex-direction:column;gap:5px}
 .field-label{font-size:12.5px;font-weight:600;color:var(--ink-2)}
 .field-label .req{color:var(--danger)}
@@ -146,7 +148,6 @@ table.data.compact{min-width:0}
 #itemsTable .num-input{text-align:right;font-variant-numeric:tabular-nums;min-width:66px}
 #itemsTable .money-input{min-width:92px}
 #itemsTable .row-amount{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
-.self-center{align-self:center}
 .text-danger{color:var(--danger)} .text-warn{color:var(--warn)} .text-ok{color:var(--ok)}
 .ellipsis{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
 /* td에 직접 ellipsis를 쓰는 경우 — inline-block이 table-cell을 깨서 상단 쏠림·우측 여백이 생기므로 셀 동작 복원 */
@@ -239,10 +240,10 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
 .fs-11{font-size:11.5px}.fs-12{font-size:12px}.fs-13{font-size:13px}
 .row-link{cursor:pointer}
 .hidden{display:none !important}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.dl{display:grid;grid-template-columns:130px 1fr;gap:8px 14px;font-size:13.5px}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.dl{display:grid;grid-template-columns:130px minmax(0,1fr);gap:8px 14px;font-size:13.5px}
 .dl dt{color:var(--ink-3)}
-.dl dd{margin:0;color:var(--ink)}
+.dl dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
 
 /* ── 상세 정의 리스트 / 섹션 헤더 ── */
 .section-title{font-size:13px;font-weight:700;color:var(--ink-2);margin:0 0 10px;display:flex;align-items:center;gap:8px}
@@ -261,7 +262,7 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
    r3 통합: 행(그룹) 세로 배치가 기본 — 페이지 가로 스크롤 금지(구 flex-row+overflow-x 제거, r3-pipeline 승격) */
 .kanban{display:flex;flex-direction:column;align-items:stretch;gap:16px;overflow-x:visible;padding-bottom:12px}
 .kanban-col{background:#f7f8fa;border:1px solid var(--line);border-top:3px solid var(--gc,#cbd5e1);border-radius:var(--radius-lg);display:flex;flex-direction:column;max-height:calc(100vh - 200px)}
-.kanban-col-head{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#f7f8fa;border-radius:var(--radius-lg) var(--radius-lg) 0 0;z-index:2}
+.kanban-col-head{padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#f7f8fa;border-radius:var(--radius-lg) var(--radius-lg) 0 0;z-index:2;cursor:default}
 .kanban-col-title{font-size:13px;font-weight:700;color:var(--ink-2);display:flex;align-items:center;gap:7px}
 .kanban-count{background:#fff;border:1px solid var(--line);color:var(--ink-3);font-size:11px;font-weight:700;padding:1px 8px;border-radius:var(--radius-pill)}
 .kanban-col-sum{font-size:11px;color:var(--ink-3);font-weight:600;font-variant-numeric:tabular-nums}
@@ -285,10 +286,10 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
 
 /* ── 캘린더(월 그리드) ── */
 .calendar{width:100%;border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;background:#fff}
-.cal-head{display:grid;grid-template-columns:repeat(7,1fr);background:#fafbfc;border-bottom:1px solid var(--line)}
+.cal-head{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:#fafbfc;border-bottom:1px solid var(--line)}
 .cal-head div{padding:8px;text-align:center;font-size:12px;font-weight:600;color:var(--ink-3)}
 .cal-head div:first-child{color:var(--danger)} .cal-head div:last-child{color:var(--info)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
 .cal-cell{min-height:96px;border-right:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:5px 6px;position:relative;overflow:hidden}
 .cal-cell:nth-child(7n){border-right:none}
 .cal-cell.other{background:#fafbfc;color:var(--muted)}
@@ -316,17 +317,11 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
 .tab.active{color:var(--brand);border-bottom-color:var(--brand)}
 .tab-panel{display:none} .tab-panel.active{display:block}
 
-/* 카드 헤드용 미니 탭(R14: 반기 실적 계약/공사 탭) */
-.tab-mini{display:flex;gap:6px}
-.tab-btn{padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--card);color:var(--ink-2);font-size:12.5px;font-weight:600;cursor:pointer}
-.tab-btn:hover{background:var(--line-2)}
-.tab-btn.active{background:var(--brand);border-color:var(--brand);color:#fff}
-
 /* ── 미니 통계행 ── */
 .kv-row{display:flex;gap:20px;flex-wrap:wrap}
-.kv{display:flex;flex-direction:column;gap:2px}
+.kv{display:flex;flex-direction:column;gap:2px;min-width:0}
 .kv-label{font-size:11.5px;color:var(--ink-3)}
-.kv-value{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.kv-value{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 
 /* ═══════════════════════════════════════════════════════════════════
    재설계 디자인 시스템 (2026-07 UI 전면 재구축)
@@ -344,10 +339,10 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
 .split{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(280px,1fr);gap:16px;align-items:start}
 .split>.col{min-width:0}
 .mt-8{margin-top:8px}.mt-14{margin-top:14px}.mt-16{margin-top:16px}.mb-8{margin-bottom:8px}.mb-14{margin-bottom:14px}
-.gap-24{gap:24px}.border-0{border:none}.tc{text-align:center}
+.border-0{border:none}.tc{text-align:center}
 .card.pad{padding:16px}
 .card.pad .section-head{margin-bottom:14px}
-@media(max-width:1100px){.split{grid-template-columns:1fr}}
+@media(max-width:1100px){.split{grid-template-columns:minmax(0,1fr)}}
 
 /* ── 섹션 ── */
 .section{margin-bottom:var(--section-gap)}
@@ -360,7 +355,6 @@ table.data td.ellipsis{display:table-cell;vertical-align:middle;max-width:240px}
 
 /* ── KPI 카드(핵심 현황) ── */
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:12px}
-.kpi-grid.k6{grid-template-columns:repeat(6,1fr)}
 .kpi{position:relative;display:flex;flex-direction:column;gap:5px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);color:var(--ink);transition:border-color .12s,box-shadow .12s}
 a.kpi:hover{text-decoration:none;border-color:#cbd5e1;border-left-color:var(--brand);box-shadow:var(--shadow-hover)}
 .kpi-label{font-size:12px;color:var(--ink-3);font-weight:500;display:flex;align-items:center;gap:6px}
@@ -415,7 +409,7 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
    모든 칸 폭이 결정적(이름 210px·우측 클러스터 300px)이라 행 간 트랙 폭이 항상 동일하다. */
 .att-list{display:flex;flex-direction:column;gap:12px}
 .att-row{display:grid;grid-template-columns:210px minmax(0,1fr) 300px;align-items:center;gap:14px}
-.att-name{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink);min-width:0}
+.att-name{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .att-name .badge{padding:1px 7px}
 .att-bar{display:block;height:8px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden}
 .att-fill{display:block;height:100%;min-width:8px;border-radius:var(--radius-pill)}
@@ -530,7 +524,6 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
 /* 보드 열 — 그룹색 액센트(--gc)는 기본 .kanban-col 로 통합(r3-formscss) */
 .kanban-col.collapsed{max-height:none}
 .kanban-col.collapsed .kanban-list{display:none}
-.kanban-col-head{cursor:default}
 .kanban-caret{cursor:pointer;color:var(--ink-3);display:inline-flex;transition:transform .15s;margin-left:2px}
 .kanban-col.collapsed .kanban-caret{transform:rotate(-90deg)}
 /* (.kanban-col-sum tabular-nums 는 기본 규칙으로 병합 — r4-designsystem 중복 제거) */
@@ -540,9 +533,6 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
 .kanban-card.st-warn{border-left-color:var(--warn)}
 .kanban-card.st-delayed{border-left-color:var(--danger)}
 .kanban-card.st-won{border-left-color:var(--ok)}
-/* R7-F1: 완료·정산 노출 전용 카드 — 이동 불가(locked=Sortable filter), 시각적으로 톤다운 */
-.kanban-card.pb-done{opacity:.8;cursor:pointer}
-.kanban-card.pb-done:hover{opacity:1}
 .kanban-card.st-closed{border-left-color:#cbd5e1}
 .kanban-card.st-closed .kc-amount,.kanban-card.st-closed .kc-name{color:var(--ink-3)}
 /* 간소화 카드 */
@@ -566,12 +556,6 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
 .pc-title{font-weight:600;font-size:13.5px;margin-bottom:4px;line-height:1.35}
 .pc-title a{color:var(--ink)}
 .pc-sub{font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}
-.pc-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:11px;color:var(--ink-3)}
-.pc-actions{display:flex;align-items:center;justify-content:space-between;margin-top:7px}
-.pc-pct{font-size:11px}
-/* 칸반 드래그 스크롤 */
-.kanban.drag-scrolling{cursor:grabbing;user-select:none}
-.kanban.drag-scrolling *{cursor:grabbing !important}
 /* 공정 이력 수정 모달 */
 .hist-list{display:flex;flex-direction:column;gap:12px}
 .hist-item{border:1px solid var(--line-2);border-radius:var(--radius-lg);padding:10px 12px}
@@ -585,16 +569,32 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
 
 /* ── 반응형 ── */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(17,24,39,.4);z-index:39}
-@media(max-width:1200px){
-  .kpi-grid.k6{grid-template-columns:repeat(3,1fr)}
+/* ── 태블릿(768~1024) ──
+   사이드바가 236px 고정이라 본문 폭은 뷰포트보다 236px 좁다(1024 → 740, 768 → 532).
+   고정폭 트랙을 쓰는 레이아웃은 이 구간에서 본문 폭을 넘기므로 여기서 유연 배치로 내린다.
+   1024 초과(PC) 레이아웃은 건드리지 않는다. */
+@media(max-width:1024px){
+  /* 대시보드 출근 게이지 — 210px/300px 고정 칸이 본문 폭을 초과 */
+  .att-row{grid-template-columns:minmax(0,1fr) auto;gap:6px 10px}
+  .att-name{grid-row:1;grid-column:1}
+  .att-meta{grid-row:1;grid-column:2}
+  .att-bar{grid-row:2;grid-column:1/-1}
+  /* 프로젝트 상세 요약 금액 블록 — 2칸 고정(150px×2 + 28px 패딩)이 정보 블록을 밀어냄 */
+  .proj-summary.ps-grouped{flex-direction:column}
+  .ps-grouped .ps-money{grid-template-columns:repeat(2,minmax(0,1fr));border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
+  /* 3칸 반기 배치는 태블릿에서 2칸(1100 규칙이 있으나 사이드바 폭을 감안해 앞당김) */
+  .fin-flex{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:960px){
-  .form-grid,.form-grid-3,.grid-2{grid-template-columns:1fr}
-  .kpi-grid.k6{grid-template-columns:repeat(2,1fr)}
+  .form-grid,.form-grid-3,.grid-2{grid-template-columns:minmax(0,1fr)}
+  /* 1칼럼으로 접힌 뒤에도 span 2 가 남으면 암시적 2번째 칼럼이 생겨 첫 트랙이 0px 로 찌그러진다
+     (프로젝트 폼 '상태' select 이 24px 로 눌리던 원인). 1칼럼에서는 그냥 한 칸을 쓴다. */
+  .form-grid>.col-span-2,.form-grid-3>.col-span-2{grid-column:auto}
 }
 @media(max-width:768px){
-  /* R7-F2 모바일 터치 영역 ≥44px(HIG) — 컨트롤 높이 토큰 상향 + 소형 터치 요소 보정 */
-  :root{--control-h:44px;--control-h-sm:36px}
+  /* R7-F2 모바일 터치 영역 ≥44px(HIG) — 컨트롤 높이 토큰 상향 + 소형 터치 요소 보정.
+     T7: 소형 컨트롤(--control-h-sm)도 36 → 40px (모바일 최소 터치 타겟 40×40) */
+  :root{--control-h:44px;--control-h-sm:40px}
   /* iOS 포커스 줌 방지 — 입력 폰트 16px 미만 금지(.tnum-input 13px 포함 후순위로 덮음) */
   .input,.select,textarea.input{font-size:16px}
   .pagination a,.pagination .cur,.pagination .disabled{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
@@ -617,54 +617,40 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
   .badge-count{top:2px;right:2px}
   .user-menu a{padding:12px}
   .user-meta{display:none}
-  .modal-close{padding:8px;margin:-8px}
-  .kanban-caret{padding:6px;margin:-6px}
+  .modal-close{padding:12px;margin:-12px}
+  .kanban-caret{padding:12px;margin:-12px}
   .part-item{padding:10px 8px}
-  .swatch{width:36px;height:36px}
-  .stage-order .btn{padding:5px 12px;font-size:12px}
+  .swatch{width:44px;height:44px}
   .cal-ev{padding:4px 6px}
   .sched-chip{padding:3px 6px}
   #toastHost{left:12px;right:12px;align-items:flex-end}
   .toast{max-width:100%}
-  .dl{grid-template-columns:1fr}
+  .dl{grid-template-columns:minmax(0,1fr)}
   .dl dt{margin-top:6px}
-  .kpi-grid,.kpi-grid.k6{grid-template-columns:repeat(2,1fr)}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi-value{font-size:21px}
   .chart-box{height:200px}
   .toolbar .search{min-width:100%}
+  /* 섹션 제목의 nowrap 해제 — 긴 설명형 제목(계약 폼 '대금 지급 계획 …')이 본문 폭을 넘겨
+     페이지 전체에 가로 스크롤을 만든다. PC/태블릿에서는 한 줄 유지(레이아웃 불변). */
+  .section-head,.section-head .st{flex-wrap:wrap}
+  .section-head h2,.section-head .section-link{white-space:normal;overflow-wrap:anywhere}
 }
 @media(max-width:420px){
   :root{--content-px-m:12px}
-  .kpi-grid,.kpi-grid.k6{grid-template-columns:1fr}
+  .kpi-grid{grid-template-columns:minmax(0,1fr)}
 }
 
 /* === r3-procboard === */
 /* 공정 보드: 그룹 섹션 줄바꿈 배치(무한 가로 스크롤 제거) + 상단 요약 + 카드 정보 확장 */
 .pb-summary{margin-bottom:16px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
-.pb-groups{display:flex;flex-direction:column;gap:16px}
-.pb-group{background:#fff;border:1px solid var(--line);border-top:3px solid var(--gc,#cbd5e1);border-radius:var(--radius-lg);padding:12px 14px 14px;box-shadow:var(--shadow)}
-.pb-group-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.pb-group-name{font-size:13.5px;font-weight:700;color:var(--ink)}
-.pb-group-name::before{content:'';display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--gc,#cbd5e1);margin-right:7px;vertical-align:1px}
-.pb-group-range{font-size:11.5px;color:var(--muted)}
-/* 보드 컬럼 wrap 그리드 — 공정 보드(.pb-group-cols)·파이프라인(.kanban-row-cols) 공용(r3-formscss 통합) */
-.pb-group-cols,.kanban-row-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(var(--kcol-min,252px),100%),1fr));gap:10px;align-items:start;justify-content:start}
-.kanban-row-cols{--kcol-min:264px;gap:12px}
-.pb-group-cols .kanban-col{flex:none;width:auto;max-height:none;border-top:1px solid var(--line)}
-.pb-group-cols .kanban-list{max-height:440px}
-.pb-group[data-group="waiting"] .kanban-col{background:#fffaf1}
-.pb-group[data-group="waiting"] .kanban-col-head{background:#fffaf1}
-.pc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.pc-top .pc-title{margin-bottom:2px;min-width:0}
-.pc-top .badge{flex:none;font-size:10.5px}
+/* 보드 컬럼 wrap 그리드 — 파이프라인 행(.kanban-row-cols) */
+.kanban-row-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(var(--kcol-min,264px),100%),1fr));gap:12px;align-items:start;justify-content:start}
 .pc-meta{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:11px;color:var(--ink-3);margin:2px 0 4px}
 .pc-meta .m{display:inline-flex;align-items:center;gap:3px;min-width:0}
 .pc-meta .m.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .kanban-card[data-href]{cursor:pointer}
 .kanban-card[data-href]:not(.locked):active{cursor:grabbing}
-@media(max-width:900px){
-  .pb-group-cols{grid-template-columns:1fr}
-}
 
 /* === r3-pipeline === */
 /* 파이프라인 보드 2행 배치(1행 신규·상담·현장확인 / 2행 견적·계약·보류종료) — 페이지 가로 스크롤 제거
@@ -678,10 +664,10 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
 /* === r3-dashboard === */
 /* 사장 대시보드 재구성: KPI 2단 위계(금액 4 크게 + 건수 3 작게), 주의 레일 제거 후 2단 카드(dash-duo),
    재무·추이 2컬럼(fin-flex), 직원 업무 부하(load-list), 최근 활동(act-list). breakpoint: 1200/1100/960/768/420 */
-.dash-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.dash-hero{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .dash-hero .kpi{padding:16px 18px}
 .dash-hero .kpi-value{font-size:26px}
-.dash-sub{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.dash-sub{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
 .dash-sub .kpi{padding:10px 14px;flex-direction:row;align-items:baseline;gap:10px}
 .dash-sub .kpi-value{font-size:19px}
 .dash-sub .kpi-note{margin-top:0;margin-left:auto}
@@ -703,7 +689,7 @@ a.kv:hover .kv-value{color:var(--brand)}
 .load-row .badge{padding:1px 7px;flex:0 0 auto}
 .load-row .load-meta{margin-left:auto;font-size:12px;color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
 .load-row .load-meta b{color:var(--ink);font-weight:700}
-.act-list{display:grid;grid-template-columns:1fr 1fr;gap:2px 28px}
+.act-list{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:2px 28px}
 .act-item{display:flex;align-items:baseline;gap:9px;padding:8px 4px;border-bottom:1px solid var(--line-2);color:var(--ink-2);font-size:13px;min-width:0}
 .act-item:hover{background:var(--line-2);text-decoration:none;color:var(--ink)}
 .act-item .act-time{flex:0 0 auto;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -711,28 +697,28 @@ a.kv:hover .kv-value{color:var(--brand)}
 .act-item .act-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .act-item .act-actor{margin-left:auto;flex:0 0 auto;font-size:12px;color:var(--ink-3);white-space:nowrap}
 @media(max-width:1200px){
-  .dash-hero{grid-template-columns:repeat(2,1fr)}
+  .dash-hero{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:1100px){
   .dash-duo{grid-template-columns:minmax(0,1fr)}
   .dash-duo>.card{height:auto}
-  .fin-flex{grid-template-columns:1fr}
+  .fin-flex{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:960px){
-  .act-list{grid-template-columns:1fr}
+  .act-list{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:768px){
-  .dash-sub{grid-template-columns:1fr}
+  .dash-sub{grid-template-columns:minmax(0,1fr)}
   .dash-hero .kpi-value{font-size:22px}
   .act-item .act-actor{display:none}
   /* 재무 현황·추이 모바일: KPI 5종은 2열 그리드(한 줄 짓눌림 방지), 차트 높이 축소, 달성률 숫자 축소 */
-  .fin-flex .kv-row{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+  .fin-flex .kv-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 16px}
   .fin-flex .chart-box{height:190px}
   .goal-rate{font-size:22px}
 }
 @media(max-width:420px){
-  .dash-hero{grid-template-columns:1fr}
-  .load-list{grid-template-columns:1fr}
+  .dash-hero{grid-template-columns:minmax(0,1fr)}
+  .load-list{grid-template-columns:minmax(0,1fr)}
 }
 
 /* === r3-schedstaff === */
@@ -741,7 +727,6 @@ a.kv:hover .kv-value{color:var(--brand)}
 /* 일정 폼 시간대 토글(복수 선택) — 기존 .slot-tab 재사용, 눌림 상태 시각 보강 */
 .slot-tab[aria-pressed="true"]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
 /* 직원 배정 파셜(assignment_form.php) */
-.af-form .af-search{margin-bottom:6px}
 /* 인라인 폼 오류 박스 — 스코프 무관 공통(.af-form 내부·#stageMoveForm 등). 색은 flash-error 팔레트와 통일(r4-designsystem) */
 .af-error{grid-column:1/-1;color:var(--danger);font-size:12.5px;background:var(--danger-soft);border:1px solid #f3c1bc;border-radius:var(--radius);padding:8px 10px}
 
@@ -752,9 +737,9 @@ a.kv:hover .kv-value{color:var(--brand)}
 /* 탭 패널 안 카드 간격(패널 자체는 기존 .tab-panel 공통 규칙 사용) */
 .proj-panels>.tab-panel>.card{margin-bottom:16px}
 /* 개요 탭 2단 배치 */
-.ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-bottom:16px}
+.ov-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
 .ov-grid>.card{margin-bottom:0;height:100%}
-@media(max-width:1100px){.ov-grid{grid-template-columns:1fr}.ov-grid>.card{height:auto}}
+@media(max-width:1100px){.ov-grid{grid-template-columns:minmax(0,1fr)}.ov-grid>.card{height:auto}}
 /* 배정 직원 요약 칩(이름·역할) */
 .assignee-chips{display:flex;flex-wrap:wrap;gap:8px}
 .assignee-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--line);border-radius:var(--radius-pill);background:#fff;font-size:12.5px;font-weight:600;color:var(--ink)}
@@ -789,16 +774,8 @@ a.kv:hover .kv-value{color:var(--brand)}
 .notif-msg{font-size:12.5px;color:var(--ink-2);margin-top:4px}
 .notif-time{font-size:11.5px;color:var(--ink-3);margin-top:5px}
 
-/* 영업/공정 단계 관리 (구 settings/stages.php <style>) — 정렬 화살표 버튼은 초소형 유지(컨트롤 토큰 예외) */
-.stage-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:7px;flex-wrap:wrap;background:#fff}
-.stage-row.stage-new{background:var(--bg)}
-.stage-row form{display:flex;align-items:center;gap:8px;margin:0}
-.stage-order{display:flex;flex-direction:column;gap:2px}
-.stage-order .btn{height:auto;padding:1px 7px;line-height:1.4;font-size:11px}
-.stage-row .input{width:auto}
-.stage-name-input{width:150px !important}
-.stage-color-input{width:90px !important}
-.stage-sort-input{width:70px !important}
+/* 단계 관리(settings/stages.php) 색상 입력 — 행 그리드 안에서 고정폭 */
+.stage-color-input{width:90px}
 
 /* 임시 비밀번호 표시(직원 등록·비밀번호 재발급 모달 공통) */
 .temp-pw{font-size:20px;font-weight:700;letter-spacing:1px;background:var(--line-2);padding:10px 14px;border-radius:var(--radius);text-align:center}
@@ -826,8 +803,10 @@ table.data tr.row-hl td{font-weight:600;background:#fafbfc}
 .pf-preset.on,.pf-apply.on{background:var(--brand);border-color:var(--brand);color:#fff}
 .pf-dates{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .pf-dates .input{width:auto;min-width:130px}
-/* Enter 기본 제출용 무명 버튼 — 시각 숨김(display:none 은 브라우저별 기본 제출 제외 우려로 미사용) */
-.pf-enter{position:absolute;left:-9999px;width:1px;height:1px;padding:0;border:0;overflow:hidden}
+/* Enter 기본 제출용 무명 버튼 — 시각 숨김(display:none 은 브라우저별 기본 제출 제외 우려로 미사용).
+   터치 타겟이 아니다(뷰에서 tabindex="-1" aria-hidden="true"). 좌측 -9999px 대신 .sr-only 와
+   같은 clip 방식을 써서 문서 폭에 영향을 주지 않게 한다. */
+.pf-enter{position:absolute;width:1px;height:1px;padding:0;margin:-1px;border:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 @media(max-width:640px){.pf,.pf-presets{width:100%}.pf-dates{width:100%}.pf-dates .input{flex:1;min-width:110px}}
 table.data tr.row-dim td{opacity:.55}
 
@@ -885,7 +864,6 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 /* === r5-attendance === */
 /* R6: 휴가(vacation) 표시·자동 지각/조퇴 판정 마킹(L/V·빗금 칩·게이지 4칸 그리드)은 전면 폐지 —
    관련 규칙 제거. 대시보드 출근 뱃지 공통 토큰만 유지(r6-attend 의 .att-flag.absent 가 확장). */
-.att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* (r7: .att-flags 컨테이너는 .att-meta(게이지 우측 클러스터)로 대체 — 죽은CSS 제거) */
 .att-flag{font-size:11px;font-weight:600;padding:1px 7px;border-radius:var(--radius-pill);white-space:nowrap}
 .att-flag.late{color:var(--warn);background:var(--warn-soft)}
@@ -899,7 +877,7 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 .ps-money .kv{align-items:flex-end;text-align:right}
 @media(max-width:720px){
   .proj-summary.ps-grouped{flex-direction:column}
-  .ps-grouped .ps-money{grid-template-columns:1fr;border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
+  .ps-grouped .ps-money{grid-template-columns:minmax(0,1fr);border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
 }
 
 /* === r6-attend === */
@@ -924,7 +902,7 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 .attmark-userform{margin:0;padding:0;border:0;background:none;box-shadow:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .attmark-userlabel{margin:0;font-size:12.5px;color:var(--ink-3)}
 .attmark-cal{padding:12px 14px 14px}
-.attmark-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:4px}
+.attmark-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:4px}
 .attmark-head{margin-top:0}
 .attmark-dow{font-size:11px;font-weight:700;color:var(--ink-3);text-align:center;padding:2px 0}
 .attmark-dow.we{color:var(--danger)}
@@ -949,11 +927,7 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 .attmark-type .muted{font-size:12px}
 
 /* === r6-uiqa === */
-/* 상세 화면의 긴 무단어 문자열(이메일·파일명·주소 등)이 페이지 가로 스크롤을 유발하지 않도록 줄바꿈 허용.
-   .kv-value 의 금액은 전부 축약(moneyShort/moneyCell)이라 중간 깨짐 없음(전수 확인) — 텍스트만 안전하게 wrap. */
-.kv{min-width:0}
-.kv-value{overflow-wrap:anywhere}
-.dl dd{overflow-wrap:anywhere}
+/* (긴 무단어 문자열 wrap 규칙 .kv/.kv-value/.dl dd 는 각 원 정의로 병합 — 중복 선언 제거) */
 
 /* ── R8-B 실적·보너스 ── */
 /* 취소된 보너스 행 — 집계 제외를 시각적으로 구분(흐리게 + 취소선은 금액만) */
@@ -1003,28 +977,8 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
   font-size:12.5px;font-weight:700;color:var(--ink-2);background:var(--card,#fff);text-decoration:none;line-height:1.4}
 .stage-type-tab:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
 .stage-type-tab.active{background:var(--brand);border-color:var(--brand);color:#fff}
-.stage-type-hint{font-size:12px}
-.stage-drag{cursor:grab;color:var(--ink-3);font-size:15px;padding:0 2px;user-select:none;flex:0 0 auto}
-.stage-drag:active{cursor:grabbing}
-.stage-row.sortable-ghost{opacity:.4;background:var(--line-2)}
-.stage-badge-common{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;
-  color:var(--ink-2);background:var(--line-2);white-space:nowrap}
-.stage-fixed-meta{font-size:12px}
-.stage-type-select,.stage-group-select{width:auto;min-width:86px;height:32px;font-size:12.5px}
-.stage-desc-input{width:180px;font-size:12.5px}
-@media(max-width:900px){.stage-desc-input{width:120px}}
-
-/* R10: 공정 설정 그룹 필터 중 정렬 잠금 표시 */
-.stage-sort-locked .stage-drag{opacity:.3;pointer-events:none}
-
 /* R10: 연동 자동 산정 읽기 전용 입력 표시 */
 .input-muted[readonly]{background:var(--line-2);color:var(--ink-2);cursor:default}
-
-/* R10: 공정/영업 단계 관리 — 좁은 화면에서 행 내부 폼 줄바꿈(본문 가로 스크롤 금지) */
-@media(max-width:1024px){
-  .stage-row form{flex-wrap:wrap}
-  .stage-name-input,.stage-desc-input,.stage-color-input{min-width:0;max-width:100%}
-}
 
 /* ── R14: 공정 보드 재구성 — 상태 그룹 섹션 + 카드내 게이지(슬라이더) + 메모 팝업 (반응형) ── */
 .sg-board{display:flex;flex-direction:column;gap:16px}
@@ -1032,57 +986,51 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .sg-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .sg-dot{width:10px;height:10px;border-radius:50%;background:var(--gc,#9ca3af)}
 .sg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:12px}
-.gauge-card{border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--card,#fff);border-left:3px solid var(--gc,var(--brand))}
-.gc-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.gc-progress{display:flex;align-items:center;gap:8px;margin:8px 0}
+.gauge-card{border:1px solid var(--line);border-radius:var(--radius);padding:14px;background:var(--card,#fff);border-left:3px solid var(--gc,var(--brand))}
+.gauge-card .pc-sub,.gauge-card .pc-meta{margin:3px 0;gap:10px}
+.gauge-card.dragging{opacity:.5}
+.gc-top{display:flex;align-items:center;justify-content:flex-start;gap:8px}
+.gc-top .pc-title{flex:1;min-width:0;margin-bottom:0}
+.gc-top .pc-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc-top .badge{flex:0 0 auto}
+.gc-drag{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0 4px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#94a3b8;font-size:16px;line-height:1;cursor:grab;user-select:none;touch-action:none}
+.gc-drag:hover{background:#eff6ff;border-color:#bfdbfe;color:#3b82f6}
+.gc-drag:active{cursor:grabbing}
+.gc-progress{display:flex;align-items:center;gap:8px;margin:10px 0 8px}
 .gc-progress .progress{flex:1}
 .gc-pct{font-size:12px;font-variant-numeric:tabular-nums}
-.gc-ggroup summary{cursor:pointer;font-weight:600;padding:6px 0}
-.gc-row{display:flex;align-items:center;gap:8px;padding:3px 0}
-.gc-name{flex:0 0 40%;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gc-slider{flex:1;accent-color:var(--brand);min-height:24px}
-.gc-slider:disabled{opacity:.5;cursor:not-allowed}
-.gc-val{flex:0 0 44px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums}
-.gc-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.memo-item{border-top:1px solid var(--line-2);padding:8px 0}
-.memo-add{display:flex;gap:6px;flex-wrap:wrap}
-.memo-add textarea{flex:1;min-width:180px}
-.empty-mini{color:var(--muted);font-size:13px;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
-@media(max-width:900px){.sg-cards{grid-template-columns:1fr}.gc-name{flex-basis:34%}}
-/* R14-2 반기 계약/공사 반반 배치 */
-.hy-split{display:grid;grid-template-columns:1.25fr 1fr .7fr;gap:14px;align-items:start}
-@media(max-width:1100px){.hy-split{grid-template-columns:1fr}}
-/* R14-3 게이지 카드 진행공정 칩·숫자입력 */
-.gc-working{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:2px 0 8px}
+.gc-working{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:6px 0 10px}
 .gc-working .gc-pct{font-weight:600}
 .gc-work-chips{display:flex;flex-wrap:wrap;gap:4px}
-.gc-num{width:54px;padding:2px 4px;text-align:right;border:1px solid var(--line);border-radius:6px;font-size:12px}
-.gc-unit{font-size:12px;color:var(--muted)}
-@media(max-width:1300px){.hy-split{grid-template-columns:1fr 1fr}}
-@media(max-width:1100px){.hy-split{grid-template-columns:1fr}}
-/* R14-4 디자인 정리 — 반기 카드·게이지 행·그룹 드래그 */
+.gc-gauges{border-top:1px solid var(--line-2);margin-top:2px}
+.gc-ggroup{border-bottom:1px solid var(--line-2)}
+.gc-ggroup:last-child{border-bottom:0}
+.gc-ggroup summary{display:flex;align-items:center;gap:6px;padding:9px 0 5px;font-size:13px;font-weight:600;color:#334155;cursor:pointer;list-style:none}
+.gc-ggroup summary::-webkit-details-marker{display:none}
+.gc-ggroup summary::before{content:'▸';color:#94a3b8;font-size:11px;transition:transform .15s}
+.gc-ggroup[open] summary::before{transform:rotate(90deg)}
+.gc-ggroup summary .gc-gsum{margin-left:auto;font-weight:500;color:#64748b}
+.gc-row{display:flex;align-items:center;gap:10px;padding:4px 0;min-width:0}
+.gc-name{flex:0 0 34%;font-size:12.5px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gc-slider{flex:1;min-width:40px;accent-color:var(--brand);min-height:24px}
+.gc-slider:disabled{opacity:.5;cursor:not-allowed}
+.gc-num{width:48px;flex:0 0 auto;padding:2px 4px;text-align:right;border:1px solid var(--line);border-radius:6px;font-size:12px}
+.gc-unit{flex:0 0 auto;font-size:12px;color:var(--muted)}
+.gc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2)}
+.sg-cards.drop-over{outline:2px dashed #3b82f6;outline-offset:-4px;border-radius:8px;background:#eff6ff}
+.empty-mini{color:var(--muted);font-size:13px;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:var(--radius)}
+@media(max-width:900px){.sg-cards{grid-template-columns:minmax(0,1fr)}}
+/* R14-2 반기 계약/공사 반반 배치 */
+.hy-split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,.7fr);gap:14px;align-items:start}
+@media(max-width:1300px){.hy-split{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media(max-width:1100px){.hy-split{grid-template-columns:minmax(0,1fr)}}
+/* R14-4 디자인 정리 — 반기 카드 */
 .hy-legend{padding:10px 14px 9px;color:var(--muted);font-size:12px;line-height:1.7;border-bottom:1px solid var(--line-2)}
 .hy-split .card-head{margin-bottom:0}
 .hy-split .table-wrap{border:0;border-radius:0 0 var(--radius) var(--radius)}
 .hy-split table.data th{background:#f8fafc;white-space:nowrap}
 .hy-split table.data td,.hy-split table.data th{padding:9px 14px}
-.gc-row{min-width:0}
-.gc-name{flex:0 0 32%}
-.gc-slider{min-width:40px}
-.gc-num{width:48px;flex:0 0 auto}
-.gc-unit{flex:0 0 auto}
-.gc-drag{cursor:grab;color:var(--muted);padding:0 4px;user-select:none;font-size:14px;line-height:1}
-.gc-drag:active{cursor:grabbing}
-.gauge-card.dragging{opacity:.5}
-.sg-cards.drop-over{outline:2px dashed #3b82f6;outline-offset:-4px;border-radius:8px;background:#eff6ff}
-/* R14-5 카드 상단(드래그 핸들)·메모 팝업 디자인 정리 */
-.gc-top{display:flex;align-items:center;gap:8px;justify-content:flex-start}
-.gc-top .pc-title{flex:1;min-width:0;margin-bottom:0}
-.gc-top .pc-title a{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gc-drag{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;color:#94a3b8;font-size:16px;cursor:grab;user-select:none;touch-action:none}
-.gc-drag:hover{background:#eff6ff;border-color:#bfdbfe;color:#3b82f6}
-.gc-drag:active{cursor:grabbing}
-.gc-top .badge{flex:0 0 auto}
+/* R14-5 메모 팝업 */
 .memo-form{display:flex;flex-direction:column;gap:8px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--line-2)}
 .memo-row{display:flex;align-items:center;gap:8px}
 .memo-lbl{font-size:12.5px;color:var(--muted);flex:0 0 auto}
@@ -1094,23 +1042,6 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
 .memo-item .memo-date{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px;margin-bottom:4px}
 .memo-item .memo-del{margin-left:auto}
 .memo-body{font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
-/* R14-6 게이지 카드 간격 통일·정돈 */
-.gauge-card{padding:14px}
-.gauge-card .pc-sub,.gauge-card .pc-meta{margin:3px 0;gap:10px}
-.gc-progress{margin-top:10px}
-.gc-working{margin:6px 0 10px}
-.gc-gauges{border-top:1px solid var(--line-2);margin-top:2px}
-.gc-ggroup summary{padding:9px 0 5px;font-size:13px;font-weight:600;color:#334155;display:flex;align-items:center;gap:6px}
-.gc-ggroup summary .gc-gsum{margin-left:auto;font-weight:500;color:#64748b}
-.gc-ggroup{border-bottom:1px solid var(--line-2)}
-.gc-ggroup:last-child{border-bottom:0}
-.gc-row{padding:4px 0;gap:10px}
-.gc-name{flex:0 0 34%;color:#475569;font-size:12.5px}
-.gc-actions{margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2)}
-.gc-ggroup summary{list-style:none}
-.gc-ggroup summary::-webkit-details-marker{display:none}
-.gc-ggroup summary::before{content:'▸';color:#94a3b8;font-size:11px;transition:transform .15s}
-.gc-ggroup[open] summary::before{transform:rotate(90deg)}
 
 /* ── R16 직원 업무 권한 매트릭스 ─────────────────────────────── */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
@@ -1146,4 +1077,51 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
   .perm-table tbody td[data-label]{display:flex;align-items:center;justify-content:space-between}
   .perm-table tbody td[data-label]::before{content:attr(data-label);font-size:12px;color:#64748b}
   .perm-table .perm-col-row{padding-top:8px}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   T7 모바일 터치 타겟 (≥40×40) — 파일 맨 끝에 둔다.
+   컴포넌트 규칙(.pb-type-tab, .gc-drag …)이 이 파일 뒤쪽에 정의돼 있어,
+   중간의 @media 블록에 두면 같은 특이도에서 뒤 규칙에 덮인다.
+   원칙: 글자 크기·색·테두리 등 "보이는 디자인"은 그대로 두고 히트영역만 넓힌다.
+   인라인 링크는 padding + 같은 크기의 음수 margin 으로 주변 레이아웃을 밀지 않고 확장한다.
+   ═══════════════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+  /* 소형 버튼 — 높이는 --control-h-sm(40px), 아이콘 전용(✕)은 최소 폭도 확보 */
+  .btn-sm,.btn.btn-sm{min-width:40px}
+  .btn-xs{min-height:40px;min-width:40px;padding:2px 10px}
+
+  /* 인라인 텍스트 링크 — 표 셀·정의 리스트·요약값·타임라인·상세 메타 안의 링크 */
+  table.data a,.dl dd a,.kv-value a,.kv a,.timeline-body a,.timeline-tag,
+  .section-link,.section-title .section-link,.qf-x,.field-hint a,.page-sub a,
+  .detail-meta a,.goal-unset-hint a,.pc-title a,.ws-cur a,a.muted,.detail-head a{
+    display:inline-block;min-width:40px;padding-top:11px;padding-bottom:11px;margin-top:-11px;margin-bottom:-11px}
+  /* 정렬 링크는 아이콘과 함께 배치되므로 flex 유지 */
+  table.data th a{display:inline-flex}
+  /* 줄바꿈 셀(.wrap)은 행 높이가 가변이라 확장폭을 줄여 겹침을 막는다 */
+  table.data td.wrap a{padding-top:8px;padding-bottom:8px;margin-top:-8px;margin-bottom:-8px}
+
+  /* 접기/펼치기 <summary> */
+  .summary-link,.gc-ggroup summary,.bh-json summary{min-height:40px;min-width:40px;display:flex;align-items:center}
+
+  /* 알약형 탭·상태 칩 */
+  .pb-type-tab,.stage-type-tab{padding-top:13px;padding-bottom:13px}
+  .chip-stat{padding-top:11px;padding-bottom:11px}
+
+  /* 리스트형 링크 카드 — 한 줄 요약이라 세로가 40px 에 못 미친다 */
+  .load-row,.act-item,.attn-item,.file-item,.assignee-chip,.part-chip{min-height:40px}
+
+  /* 칸반 접기 캐럿 */
+  .kanban-caret{padding:14px;margin:-14px}
+
+  /* 게이지 카드 핸들·숫자 입력 */
+  .gc-drag{width:40px;height:40px}
+  .gc-num{min-height:40px}
+
+  /* 인라인 축소 select(카드 헤더 안 반기 선택 등) */
+  .select,.staff-half-form .select{min-height:40px}
+
+  /* 체크박스·라디오 — 시각 크기는 유지하고 감싼 라벨의 여백으로 히트영역 확보 */
+  .perm-check{padding:12px}
+  .attmark-type,.chart-legend .lg{min-height:40px;display:inline-flex;align-items:center}
 }

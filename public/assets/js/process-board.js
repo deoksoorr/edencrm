@@ -29,13 +29,13 @@
         byGroup[g] = sec.querySelectorAll('.gauge-card').length;
       });
       document.querySelectorAll('#pcTabs .pl-tab').forEach(function (b) {
-        var n = b.dataset.groups.split(',').reduce(function (s, g) { return s + (byGroup[g] || 0); }, 0);
+        var n = (b.dataset.groups || '').split(',').reduce(function (s, g) { return s + (byGroup[g] || 0); }, 0);
         var c = b.querySelector('.tcnt'); if (c) c.textContent = n;
       });
     }
     function applyTab() {
       var btn = document.querySelector('#pcTabs .pl-tab[data-tab="' + activeTab + '"]');
-      var groups = btn ? btn.dataset.groups.split(',') : [];
+      var groups = btn ? (btn.dataset.groups || '').split(',') : [];
       var showAll = activeTab === 'all';
       boardEl.querySelectorAll('.sg-group').forEach(function (sec) {
         sec.style.display = (showAll || groups.indexOf(sec.dataset.group) >= 0) ? '' : 'none';
@@ -223,9 +223,19 @@
     });
 
     // ── 메모 레이어팝업 ──
+    // openMemo 는 async 이므로 반드시 catch 로 마감한다(미처리 rejection → 콘솔 오류).
     boardEl.querySelectorAll('.gc-memo-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { openMemo(btn.closest('.gauge-card')); });
+      btn.addEventListener('click', function () {
+        btn.disabled = true;   // 응답 전 연타로 모달이 겹쳐 열리는 것 방지
+        openMemo(btn.closest('.gauge-card'))
+          .catch(function (e) { toast((e && e.message) || '메모를 불러오지 못했습니다.', 'error'); })
+          .finally(function () { btn.disabled = false; });
+      });
     });
+    /** 저장·삭제 후 목록 재렌더 — await 하지 않으므로 rejection 을 반드시 흡수한다. */
+    function reopenMemo(card) {
+      openMemo(card).catch(function (e) { toast((e && e.message) || '메모를 다시 불러오지 못했습니다.', 'error'); });
+    }
     async function openMemo(card) {
       var pid = card.dataset.projectId;
       var d = await api('process.memo.list', { project_id: pid }, { method: 'GET' });
@@ -251,14 +261,14 @@
           try {
             await api('process.memo.save', { project_id: pid,
               memo_date: this.memo_date.value, content: this.content.value });
-            m.close(); openMemo(card); toast('메모가 등록되었습니다.', 'success');
+            m.close(); reopenMemo(card); toast('메모가 등록되었습니다.', 'success');
           } catch (e) { toast(e.message, 'error'); }
         });
       }
       m.body.querySelectorAll('.memo-del').forEach(function (db) {
         db.addEventListener('click', async function () {
           if (!(await EDEN.confirm('이 메모를 삭제할까요?', { danger: true }))) return;
-          try { await api('process.memo.delete', { id: db.dataset.id }); m.close(); openMemo(card); }
+          try { await api('process.memo.delete', { id: db.dataset.id }); m.close(); reopenMemo(card); }
           catch (e) { toast(e.message, 'error'); }
         });
       });

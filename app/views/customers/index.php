@@ -110,17 +110,10 @@ $filterParams = array_filter([
               <?php if ($trash): ?>
                 <td class="nowrap"><?= fmtdate($r['deleted_at']) ?></td>
                 <td class="nowrap">
-                  <form method="post" action="<?= e(url('customers.restore')) ?>" style="display:inline"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
-                  <?php if (is_role('super_admin')): ?>
-                  <form method="post" action="<?= e(url('customers.purge')) ?>" style="display:inline"
-                        data-purge data-purge-kind="고객"
-                        data-purge-label="<?= e($r['name'] ?: ('#' . (int) $r['id'])) ?>"
-                        data-purge-scope="연락처·활동 이력"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
-                  <?php endif; ?>
+                  <?php View::partial('partials/trash_actions', [
+                      'id' => (int) $r['id'], 'restore' => 'customers.restore', 'purge' => 'customers.purge',
+                      'kind' => '고객', 'label' => (string) $r['name'], 'scope' => '연락처·활동 이력',
+                  ]); ?>
                 </td>
               <?php else: ?>
                 <td><a class="btn btn-sm btn-outline" href="<?= e(url('customers.show', ['id' => $r['id']])) ?>">상세</a></td>

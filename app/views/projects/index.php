@@ -171,17 +171,10 @@ function projSortArrow(string $key, string $sort, string $dir): string
               <?php if ($trash): ?>
                 <td class="nowrap"><?= fmtdate($p['deleted_at']) ?></td>
                 <td class="nowrap">
-                  <form method="post" action="<?= e(url('projects.restore')) ?>" style="display:inline"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
-                  <?php if (is_role('super_admin')): ?>
-                  <form method="post" action="<?= e(url('projects.purge')) ?>" style="display:inline"
-                        data-purge data-purge-kind="프로젝트"
-                        data-purge-label="<?= e($p['project_no'] ?? ('#' . (int) $p['id'])) ?>"
-                        data-purge-scope="공정 이력·진행률·메모"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $p['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
-                  <?php endif; ?>
+                  <?php View::partial('partials/trash_actions', [
+                      'id' => (int) $p['id'], 'restore' => 'projects.restore', 'purge' => 'projects.purge',
+                      'kind' => '프로젝트', 'label' => (string) ($p['project_no'] ?? ''), 'scope' => '공정 이력·진행률·메모',
+                  ]); ?>
                 </td>
               <?php endif; ?>
             </tr>

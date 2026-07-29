@@ -71,17 +71,10 @@ if (!$trash) {
               <td><?= e($r['sales_user_name'] ?: '-') ?></td>
               <td class="nowrap"><?= fmtdate($r['deleted_at']) ?></td>
               <td class="nowrap">
-                <form method="post" action="<?= e(url('pipeline.restore')) ?>" style="display:inline"><?= csrf_field() ?>
-                  <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                  <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
-                <?php if (is_role('super_admin')): ?>
-                <form method="post" action="<?= e(url('pipeline.purge')) ?>" style="display:inline"
-                      data-purge data-purge-kind="영업기회"
-                      data-purge-label="<?= e($r['customer_name'] ?: ('#' . (int) $r['id'])) ?>"
-                      data-purge-scope="영업기회 기록"><?= csrf_field() ?>
-                  <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                  <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
-                <?php endif; ?>
+                <?php View::partial('partials/trash_actions', [
+                    'id' => (int) $r['id'], 'restore' => 'pipeline.restore', 'purge' => 'pipeline.purge',
+                    'kind' => '영업기회', 'label' => (string) $r['customer_name'], 'scope' => '영업기회 기록',
+                ]); ?>
               </td>
             </tr>
           <?php endforeach; ?>

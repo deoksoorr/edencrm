@@ -71,17 +71,10 @@
               <?php if ($filters['trash']): ?>
                 <td><?= fmtdate($r['deleted_at']) ?></td>
                 <td class="nowrap">
-                  <form method="post" action="<?= e(url('quotes.restore')) ?>" style="display:inline"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
-                  <?php if (is_role('super_admin')): ?>
-                  <form method="post" action="<?= e(url('quotes.purge')) ?>" style="display:inline"
-                        data-purge data-purge-kind="견적"
-                        data-purge-label="<?= e($r['quote_no'] ?? ('#' . (int) $r['id'])) ?>"
-                        data-purge-scope="견적 버전·견적 항목"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
-                  <?php endif; ?>
+                  <?php View::partial('partials/trash_actions', [
+                      'id' => (int) $r['id'], 'restore' => 'quotes.restore', 'purge' => 'quotes.purge',
+                      'kind' => '견적', 'label' => (string) ($r['quote_no'] ?? ''), 'scope' => '견적 버전·견적 항목',
+                  ]); ?>
                 </td>
               <?php endif; ?>
             </tr>

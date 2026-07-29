@@ -141,7 +141,7 @@ $pctVal = function ($k) use ($contract) {
     </div>
 
     <div class="card pad">
-      <div class="section-head"><div class="st"><h2>대금 지급 계획 — 계약금·중도금·잔금 (저장 시 입금 예정행 자동 동기화)</h2></div></div>
+      <div class="section-head"><div class="st"><h2>대금 지급 계획</h2><span class="section-desc">계약금·중도금·잔금 — 저장 시 입금 예정행 자동 동기화</span></div></div>
       <div class="field-hint mb-8">
         분할 지급 계산 기준: <b>계약 총액(VAT 포함)</b> · 비율 합계는 정확히 100%여야 합니다.
         금액 = 총액 × 비율 반올림이며, 반올림 보정은 잔금에 귀속됩니다(세 금액 합 = 계약 총액).

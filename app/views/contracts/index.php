@@ -121,17 +121,10 @@ $filtered = $filters['q'] !== '' || $filters['status'] !== '' || $filters['payme
               <?php if ($filters['trash']): ?>
                 <td><?= fmtdate($r['deleted_at']) ?></td>
                 <td class="nowrap">
-                  <form method="post" action="<?= e(url('contracts.restore')) ?>" style="display:inline"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline">복원</button></form>
-                  <?php if (is_role('super_admin')): ?>
-                  <form method="post" action="<?= e(url('contracts.purge')) ?>" style="display:inline"
-                        data-purge data-purge-kind="계약"
-                        data-purge-label="<?= e($r['contract_no'] ?? ('#' . (int) $r['id'])) ?>"
-                        data-purge-scope="계약 상태 이력"><?= csrf_field() ?>
-                    <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-danger">완전삭제</button></form>
-                  <?php endif; ?>
+                  <?php View::partial('partials/trash_actions', [
+                      'id' => (int) $r['id'], 'restore' => 'contracts.restore', 'purge' => 'contracts.purge',
+                      'kind' => '계약', 'label' => (string) ($r['contract_no'] ?? ''), 'scope' => '계약 상태 이력',
+                  ]); ?>
                 </td>
               <?php endif; ?>
             </tr>

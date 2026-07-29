@@ -258,30 +258,9 @@
     img.classList.add('img-fallback');
   }, true);
 
-  /**
-   * 칸반 보드(파이프라인·공정) 빈 영역을 마우스로 잡아 좌우 스크롤.
-   * 카드·입력·버튼·링크·캐럿 위에서는 동작하지 않아 드래그이동/클릭과 충돌하지 않는다.
-   */
-  document.addEventListener('mousedown', function (e) {
-    if (e.button !== 0) return;
-    var board = e.target.closest('.kanban');
-    if (!board) return;
-    if (e.target.closest('.kanban-card, input, textarea, select, button, a, .kanban-caret')) return;
-    var startX = e.pageX;
-    var startScroll = board.scrollLeft;
-    board.classList.add('drag-scrolling');
-    function onMove(ev) {
-      board.scrollLeft = startScroll - (ev.pageX - startX);
-      ev.preventDefault();
-    }
-    function onUp() {
-      board.classList.remove('drag-scrolling');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
+  /* (칸반 빈 영역 드래그 좌우 스크롤은 제거 — r3 에서 .kanban 이 세로 배치(overflow-x:visible)로
+     바뀌어 scrollLeft 가 항상 0이었다. 스크롤은 일어나지 않고 커서만 grabbing 으로 바뀌는
+     잘못된 어포던스만 남아 있었다.) */
 })();
 
 /**

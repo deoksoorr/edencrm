@@ -249,12 +249,15 @@ async function logout(page) {
                                  ['projects.index', '프로젝트'], ['customers.index', '고객'],
                                  ['pipeline.index', '영업기회']]) {
       await page.goto(`${BASE}?r=${route}&trash=1`, { waitUntil: 'domcontentloaded' });
+      // 오류 판정은 본문 텍스트 스캔이 아니라 오류 페이지 마커로 한다 —
+      // 본문에는 직원 이름 등 사용자 데이터가 섞여 '권한' 같은 단어가 정상적으로 등장한다.
       const t = await page.evaluate(() => ({
         status: document.title,
         hasRestore: !!Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === '복원'),
         hasPurge: !!Array.from(document.querySelectorAll('button')).find((b) => b.textContent.trim() === '완전삭제'),
         rows: document.querySelectorAll('tbody tr').length,
-        err: /권한|오류|찾을 수 없/.test(document.body.innerText.slice(0, 200)),
+        err: !!document.querySelector('.error-page, .err-page')
+             || /접근 권한 없음|페이지를 찾을 수 없|서버 오류/.test(document.querySelector('h1')?.textContent || ''),
       }));
       chk(`${name} 휴지통 진입`, !t.err);
       if (t.rows > 0) {

@@ -68,7 +68,14 @@
     return list.map(mapFn).join('');
   }
 
+  // 조회 중 재클릭은 무시하고 버튼을 잠근다 — 같은 기간으로 reports.data 가 중복 호출되면
+  // 응답 순서에 따라 오래된 결과가 화면을 덮어쓸 수 있다.
+  let loading = false;
   async function loadReport() {
+    if (loading) return;
+    loading = true;
+    const applyBtn = document.getElementById('btnApply');
+    if (applyBtn) applyBtn.disabled = true;
     const params = periodParams();
     let data;
     try {
@@ -76,6 +83,9 @@
     } catch (err) {
       toast(err.message, 'error');
       return;
+    } finally {
+      loading = false;
+      if (applyBtn) applyBtn.disabled = false;
     }
 
     document.getElementById('periodLabel').textContent = data.period.label + ' (' + data.period.from + ' ~ ' + data.period.to + ') 기준';

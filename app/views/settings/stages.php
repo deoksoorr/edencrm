@@ -32,6 +32,22 @@ $isCommonTab = $processType === 'common';
 .sw input:checked + .sw-t { background:#16a34a; }
 .sw input:checked + .sw-t::before { transform:translateX(18px); }
 .stage-sort-locked .s2-drag { cursor:not-allowed; opacity:.4; }
+/* 태블릿 — 고정폭 6칸(26+160+130+96+60+150 = 622px + gap)이 사이드바를 뺀 본문 폭을 넘겨
+   페이지 가로 스크롤을 만든다. 이름은 첫 줄 전체, 나머지는 2열로 접는다. */
+@media (max-width:1024px) {
+  .stage-thead { display:none; }
+  .stage-r2, .stage-r2.common { grid-template-columns:26px minmax(0,1fr) minmax(0,1fr); }
+  .s2-name { grid-column:2 / -1; }
+  .s2-act  { grid-column:1 / -1; justify-content:flex-start; flex-wrap:wrap; }
+}
+/* 모바일 — 한 줄에 한 항목(라벨 없이도 순서로 식별 가능).
+   편집 행의 칸은 form.s2-inline(display:contents) 의 자식이라 자식 결합자(>)로는 잡히지 않는다. */
+@media (max-width:640px) {
+  .stage-r2, .stage-r2.common { grid-template-columns:26px minmax(0,1fr); }
+  .s2-name, .s2-act { grid-column:1 / -1; }
+  .stage-r2 span:not(.s2-drag):not(.s2-name):not(.s2-act) { grid-column:2 / -1; }
+  .stage-r2 .ta-c { justify-self:start; }
+}
 </style>
 
 <div class="page">
@@ -96,7 +112,7 @@ $isCommonTab = $processType === 'common';
               <span class="s2-drag static">·</span>
               <span class="s2-name"><input type="text" name="name" class="input" value="<?= e($s['name']) ?>"></span>
               <span><span class="badge badge-muted fs-11"><?= e(['waiting' => '대기중', 'defect' => '하자보수', 'complete' => '종결'][$s['stage_group'] ?? ''] ?? '-') ?></span></span>
-              <span class="s2-act"><input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>" style="width:90px"> <button class="btn btn-outline btn-sm">저장</button></span>
+              <span class="s2-act"><input type="text" name="color" class="input stage-color-input" placeholder="#색상" value="<?= e($s['color'] ?? '') ?>"> <button class="btn btn-outline btn-sm">저장</button></span>
             </form>
           <?php else: /* 유형 전용 편집 행 */ ?>
             <form class="s2-inline" method="post" action="<?= e(url('settings.stage.save')) ?>">

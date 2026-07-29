@@ -99,7 +99,7 @@ $overdue = !empty($l['next_contact_date']) && $l['next_contact_date'] < date('Y-
     <?php else: ?>
       <div class="muted">상담 기록이 없습니다.</div>
     <?php endif; ?>
-    <div class="mt-14"><a href="<?= e(url('customers.show', ['id' => (int) $l['customer_id']])) ?>">상담 기록 작성 →</a></div>
+    <div class="mt-14"><a href="<?= e(url('customers.show', ['id' => (int) $l['customer_id']])) ?>" class="section-link">상담 기록 작성 →</a></div>
   </div>
 
   <?php if ($l['memo']): ?>
