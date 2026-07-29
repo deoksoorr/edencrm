@@ -12,7 +12,9 @@ if (PHP_SAPI !== 'cli') { exit(1); }
 // 장애 상황에서 이름만 보고 짝이 안 맞는 파일·DB 백업을 고르게 된다(날짜까지 달라짐).
 date_default_timezone_set('Asia/Seoul');
 
-$envFile = __DIR__ . '/cafe24.env';
+// backup.sh 와 같은 주입구를 둔다. 이게 없으면 "DB 덤프 실패 시 반쪽 백업이 남지 않는가"
+// 같은 장애 주입 테스트를 아예 할 수 없다(실제로 첫 시도에서 주입이 무시돼 통과해버렸다).
+$envFile = getenv('EDEN_ENV_FILE') ?: (__DIR__ . '/cafe24.env');
 $env = [];
 foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $l) {
     $l = trim($l);
@@ -23,10 +25,26 @@ foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $l) {
 $label = preg_replace('/[^a-zA-Z0-9_-]/', '', $argv[1] ?? 'manual');
 $prefix = $env['TBL_PREFIX'] ?: 'edencrm_';
 $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $env['DB_HOST'], $env['DB_PORT'] ?: '3306', $env['DB_NAME']);
-$pdo = new PDO($dsn, $env['DB_USER'], $env['DB_PASSWORD'], [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-]);
+try {
+    $pdo = new PDO($dsn, $env['DB_USER'], $env['DB_PASSWORD'], [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+} catch (PDOException $e) {
+    // 자동 실행에서 미처리 예외를 던지면 스택트레이스가 그대로 알림에 실려 나간다.
+    // 트레이스에는 경로·DSN 파편이 섞이므로 한 줄로 정리해서 내보낸다.
+    //
+    // 더 중요한 건 마스킹이다. MySQL 의 접속 실패 메시지는
+    //   Access denied for user 'X'@'1.2.3.4'
+    // 형태라 **DB 계정명과 이 기기의 공인 IP** 가 함께 노출된다. 이 문구는 그대로
+    // 텔레그램 알림으로 나가므로 여기서 가린다. 카페24는 DB 계정명 = FTP 계정명이라
+    // 계정명 노출은 자격증명의 절반을 흘리는 것과 같다.
+    $msg = preg_replace('/\s+/', ' ', $e->getMessage());
+    $msg = preg_replace("/for user '[^']*'@'[^']*'/", "for user '***'@'***'", $msg);
+    $msg = preg_replace('/\b(\d{1,3}\.){3}\d{1,3}\b/', '***.***.***.***', $msg);
+    fwrite(STDERR, 'DB 접속 실패: ' . $msg . "\n");
+    exit(1);
+}
 // ── 덤프 대상 = prefix 일치 BASE TABLE ──────────────────────────────────────
 // SHOW TABLES 는 뷰도 반환한다. 뷰를 SHOW CREATE TABLE 로 뽑으면 복구 불가능한
 // 덤프가 만들어지므로 BASE TABLE 로 한정한다(현재 뷰는 없지만 생기면 조용히 깨진다).
