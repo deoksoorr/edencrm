@@ -10,7 +10,7 @@
 - 카드: `.card` / 내부 여백형 `.card.pad`.
 
 ## 핵심 컴포넌트
-- KPI: `.kpi-grid`(자동) / `.kpi-grid.k6`(6열). 항목 `a.kpi`(+`accent-danger|warn|ok|brand`) → `.kpi-label`,`.kpi-value`(`<span class="u">단위`),`.kpi-note`, 증감 `.delta.up|down|flat`.
+- KPI: `.kpi-grid`(자동 — auto-fit 이라 6열도 별도 클래스 없이 처리). 항목 `a.kpi`(+`accent-danger|warn|ok|brand`) → `.kpi-label`,`.kpi-value`(`<span class="u">단위`),`.kpi-note`, 증감 `.delta.up|down|flat`.
 - 주의 리스트: `.attn-list` > `a.attn-item`(+`warn|danger|zero`) : `.attn-label` + `.attn-cnt`.
 - 상태 칩: `.chip-grid` > `a.chip-stat`(+`warn|danger|ok|zero`) : `.cn`(수치) + 라벨. 색점 `.dot`(배경 인라인 허용).
 - 퍼널: `.funnel` > `.funnel-step`(+`is-won`) : `.fn`,`.fl`.
