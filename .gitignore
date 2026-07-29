@@ -19,3 +19,6 @@ node_modules/
 
 # DR 자동 복구검증 산출물(주간 생성) — git status 소음 방지
 docs/audit/dr/auto_verify/
+
+# 개인정보 치환 매핑(실명 포함) — 절대 커밋 금지
+deploy/pii_map.local.txt

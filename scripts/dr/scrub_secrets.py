@@ -33,14 +33,30 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ENV_FILE = os.path.join(ROOT, 'deploy', 'cafe24.env')
 
-# 고객 실명 → 익명 라벨. 감사 문서의 한글 왕복 검증 시료로 쓰이므로
-# 한글이면서 길이가 다양한 값으로 바꿔 charset 검증의 의미를 보존한다.
-CUSTOMER_NAMES = {
-    '고객다': '고객다',
-    '고객라마바': '고객라마바',
-    '고객사아자': '고객사아자',
-    '고객나': '고객나',
-}
+# 고객 실명 → 익명 라벨.
+#
+# 실명을 이 파일에 적지 않는다. 2026-07-29 첫 판에서는 딕셔너리에 실명을 그대로
+# 넣었는데, 히스토리 세탁을 돌리자 이 파일 자신도 치환 대상이 되어 매핑이
+# '고객다'→'고객다' 같은 항등식으로 무너졌다. 개인정보를 담은 스크립트로
+# 개인정보를 지우려 한 자기모순이었다.
+#
+# 그래서 매핑은 git 에 올라가지 않는 로컬 파일에서 읽는다. 파일이 없으면
+# 고객명 치환은 건너뛰고 자격증명 마스킹만 수행한다(그쪽이 더 중요하다).
+# 형식: 한 줄에 `실명=치환명`
+CUSTOMER_MAP_FILE = os.path.join(ROOT, 'deploy', 'pii_map.local.txt')
+
+
+def load_customer_map():
+    if not os.path.exists(CUSTOMER_MAP_FILE):
+        return {}
+    out = {}
+    for line in open(CUSTOMER_MAP_FILE, encoding='utf-8'):
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            src, dst = line.split('=', 1)
+            if src.strip():
+                out[src.strip()] = dst.strip()
+    return out
 
 
 def load_env():
@@ -73,7 +89,7 @@ def build_rules(env):
         # 너무 짧은 값은 오탐이 크다(예: 포트). 4자 미만은 건너뛴다.
         if v and len(v) >= 4:
             raw.append((v, token))
-    raw += list(CUSTOMER_NAMES.items())
+    raw += list(load_customer_map().items())
 
     # 중복 제거 후 길이 내림차순 — <FTP_HOST> 이 <DB_ACCOUNT> 보다 먼저 처리돼야 한다.
     seen, rules = set(), []
