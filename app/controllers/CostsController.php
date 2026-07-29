@@ -9,6 +9,29 @@
  */
 class CostsController
 {
+    /** 중복 저장 판정 창(초) — ContractsController::DUP_WINDOW_SEC 와 동일 정책. */
+    private const DUP_WINDOW_SEC = 60;
+
+    /**
+     * 최근 동일 지출 id — 없으면 null.
+     * 취소(cancelled)된 건은 제외해 '취소 후 같은 값으로 재등록' 흐름을 막지 않는다.
+     */
+    public static function findRecentDuplicateCost(
+        int $projectId, string $category, string $itemName, $amount, ?string $spentDate
+    ): ?int {
+        $row = Db::one(
+            "SELECT id FROM costs
+              WHERE project_id = :p AND category = :c AND item_name = :i
+                AND amount = :a AND (spent_date <=> :d)
+                AND cost_status <> 'cancelled'
+                AND created_at > DATE_SUB(NOW(), INTERVAL :sec SECOND)
+              ORDER BY id DESC LIMIT 1",
+            [':p' => $projectId, ':c' => $category, ':i' => $itemName,
+             ':a' => $amount, ':d' => $spentDate, ':sec' => self::DUP_WINDOW_SEC]
+        );
+        return $row ? (int) $row['id'] : null;
+    }
+
     private const TYPES = ['estimate', 'actual'];
     /** 저장 폼에서 선택 가능한 상태 — cancelled 는 cancel 액션으로만 전환. */
     private const SAVABLE_STATUSES = ['draft', 'pending', 'confirmed'];
@@ -127,10 +150,18 @@ class CostsController
             Audit::log('update', 'costs', $id, $before, $data);
             $flash = '비용이 수정되었습니다.';
         } else {
-            $data['created_by'] = Auth::id();
-            $id = Db::insert('costs', $data);
-            Audit::log('create', 'costs', $id, null, $data);
-            $flash = '비용이 등록되었습니다.';
+            // 중복 저장 방지(멱등) — 저장 연타 시 같은 지출이 여러 건 쌓여
+            // 원가 총액과 순이익이 배수로 왜곡된다(입금 savePayment 와 동일 정책).
+            $dup = self::findRecentDuplicateCost($projectId, $category, $itemName, $amountInt, $spentDate);
+            if ($dup !== null) {
+                $id = $dup;
+                $flash = '비용이 등록되었습니다.';
+            } else {
+                $data['created_by'] = Auth::id();
+                $id = Db::insert('costs', $data);
+                Audit::log('create', 'costs', $id, null, $data);
+                $flash = '비용이 등록되었습니다.';
+            }
         }
 
         // 증빙 첨부(선택) — 기존 Upload/project_files 패턴 재사용 (entity_type='cost_receipt')

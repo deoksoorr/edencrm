@@ -1000,6 +1000,30 @@ class ContractsController
         Response::redirect('contracts.index', ['trash' => 1], '계약이 복원되었습니다.');
     }
 
+    /** 중복 저장 판정 창(초) — 사람이 의도적으로 동일 입금을 이 안에 두 번 넣지는 않는다. */
+    private const DUP_WINDOW_SEC = 60;
+
+    /**
+     * 최근 동일 입금 id — 없으면 null.
+     * 취소된 건은 제외한다(취소 후 같은 값으로 재등록하는 정상 흐름을 막지 않기 위함).
+     */
+    public static function findRecentDuplicatePayment(
+        int $contractId, string $payType, float $amount,
+        ?string $paidDate, ?string $dueDate, string $status
+    ): ?int {
+        $row = Db::one(
+            "SELECT id FROM payments
+              WHERE contract_id = :c AND pay_type = :t AND amount = :a
+                AND status = :s AND status <> 'cancelled'
+                AND (paid_date <=> :pd) AND (due_date <=> :dd)
+                AND created_at > DATE_SUB(NOW(), INTERVAL :sec SECOND)
+              ORDER BY id DESC LIMIT 1",
+            [':c' => $contractId, ':t' => $payType, ':a' => $amount, ':s' => $status,
+             ':pd' => $paidDate, ':dd' => $dueDate, ':sec' => self::DUP_WINDOW_SEC]
+        );
+        return $row ? (int) $row['id'] : null;
+    }
+
     public function savePayment(): void
     {
         $id = Util::postInt('id', 0);
@@ -1056,6 +1080,14 @@ class ContractsController
             Db::update('payments', $data, 'id = :id', [':id' => $id]);
             $paymentId = $id;
         } else {
+            // 중복 저장 방지(멱등) — 저장 버튼 연타·응답 전 재요청으로 같은 입금이
+            // 여러 건 쌓이면 순입금·확정매출이 배수로 부풀고 완납 상태가 조기 전환된다.
+            // 60초 내 동일 조건(계약·유형·금액·일자·상태) 입금이 있으면 새로 만들지 않고 기존 건을 돌려준다.
+            $dup = self::findRecentDuplicatePayment($contractId, $payType, $amount, $data['paid_date'], $dueDate, $status);
+            if ($dup !== null) {
+                $this->recalcPaymentStatus($contractId);
+                Response::json(['id' => $dup, 'duplicate' => true]);
+            }
             $data['created_by'] = Auth::id() ?: null;
             $paymentId = Db::insert('payments', $data);
         }

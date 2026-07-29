@@ -26,24 +26,104 @@ class SettingsController
         ]);
     }
 
+    /**
+     * 설정 키별 검증 규칙.
+     *
+     * 검증이 없으면 관리자가 자기 자신을 잠가버릴 수 있다 —
+     * 실측: session_idle_min=0 저장 시 저장 즉시 전원(본인 포함) 자동 로그아웃되어
+     * 설정 화면으로 돌아갈 수 없었고 DB 직접 수정으로만 복구 가능했다.
+     * page_size=0 은 목록을 0건으로, vat_rate='abc' 는 VAT 를 0원으로 만들었다.
+     *
+     * ['int', 최소, 최대] | ['num', 최소, 최대] | ['bool'] | ['time'] | ['str', 최대길이] | ['enum', [...]]
+     */
+    private const RULES = [
+        'page_size'          => ['int', 5, 200],
+        'vat_rate'           => ['num', 0, 100],
+        'login_max_attempts' => ['int', 1, 50],
+        'lock_minutes'       => ['int', 1, 1440],
+        'session_idle_min'   => ['int', 5, 1440],
+        'upload_max_size_mb' => ['int', 1, 100],
+        'app_name'           => ['str', 50],
+        'company_name'       => ['str', 100],
+        'timezone'           => ['enum', ['Asia/Seoul', 'UTC']],
+        'feature_attendance'              => ['bool'],
+        'feature_worklog'                 => ['bool'],
+        'feature_dashboard_sales_alerts'  => ['bool'],
+        'feature_pipeline_quick_alerts'   => ['bool'],
+        'attendance_work_start' => ['time'],
+        'attendance_work_end'   => ['time'],
+    ];
+
+    /** 값 검증. 통과하면 정규화된 값, 실패하면 사용자에게 보여줄 사유. */
+    private static function validateSetting(string $key, string $val, ?string &$err): ?string
+    {
+        $err = null;
+        $rule = self::RULES[$key] ?? null;
+        if ($rule === null) {
+            return $val;                       // 규칙 미정의 키는 그대로(문자열 설정)
+        }
+        switch ($rule[0]) {
+            case 'int':
+                if (!preg_match('/^-?\d+$/', $val)) { $err = '정수를 입력하세요.'; return null; }
+                $n = (int) $val;
+                if ($n < $rule[1] || $n > $rule[2]) { $err = "{$rule[1]} ~ {$rule[2]} 범위로 입력하세요."; return null; }
+                return (string) $n;
+            case 'num':
+                if (!is_numeric($val)) { $err = '숫자를 입력하세요.'; return null; }
+                $f = (float) $val;
+                if ($f < $rule[1] || $f > $rule[2]) { $err = "{$rule[1]} ~ {$rule[2]} 범위로 입력하세요."; return null; }
+                return rtrim(rtrim(sprintf('%.4f', $f), '0'), '.') ?: '0';
+            case 'bool':
+                return in_array($val, ['1', 'on', 'true'], true) ? '1' : '0';
+            case 'time':
+                if (!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $val)) { $err = 'HH:MM 형식으로 입력하세요.'; return null; }
+                return $val;
+            case 'enum':
+                if (!in_array($val, $rule[1], true)) { $err = '허용되지 않은 값입니다.'; return null; }
+                return $val;
+            case 'str':
+            default:
+                if (mb_strlen($val) > $rule[1]) { $err = "{$rule[1]}자 이내로 입력하세요."; return null; }
+                return $val;
+        }
+    }
+
     public function save(): void
     {
         $hidden = "'" . implode("','", self::HIDDEN_KEYS) . "'";
-        $rows = Db::all("SELECT setting_key, value FROM settings WHERE setting_key NOT IN ($hidden)");
+        $rows = Db::all("SELECT setting_key, value, label FROM settings WHERE setting_key NOT IN ($hidden)");
         $before = [];
         $after  = [];
+        $errors = [];
+
+        // 1) 먼저 전부 검증한다 — 하나라도 잘못되면 아무것도 저장하지 않는다(부분 적용 방지).
+        $pending = [];
         foreach ($rows as $r) {
             $key = $r['setting_key'];
             if (!array_key_exists($key, $_POST)) {
                 continue;
             }
             $val = trim((string) $_POST[$key]);
-            if ($val === $r['value']) {
+            $norm = self::validateSetting($key, $val, $err);
+            if ($norm === null) {
+                $errors[] = ($r['label'] ?? $key) . ': ' . $err;
                 continue;
             }
-            $before[$key] = $r['value'];
-            $after[$key]  = $val;
-            Db::update('settings', ['value' => $val], 'setting_key = :k', [':k' => $key]);
+            if ($norm === $r['value']) {
+                continue;
+            }
+            $pending[$key] = [$r['value'], $norm];
+        }
+
+        if ($errors) {
+            Response::redirect('settings.index', [], implode(' / ', $errors), 'error');
+        }
+
+        // 2) 전부 통과한 경우에만 반영
+        foreach ($pending as $key => [$old, $new]) {
+            $before[$key] = $old;
+            $after[$key]  = $new;
+            Db::update('settings', ['value' => $new], 'setting_key = :k', [':k' => $key]);
         }
         if ($after) {
             Audit::log('settings_update', 'settings', null, $before, $after);

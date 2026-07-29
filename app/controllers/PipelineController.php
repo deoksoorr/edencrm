@@ -489,13 +489,9 @@ class PipelineController
         return (int) (Db::val("SELECT id FROM pipeline_stages ORDER BY sort_order ASC LIMIT 1") ?? 1);
     }
 
+    /** 담당 영업 옵션 — 공용 구현(Util::salesUserOptions) 위임. 고객 폼과 동일 모집단 보장. */
     private function salesUserOptions(int $includeId = 0): array
     {
-        $rows = Db::all("SELECT id, name FROM users WHERE role_key = 'sales_manager' AND status = 'active' AND deleted_at IS NULL ORDER BY name");
-        if ($includeId && !in_array($includeId, array_map('intval', array_column($rows, 'id')), true)) {
-            $extra = Db::one('SELECT id, name FROM users WHERE id = :id', [':id' => $includeId]);
-            if ($extra) { $extra['name'] .= ' (비활성)'; $rows[] = $extra; }
-        }
-        return $rows;
+        return Util::salesUserOptions($includeId);
     }
 }

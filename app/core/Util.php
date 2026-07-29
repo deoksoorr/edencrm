@@ -315,6 +315,39 @@ class Util
         }
         return mb_substr($s, 0, $len) . '…';
     }
+    /**
+     * 담당 영업 선택 옵션 (고객·영업기회 폼 공용).
+     *
+     * 이전에는 role_key='sales_manager' 만 조회했는데 운영에 해당 역할 사용자가 0명이라
+     * 고객 폼의 담당 영업 셀렉트가 '미지정' 하나뿐이 되어 지정 자체가 불가능했다(QA 실측).
+     * R16 이후 업무 수행 가능 여부는 역할이 아니라 직원별 권한이 정하므로,
+     * 활성 직원 전체를 후보로 두고 실제 통제는 권한 매트릭스에 맡긴다.
+     *
+     * @param int $includeId 현재 지정된 담당자 — 비활성/삭제되었어도 목록에서 사라지지 않도록 포함
+     */
+    public static function salesUserOptions(int $includeId = 0): array
+    {
+        $rows = Db::all(
+            "SELECT id, name FROM users
+              WHERE status = 'active' AND deleted_at IS NULL
+              ORDER BY name"
+        );
+        if ($includeId > 0 && !in_array($includeId, array_map('intval', array_column($rows, 'id')), true)) {
+            $extra = Db::one(
+                "SELECT id, name, status, deleted_at FROM users WHERE id = :id",
+                [':id' => $includeId]
+            );
+            if ($extra) {
+                // 실제로 비활성/삭제인 경우에만 표시한다(활성 계정에 '(비활성)' 이 붙던 오표기 수정).
+                if (($extra['status'] ?? '') !== 'active' || !empty($extra['deleted_at'])) {
+                    $extra['name'] .= ' (비활성)';
+                }
+                unset($extra['status'], $extra['deleted_at']);
+                $rows[] = $extra;
+            }
+        }
+        return $rows;
+    }
 }
 
 // ── 전역 단축 함수 (뷰에서 사용) ──

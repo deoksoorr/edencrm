@@ -692,16 +692,9 @@ class CustomersController
     }
 
     /** 담당영업 select 옵션(role_key=sales_manager, 활성). 편집 중인 값이 목록에 없으면 포함. */
+    /** 담당 영업 옵션 — 공용 구현(Util::salesUserOptions) 위임. 영업기회 폼과 동일 모집단 보장. */
     private function salesUserOptions(int $includeId = 0): array
     {
-        $rows = Db::all("SELECT id, name FROM users WHERE role_key = 'sales_manager' AND status = 'active' AND deleted_at IS NULL ORDER BY name");
-        if ($includeId && !in_array($includeId, array_column($rows, 'id'), true)) {
-            $extra = Db::one('SELECT id, name FROM users WHERE id = :id', [':id' => $includeId]);
-            if ($extra) {
-                $extra['name'] .= ' (비활성)';
-                $rows[] = $extra;
-            }
-        }
-        return $rows;
+        return Util::salesUserOptions($includeId);
     }
 }

@@ -56,7 +56,7 @@ class PerformanceController
                 'user_id'    => (int) $u['id'],
                 'name'       => $u['name'],
                 'role_key'   => $u['role_key'],
-                'department' => $depMap[$u['department_id']] ?? '-',
+                'department' => ($u['department_id'] !== null && isset($depMap[$u['department_id']])) ? $depMap[$u['department_id']] : '-',
             ];
         }
 
