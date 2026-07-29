@@ -1,0 +1,1667 @@
+{
+  "meta": {
+    "task": "T2",
+    "agent": "backup",
+    "mode": "read-only (no prod access)",
+    "generated_at": "2026-07-29T03:05:42+00:00",
+    "ftp_backup": "database/backups/ftp_20260729-103659",
+    "db_backup": "database/backups/proddb_audit_pre_20260729-013710.sql",
+    "baseline": "docs/audit/dr/baseline_prod.json",
+    "elapsed_sec": 1.98
+  },
+  "A_files": {
+    "A1_inventory": {
+      "dir": "database/backups/ftp_20260729-103659",
+      "dirname_timestamp_local": "20260729T103659",
+      "dir_mtime_local": "2026-07-29T10:37:10+09:00",
+      "file_count": 134,
+      "dir_count": 39,
+      "symlink_count": 0,
+      "symlinks": [],
+      "total_bytes": 2155359,
+      "zero_byte_files": [],
+      "file_mtime_min_local": "2026-07-23T12:29:23+09:00",
+      "file_mtime_max_local": "2026-07-29T09:24:22+09:00",
+      "newest_file": "app/config/config.local.php"
+    },
+    "A2_required": {
+      "entrypoint public/index.php": {
+        "path": "public/index.php",
+        "present": true,
+        "bytes": 5955
+      },
+      "routes app/routes.php": {
+        "path": "app/routes.php",
+        "present": true,
+        "bytes": 17922
+      },
+      "bootstrap app/bootstrap.php": {
+        "path": "app/bootstrap.php",
+        "present": true,
+        "bytes": 3027
+      },
+      "config app/config/config.php": {
+        "path": "app/config/config.php",
+        "present": true,
+        "bytes": 2803
+      },
+      "root .htaccess": {
+        "path": ".htaccess",
+        "present": true,
+        "bytes": 2157
+      },
+      "storage/.htaccess": {
+        "path": "storage/.htaccess",
+        "present": true,
+        "bytes": 552
+      },
+      "public/.user.ini": {
+        "path": "public/.user.ini",
+        "present": true,
+        "bytes": 247
+      },
+      "css public/assets/css/app.css": {
+        "path": "public/assets/css/app.css",
+        "present": true,
+        "bytes": 79133
+      },
+      "js public/assets/js/app.js": {
+        "path": "public/assets/js/app.js",
+        "present": true,
+        "bytes": 13119
+      },
+      "vendor chart.umd.js": {
+        "path": "public/assets/vendor/chart.umd.js",
+        "present": true,
+        "bytes": 205125
+      },
+      "vendor Sortable.min.js": {
+        "path": "public/assets/vendor/Sortable.min.js",
+        "present": true,
+        "bytes": 44581
+      }
+    },
+    "A2_group_file_counts": {
+      "app/controllers/": 23,
+      "app/core/": 26,
+      "app/views/": 60,
+      "public/assets/css/": 1,
+      "public/assets/js/": 10,
+      "public/assets/vendor/": 2,
+      "storage/uploads/": 2,
+      "storage/logs/": 1
+    },
+    "A2_missing_required": [],
+    "A2_static_images": [],
+    "A3_uploads": {
+      "backup_upload_files": [
+        "customers/1/db9cfc2cd982075fcdee8bda.png",
+        "customers/5/0272f2e68af26428c83022e3.jpeg"
+      ],
+      "backup_upload_count": 2,
+      "db_project_files_count": 2,
+      "db_paths": [
+        "customers/1/db9cfc2cd982075fcdee8bda.png",
+        "customers/5/0272f2e68af26428c83022e3.jpeg"
+      ],
+      "matched_exact": [
+        {
+          "path": "customers/1/db9cfc2cd982075fcdee8bda.png",
+          "db_size": 133749,
+          "file_size": 133749
+        },
+        {
+          "path": "customers/5/0272f2e68af26428c83022e3.jpeg",
+          "db_size": 229689,
+          "file_size": 229689
+        }
+      ],
+      "mismatch_or_missing": [],
+      "orphan_files_not_in_db": [],
+      "verdict": "PASS"
+    },
+    "A4_runtime_dirs": {
+      "storage_logs_present": true,
+      "storage_logs_files": [
+        "storage/logs/php-error.log"
+      ],
+      "storage_uploads_present": true,
+      "cache_dir_present": false,
+      "session_dir_present": false,
+      "gitkeep_files": [],
+      "empty_dirs": []
+    },
+    "A5_symlinks": {
+      "count": 0,
+      "note": "lftp mirror 기본은 심링크를 재생성하지만, 백업본에 링크가 0개이므로 복구 시 링크 재현 이슈 없음"
+    },
+    "A6_secrets_in_backup": {
+      "sensitive_files": [
+        {
+          "path": "app/config/config.local.php",
+          "bytes": 840,
+          "mode": "0o644",
+          "sha256_12": "ac0557b9b713"
+        }
+      ],
+      "config_local_php_present": true,
+      "config_local_php_keys_only": [
+        "DB_HOST",
+        "DB_NAME",
+        "DB_USER"
+      ],
+      "note": "값은 절대 기록하지 않음 — 키 이름/크기/모드만",
+      "gitignored_locally": ".gitignore:1:app/config/config.local.php\tapp/config/config.local.php"
+    },
+    "A7_git_diff": {
+      "git_head": "37d2da0fb550460c22b6b8ef77ea30a9504cd24a 2026-07-29T10:39:39+09:00 docs(audit): 감사 보고서 3종 + 감사 도구",
+      "git_dirty_entries": 8,
+      "tracked_deployable": 126,
+      "backup_deployable": 130,
+      "identical": 94,
+      "content_differs": [
+        "app/controllers/ContractsController.php",
+        "app/controllers/CostsController.php",
+        "app/controllers/CustomersController.php",
+        "app/controllers/PerformanceController.php",
+        "app/controllers/PipelineController.php",
+        "app/controllers/ProjectsController.php",
+        "app/controllers/QuotesController.php",
+        "app/controllers/SettingsController.php",
+        "app/core/AccountingService.php",
+        "app/core/ProcessService.php",
+        "app/core/Util.php",
+        "app/views/contracts/form.php",
+        "app/views/contracts/index.php",
+        "app/views/customers/index.php",
+        "app/views/pipeline/form.php",
+        "app/views/pipeline/index.php",
+        "app/views/pipeline/show.php",
+        "app/views/projects/_tab_history.php",
+        "app/views/projects/form.php",
+        "app/views/projects/index.php",
+        "app/views/quotes/index.php",
+        "app/views/reports/attendance.php",
+        "app/views/reports/index.php",
+        "app/views/settings/stages.php",
+        "app/views/targets/index.php",
+        "app/views/worklogs/form.php",
+        "app/views/worklogs/index.php",
+        "public/assets/css/app.css",
+        "public/assets/js/app.js",
+        "public/assets/js/process-board.js",
+        "public/assets/js/reports.js"
+      ],
+      "only_in_local_git_MISSING_FROM_BACKUP": [
+        "app/views/partials/trash_actions.php"
+      ],
+      "only_in_backup_untracked": [
+        "app/config/config.local.php",
+        "app/views/dashboard/boss.php",
+        "app/views/dashboard/sales.php",
+        "app/views/dashboard/site.php",
+        "app/views/dashboard/staff.php"
+      ]
+    },
+    "A7_provenance": {
+      "blob_found_in_git_history": 129,
+      "blob_NOT_in_git_history": [
+        "app/config/config.local.php"
+      ],
+      "interpretation": "git 이력에 없는 blob = 서버에서 직접 수정됐거나 미커밋 산출물 / 있는 blob = 과거 커밋의 정상 배포본(시점 차이)"
+    },
+    "A9_deploy_correlation": {
+      "deploy_log_count": 47,
+      "last_deploy_before_backup": {
+        "log": "deploy_20260729-092421.log",
+        "mtime_local": "2026-07-29T09:24:22+09:00"
+      },
+      "first_deploy_after_backup": {
+        "log": "deploy_20260729-103753.log",
+        "mtime_local": "2026-07-29T10:38:02+09:00"
+      },
+      "backup_dir_mtime": "2026-07-29T10:37:10+09:00",
+      "note": "백업 이후 배포가 있으면 이 백업은 현재 운영 코드를 담고 있지 않다 — 파일 복구 시 그만큼 롤백된다"
+    },
+    "A10_dir_mtime_skew": {
+      "dirs_with_files": 35,
+      "median_skew_hours": 9.0,
+      "dirs_dated_in_future": 22,
+      "files_dated_in_future": 0,
+      "note": "디렉터리 mtime 이 내부 파일보다 중앙값 +9h — 파일 mtime 은 정상. 증분/차등 복구를 mtime 으로 판단하면 안 된다"
+    },
+    "A8_modes": {
+      "files": {
+        "0o644": 134
+      },
+      "dirs": {
+        "0o755": 39
+      },
+      "note": "파일 mode 는 lftp mirror 가 원격 LIST 기준으로 적용, 디렉터리는 로컬 mkdir umask 라 원격 실제값이 아님 — 복구 시 storage/ 쓰기권한 재설정 필수"
+    }
+  },
+  "B_sql": {
+    "B9_integrity": {
+      "path": "database/backups/proddb_audit_pre_20260729-013710.sql",
+      "bytes": 352895,
+      "nonzero": true,
+      "mtime_local": "2026-07-29T10:37:11+09:00",
+      "header_line": "-- eden_crm 운영 백업 2026-07-29T01:37:10+00:00 · 46 tables (prefix edencrm_)",
+      "header_declared_tables": 46,
+      "header_timestamp": "2026-07-29T01:37:10+00:00",
+      "total_lines": 2130,
+      "last_nonempty_line": "SET FOREIGN_KEY_CHECKS=1;",
+      "ends_with_semicolon": true,
+      "ends_with_fk_checks_on": true,
+      "utf8_decodable": true,
+      "utf8_error": null,
+      "sha256": "99647c670aeb9a206fb6e0d0acb8c4a37b28aa5b055dcae447708e06d8759376"
+    },
+    "B10_tables": {
+      "create_table_count": 46,
+      "prod_table_count": 46,
+      "drop_table_count": 46,
+      "set_equal": true,
+      "in_prod_not_in_dump": [],
+      "in_dump_not_in_prod": [],
+      "duplicate_creates": [],
+      "non_prefixed_tables_in_dump": []
+    },
+    "B11_rows": {
+      "dump_insert_total": 1102,
+      "baseline_row_total": 1102,
+      "equal": true,
+      "delta": 0
+    },
+    "B12_per_table": {
+      "attendance_marks": {
+        "table": "edencrm_attendance_marks",
+        "baseline_rows": 1,
+        "dump_inserts": 1,
+        "delta": 0
+      },
+      "audit_logs": {
+        "table": "edencrm_audit_logs",
+        "baseline_rows": 394,
+        "dump_inserts": 394,
+        "delta": 0
+      },
+      "company_targets": {
+        "table": "edencrm_company_targets",
+        "baseline_rows": 17,
+        "dump_inserts": 17,
+        "delta": 0
+      },
+      "contract_status_history": {
+        "table": "edencrm_contract_status_history",
+        "baseline_rows": 9,
+        "dump_inserts": 9,
+        "delta": 0
+      },
+      "contract_terminations": {
+        "table": "edencrm_contract_terminations",
+        "baseline_rows": 1,
+        "dump_inserts": 1,
+        "delta": 0
+      },
+      "contracts": {
+        "table": "edencrm_contracts",
+        "baseline_rows": 5,
+        "dump_inserts": 5,
+        "delta": 0
+      },
+      "costs": {
+        "table": "edencrm_costs",
+        "baseline_rows": 4,
+        "dump_inserts": 4,
+        "delta": 0
+      },
+      "customer_activities": {
+        "table": "edencrm_customer_activities",
+        "baseline_rows": 1,
+        "dump_inserts": 1,
+        "delta": 0
+      },
+      "customer_contacts": {
+        "table": "edencrm_customer_contacts",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "customers": {
+        "table": "edencrm_customers",
+        "baseline_rows": 6,
+        "dump_inserts": 6,
+        "delta": 0
+      },
+      "departments": {
+        "table": "edencrm_departments",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "employee_permissions": {
+        "table": "edencrm_employee_permissions",
+        "baseline_rows": 36,
+        "dump_inserts": 36,
+        "delta": 0
+      },
+      "goal_history": {
+        "table": "edencrm_goal_history",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "goals": {
+        "table": "edencrm_goals",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "holidays": {
+        "table": "edencrm_holidays",
+        "baseline_rows": 20,
+        "dump_inserts": 20,
+        "delta": 0
+      },
+      "leads": {
+        "table": "edencrm_leads",
+        "baseline_rows": 2,
+        "dump_inserts": 2,
+        "delta": 0
+      },
+      "login_attempts": {
+        "table": "edencrm_login_attempts",
+        "baseline_rows": 72,
+        "dump_inserts": 72,
+        "delta": 0
+      },
+      "notifications": {
+        "table": "edencrm_notifications",
+        "baseline_rows": 32,
+        "dump_inserts": 32,
+        "delta": 0
+      },
+      "payments": {
+        "table": "edencrm_payments",
+        "baseline_rows": 13,
+        "dump_inserts": 13,
+        "delta": 0
+      },
+      "permissions": {
+        "table": "edencrm_permissions",
+        "baseline_rows": 43,
+        "dump_inserts": 43,
+        "delta": 0
+      },
+      "pipeline_stages": {
+        "table": "edencrm_pipeline_stages",
+        "baseline_rows": 12,
+        "dump_inserts": 12,
+        "delta": 0
+      },
+      "process_stages": {
+        "table": "edencrm_process_stages",
+        "baseline_rows": 33,
+        "dump_inserts": 33,
+        "delta": 0
+      },
+      "project_assignments": {
+        "table": "edencrm_project_assignments",
+        "baseline_rows": 11,
+        "dump_inserts": 11,
+        "delta": 0
+      },
+      "project_files": {
+        "table": "edencrm_project_files",
+        "baseline_rows": 2,
+        "dump_inserts": 2,
+        "delta": 0
+      },
+      "project_memos": {
+        "table": "edencrm_project_memos",
+        "baseline_rows": 1,
+        "dump_inserts": 1,
+        "delta": 0
+      },
+      "project_process_history": {
+        "table": "edencrm_project_process_history",
+        "baseline_rows": 117,
+        "dump_inserts": 117,
+        "delta": 0
+      },
+      "project_stage_progress": {
+        "table": "edencrm_project_stage_progress",
+        "baseline_rows": 64,
+        "dump_inserts": 64,
+        "delta": 0
+      },
+      "project_status_history": {
+        "table": "edencrm_project_status_history",
+        "baseline_rows": 51,
+        "dump_inserts": 51,
+        "delta": 0
+      },
+      "projects": {
+        "table": "edencrm_projects",
+        "baseline_rows": 11,
+        "dump_inserts": 11,
+        "delta": 0
+      },
+      "quote_items": {
+        "table": "edencrm_quote_items",
+        "baseline_rows": 4,
+        "dump_inserts": 4,
+        "delta": 0
+      },
+      "quote_versions": {
+        "table": "edencrm_quote_versions",
+        "baseline_rows": 4,
+        "dump_inserts": 4,
+        "delta": 0
+      },
+      "quotes": {
+        "table": "edencrm_quotes",
+        "baseline_rows": 4,
+        "dump_inserts": 4,
+        "delta": 0
+      },
+      "role_permissions": {
+        "table": "edencrm_role_permissions",
+        "baseline_rows": 77,
+        "dump_inserts": 77,
+        "delta": 0
+      },
+      "roles": {
+        "table": "edencrm_roles",
+        "baseline_rows": 5,
+        "dump_inserts": 5,
+        "delta": 0
+      },
+      "schedule_participants": {
+        "table": "edencrm_schedule_participants",
+        "baseline_rows": 3,
+        "dump_inserts": 3,
+        "delta": 0
+      },
+      "schedule_time_slots": {
+        "table": "edencrm_schedule_time_slots",
+        "baseline_rows": 4,
+        "dump_inserts": 4,
+        "delta": 0
+      },
+      "schedules": {
+        "table": "edencrm_schedules",
+        "baseline_rows": 2,
+        "dump_inserts": 2,
+        "delta": 0
+      },
+      "settings": {
+        "table": "edencrm_settings",
+        "baseline_rows": 15,
+        "dump_inserts": 15,
+        "delta": 0
+      },
+      "site_bonus_history": {
+        "table": "edencrm_site_bonus_history",
+        "baseline_rows": 14,
+        "dump_inserts": 14,
+        "delta": 0
+      },
+      "site_bonuses": {
+        "table": "edencrm_site_bonuses",
+        "baseline_rows": 5,
+        "dump_inserts": 5,
+        "delta": 0
+      },
+      "targets": {
+        "table": "edencrm_targets",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "user_permissions": {
+        "table": "edencrm_user_permissions",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "users": {
+        "table": "edencrm_users",
+        "baseline_rows": 7,
+        "dump_inserts": 7,
+        "delta": 0
+      },
+      "warranty_repairs": {
+        "table": "edencrm_warranty_repairs",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "work_log_photos": {
+        "table": "edencrm_work_log_photos",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      },
+      "work_logs": {
+        "table": "edencrm_work_logs",
+        "baseline_rows": 0,
+        "dump_inserts": 0,
+        "delta": 0
+      }
+    },
+    "B12_mismatched_tables": [],
+    "B12_mismatch_count": 0,
+    "B12_timing": {
+      "dump_at": "2026-07-29T01:37:10+00:00",
+      "baseline_measured_at": "2026-07-29T02:49:54+00:00",
+      "note": "베이스라인이 덤프보다 나중에 측정되었으면 그 사이 운영 쓰기로 차이가 날 수 있다"
+    },
+    "B13_ddl_clauses": {
+      "PRIMARY KEY": 46,
+      "UNIQUE KEY": 23,
+      "KEY (non-unique+unique 라인)": 161,
+      "CONSTRAINT ... FOREIGN KEY": 85,
+      "AUTO_INCREMENT column": 90,
+      "AUTO_INCREMENT= (table option)": 36,
+      "ENGINE=InnoDB": 46,
+      "DEFAULT CHARSET=utf8mb4": 46,
+      "COLLATE=utf8mb4_unicode_ci": 46,
+      "baseline_fk_count": 85,
+      "baseline_index_count": 207,
+      "baseline_autoinc_tables": 45,
+      "index_lines_incl_primary": 207
+    },
+    "B14_error_traces": {
+      "count": 0,
+      "samples": [],
+      "unparsed_lines": 0,
+      "unparsed_samples": []
+    },
+    "B15_charset_preamble": {
+      "has_SET_NAMES": false,
+      "has_SET_character_set_client": false,
+      "has_charset_collation_connection": false,
+      "has_CREATE_DATABASE": false,
+      "has_USE_stmt": false,
+      "has_START_TRANSACTION": false,
+      "has_LOCK_TABLES": false,
+      "has_SET_sql_mode": false,
+      "has_SET_time_zone": false,
+      "preamble_statements": [
+        "-- eden_crm 운영 백업 2026-07-29T01:37:10+00:00 · 46 tables (prefix edencrm_)",
+        "SET FOREIGN_KEY_CHECKS=0;"
+      ],
+      "non_ascii_bytes": 19744
+    },
+    "B16_drop_table": {
+      "count": 46,
+      "covers_all_creates": true,
+      "guarded_by_if_exists": true,
+      "has_create_if_not_exists": false,
+      "fk_checks_off_at_top": true
+    },
+    "B18_mysql_compat_scan": {
+      "int_display_width": {
+        "count": 175,
+        "example": "proddb_audit_pre_20260729-013710.sql:6  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,"
+      },
+      "tinyint_1": {
+        "count": 18,
+        "example": "proddb_audit_pre_20260729-013710.sql:641  `is_primary` tinyint(1) NOT NULL DEFAULT 0,"
+      },
+      "current_timestamp_parens": {
+        "count": 76,
+        "example": "proddb_audit_pre_20260729-013710.sql:12  `created_at` datetime NOT NULL DEFAULT current_timestamp(),"
+      },
+      "on_update_current_timestamp_parens": {
+        "count": 31,
+        "example": "proddb_audit_pre_20260729-013710.sql:13  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),"
+      },
+      "utf8mb3_or_utf8_legacy": {
+        "count": 0,
+        "example": null
+      },
+      "row_format": {
+        "count": 0,
+        "example": null
+      },
+      "text_blob_default_null": {
+        "count": 20,
+        "example": "proddb_audit_pre_20260729-013710.sql:30  `before_json` text DEFAULT NULL,"
+      },
+      "json_default": {
+        "count": 0,
+        "example": null
+      },
+      "mariadb_check_constraint": {
+        "count": 0,
+        "example": null
+      },
+      "mariadb_invisible": {
+        "count": 0,
+        "example": null
+      },
+      "mariadb_system_versioning": {
+        "count": 0,
+        "example": null
+      },
+      "mariadb_page_checksum": {
+        "count": 0,
+        "example": null
+      },
+      "mariadb_uuid_default": {
+        "count": 0,
+        "example": null
+      },
+      "generated_virtual_persistent": {
+        "count": 1,
+        "example": "proddb_audit_pre_20260729-013710.sql:1215  `active_pair` varchar(40) GENERATED ALWAYS AS (case when `status` = 'active' then concat(`project_id`,'-',`user_id`) else NULL end) VIRTUAL COMMENT 'a"
+      },
+      "zerofill": {
+        "count": 0,
+        "example": null
+      },
+      "fulltext_or_spatial": {
+        "count": 0,
+        "example": null
+      },
+      "double_unsigned": {
+        "count": 0,
+        "example": null
+      }
+    },
+    "B19_binary_risk": {
+      "blob_binary_columns_in_prod": [],
+      "blob_binary_column_count": 0,
+      "dump_contains_hex_literal": false,
+      "null_literal_count": 1146,
+      "escaped_nul_in_data": 0,
+      "raw_nul_bytes": 0,
+      "note": "db_dump.php:36 은 (string)\\$v 캐스팅 후 PDO::quote — 바이너리 컬럼이 0개면 실질 위험 없음"
+    },
+    "B20_password_hashes": {
+      "bcrypt_count": 7,
+      "lengths": [
+        60
+      ],
+      "all_60": true,
+      "baseline_expected": [
+        {
+          "algo": "$2y$",
+          "c": 7,
+          "min_len": 60,
+          "max_len": 60
+        }
+      ],
+      "note": "해시 값 자체는 기록하지 않음"
+    },
+    "B17_atomicity": {
+      "source": "deploy/db_dump.php",
+      "has_beginTransaction": false,
+      "has_SET_TRANSACTION_ISOLATION": true,
+      "has_consistent_snapshot": true,
+      "has_LOCK_TABLES": false,
+      "has_FLUSH_TABLES_WITH_READ_LOCK": false,
+      "per_table_sequential_select": true,
+      "select_stmt": "SELECT * FROM `$t`",
+      "atomic": false,
+      "verdict": "트랜잭션·락 없이 테이블을 알파벳 순으로 순차 SELECT — 덤프 시작~종료 사이 운영 쓰기가 있으면 테이블 간 참조 불일치가 남는다"
+    },
+    "B21_restore_blockers": [
+      {
+        "kind": "INSERT into GENERATED column",
+        "severity": "CRITICAL",
+        "table": "edencrm_project_assignments",
+        "column": "active_pair",
+        "sql_line": 1215,
+        "affected_insert_rows": 11,
+        "dump_order_position": 23,
+        "tables_after_failure_point": 23,
+        "rows_after_failure_point": 390,
+        "tables_lost_on_abort": [
+          "edencrm_project_files",
+          "edencrm_project_memos",
+          "edencrm_project_process_history",
+          "edencrm_project_stage_progress",
+          "edencrm_project_status_history",
+          "edencrm_projects",
+          "edencrm_quote_items",
+          "edencrm_quote_versions",
+          "edencrm_quotes",
+          "edencrm_role_permissions",
+          "edencrm_roles",
+          "edencrm_schedule_participants",
+          "edencrm_schedule_time_slots",
+          "edencrm_schedules",
+          "edencrm_settings",
+          "edencrm_site_bonus_history",
+          "edencrm_site_bonuses",
+          "edencrm_targets",
+          "edencrm_user_permissions",
+          "edencrm_users",
+          "edencrm_warranty_repairs",
+          "edencrm_work_log_photos",
+          "edencrm_work_logs"
+        ],
+        "expected_error": "MySQL 3105 / MariaDB 1906 — The value specified for generated column ... is not allowed"
+      }
+    ],
+    "B21_summary": {
+      "blocker_count": 1,
+      "drop_before_create": true,
+      "client_aborts_on_error_by_default": true,
+      "worst_case": "mysql < dump.sql 로 실행하면 46개 테이블을 DROP 한 뒤 차단 지점에서 중단 → DB가 반쯤 비워진 채 남는다"
+    },
+    "B22_auto_increment": {
+      "tables_with_AI_clause_in_dump": 36,
+      "prod_tables_with_AI": 45,
+      "mismatches": [
+        {
+          "table": "edencrm_audit_logs",
+          "prod_auto_increment": 494,
+          "dump_auto_increment": 485,
+          "dump_rows": 394
+        },
+        {
+          "table": "edencrm_customer_contacts",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_customers",
+          "prod_auto_increment": 10,
+          "dump_auto_increment": 9,
+          "dump_rows": 6
+        },
+        {
+          "table": "edencrm_departments",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_goal_history",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_goals",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_login_attempts",
+          "prod_auto_increment": 97,
+          "dump_auto_increment": 93,
+          "dump_rows": 72
+        },
+        {
+          "table": "edencrm_targets",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_user_permissions",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_users",
+          "prod_auto_increment": 20,
+          "dump_auto_increment": 19,
+          "dump_rows": 7
+        },
+        {
+          "table": "edencrm_warranty_repairs",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_work_log_photos",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        },
+        {
+          "table": "edencrm_work_logs",
+          "prod_auto_increment": 1,
+          "dump_auto_increment": null,
+          "dump_rows": 0
+        }
+      ],
+      "mismatches_with_rows": [
+        {
+          "table": "edencrm_audit_logs",
+          "prod_auto_increment": 494,
+          "dump_auto_increment": 485,
+          "dump_rows": 394
+        },
+        {
+          "table": "edencrm_customers",
+          "prod_auto_increment": 10,
+          "dump_auto_increment": 9,
+          "dump_rows": 6
+        },
+        {
+          "table": "edencrm_login_attempts",
+          "prod_auto_increment": 97,
+          "dump_auto_increment": 93,
+          "dump_rows": 72
+        },
+        {
+          "table": "edencrm_users",
+          "prod_auto_increment": 20,
+          "dump_auto_increment": 19,
+          "dump_rows": 7
+        }
+      ],
+      "note": "AI=1 인 빈 테이블은 MariaDB SHOW CREATE 가 절을 생략한다(정상). 행이 있는 테이블의 차이는 덤프 이후 발생한 롤백/차단 INSERT 로 카운터만 전진한 것."
+    },
+    "B23_rollback_sql_coverage": {
+      "file": "database/cafe24/rollback.sql",
+      "drop_targets": 39,
+      "prod_tables": 46,
+      "missing_from_rollback": [
+        "edencrm_employee_permissions",
+        "edencrm_goal_history",
+        "edencrm_goals",
+        "edencrm_project_memos",
+        "edencrm_project_stage_progress",
+        "edencrm_site_bonus_history",
+        "edencrm_site_bonuses"
+      ],
+      "stale_in_rollback": []
+    },
+    "_parsed": {
+      "creates": [
+        "edencrm_attendance_marks",
+        "edencrm_audit_logs",
+        "edencrm_company_targets",
+        "edencrm_contract_status_history",
+        "edencrm_contract_terminations",
+        "edencrm_contracts",
+        "edencrm_costs",
+        "edencrm_customer_activities",
+        "edencrm_customer_contacts",
+        "edencrm_customers",
+        "edencrm_departments",
+        "edencrm_employee_permissions",
+        "edencrm_goal_history",
+        "edencrm_goals",
+        "edencrm_holidays",
+        "edencrm_leads",
+        "edencrm_login_attempts",
+        "edencrm_notifications",
+        "edencrm_payments",
+        "edencrm_permissions",
+        "edencrm_pipeline_stages",
+        "edencrm_process_stages",
+        "edencrm_project_assignments",
+        "edencrm_project_files",
+        "edencrm_project_memos",
+        "edencrm_project_process_history",
+        "edencrm_project_stage_progress",
+        "edencrm_project_status_history",
+        "edencrm_projects",
+        "edencrm_quote_items",
+        "edencrm_quote_versions",
+        "edencrm_quotes",
+        "edencrm_role_permissions",
+        "edencrm_roles",
+        "edencrm_schedule_participants",
+        "edencrm_schedule_time_slots",
+        "edencrm_schedules",
+        "edencrm_settings",
+        "edencrm_site_bonus_history",
+        "edencrm_site_bonuses",
+        "edencrm_targets",
+        "edencrm_user_permissions",
+        "edencrm_users",
+        "edencrm_warranty_repairs",
+        "edencrm_work_log_photos",
+        "edencrm_work_logs"
+      ],
+      "inserts_by_table": {
+        "edencrm_attendance_marks": 1,
+        "edencrm_audit_logs": 394,
+        "edencrm_company_targets": 17,
+        "edencrm_contract_status_history": 9,
+        "edencrm_contract_terminations": 1,
+        "edencrm_contracts": 5,
+        "edencrm_costs": 4,
+        "edencrm_customer_activities": 1,
+        "edencrm_customers": 6,
+        "edencrm_employee_permissions": 36,
+        "edencrm_holidays": 20,
+        "edencrm_leads": 2,
+        "edencrm_login_attempts": 72,
+        "edencrm_notifications": 32,
+        "edencrm_payments": 13,
+        "edencrm_permissions": 43,
+        "edencrm_pipeline_stages": 12,
+        "edencrm_process_stages": 33,
+        "edencrm_project_assignments": 11,
+        "edencrm_project_files": 2,
+        "edencrm_project_memos": 1,
+        "edencrm_project_process_history": 117,
+        "edencrm_project_stage_progress": 64,
+        "edencrm_project_status_history": 51,
+        "edencrm_projects": 11,
+        "edencrm_quote_items": 4,
+        "edencrm_quote_versions": 4,
+        "edencrm_quotes": 4,
+        "edencrm_role_permissions": 77,
+        "edencrm_roles": 5,
+        "edencrm_schedule_participants": 3,
+        "edencrm_schedule_time_slots": 4,
+        "edencrm_schedules": 2,
+        "edencrm_settings": 15,
+        "edencrm_site_bonus_history": 14,
+        "edencrm_site_bonuses": 5,
+        "edencrm_users": 7
+      }
+    }
+  },
+  "C_ops": {
+    "C21_history": [
+      {
+        "kind": "files",
+        "name": "ftp_20260723-131931",
+        "label": null,
+        "name_ts": "2026-07-23T13:19:31",
+        "mtime_local": "2026-07-23T13:19:38+09:00",
+        "files": 118,
+        "bytes": 1307608
+      },
+      {
+        "kind": "db",
+        "name": "proddb_20260723-132005.sql",
+        "label": null,
+        "name_ts_utc": null,
+        "mtime_local": "2026-07-23T13:20:05+09:00",
+        "files": 1,
+        "bytes": 101262
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260723-141807",
+        "label": null,
+        "name_ts": "2026-07-23T14:18:07",
+        "mtime_local": "2026-07-23T14:18:15+09:00",
+        "files": 118,
+        "bytes": 1330581
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260723-143134",
+        "label": null,
+        "name_ts": "2026-07-23T14:31:34",
+        "mtime_local": "2026-07-23T14:31:42+09:00",
+        "files": 118,
+        "bytes": 1330738
+      },
+      {
+        "kind": "db",
+        "name": "proddb_final_20260723-143151.sql",
+        "label": "final",
+        "name_ts_utc": "2026-07-23T14:31:51",
+        "mtime_local": "2026-07-23T14:31:52+09:00",
+        "files": 1,
+        "bytes": 107304
+      },
+      {
+        "kind": "db",
+        "name": "proddb_precleanup_20260723-144118.sql",
+        "label": "precleanup",
+        "name_ts_utc": "2026-07-23T14:41:18",
+        "mtime_local": "2026-07-23T14:41:19+09:00",
+        "files": 1,
+        "bytes": 107304
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260723-154803",
+        "label": null,
+        "name_ts": "2026-07-23T15:48:03",
+        "mtime_local": "2026-07-23T15:48:10+09:00",
+        "files": 119,
+        "bytes": 1470774
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r8pre_20260727-043555.sql",
+        "label": "r8pre",
+        "name_ts_utc": "2026-07-27T04:35:55",
+        "mtime_local": "2026-07-27T13:35:55+09:00",
+        "files": 1,
+        "bytes": 202833
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260727-133622",
+        "label": null,
+        "name_ts": "2026-07-27T13:36:22",
+        "mtime_local": "2026-07-27T13:36:29+09:00",
+        "files": 120,
+        "bytes": 1708629
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260727-143146",
+        "label": null,
+        "name_ts": "2026-07-27T14:31:46",
+        "mtime_local": "2026-07-27T14:31:54+09:00",
+        "files": 124,
+        "bytes": 1822680
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r9pre_20260727-053253.sql",
+        "label": "r9pre",
+        "name_ts_utc": "2026-07-27T05:32:53",
+        "mtime_local": "2026-07-27T14:32:53+09:00",
+        "files": 1,
+        "bytes": 222728
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r9pre_20260727-055540.sql",
+        "label": "r9pre",
+        "name_ts_utc": "2026-07-27T05:55:40",
+        "mtime_local": "2026-07-27T14:55:40+09:00",
+        "files": 1,
+        "bytes": 241772
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r9pre_20260727-061120.sql",
+        "label": "r9pre",
+        "name_ts_utc": "2026-07-27T06:11:20",
+        "mtime_local": "2026-07-27T15:11:21+09:00",
+        "files": 1,
+        "bytes": 248746
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r9pre_20260727-064308.sql",
+        "label": "r9pre",
+        "name_ts_utc": "2026-07-27T06:43:08",
+        "mtime_local": "2026-07-27T15:43:09+09:00",
+        "files": 1,
+        "bytes": 248746
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r11pre_20260727-075706.sql",
+        "label": "r11pre",
+        "name_ts_utc": "2026-07-27T07:57:06",
+        "mtime_local": "2026-07-27T16:57:07+09:00",
+        "files": 1,
+        "bytes": 210657
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r12pre_20260727-091304.sql",
+        "label": "r12pre",
+        "name_ts_utc": "2026-07-27T09:13:04",
+        "mtime_local": "2026-07-27T18:13:04+09:00",
+        "files": 1,
+        "bytes": 223664
+      },
+      {
+        "kind": "other_sql",
+        "name": "restore_test_stages_20260728-093332.sql",
+        "label": null,
+        "mtime_local": "2026-07-28T09:33:56+09:00",
+        "files": 1,
+        "bytes": 2019
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r14pre_20260728-062229.sql",
+        "label": "r14pre",
+        "name_ts_utc": "2026-07-28T06:22:29",
+        "mtime_local": "2026-07-28T15:22:29+09:00",
+        "files": 1,
+        "bytes": 282189
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260729-082624",
+        "label": null,
+        "name_ts": "2026-07-29T08:26:24",
+        "mtime_local": "2026-07-29T08:26:32+09:00",
+        "files": 129,
+        "bytes": 2033406
+      },
+      {
+        "kind": "db",
+        "name": "proddb_r16_pre_20260728-232641.sql",
+        "label": "r16_pre",
+        "name_ts_utc": "2026-07-28T23:26:41",
+        "mtime_local": "2026-07-29T08:26:42+09:00",
+        "files": 1,
+        "bytes": 335927
+      },
+      {
+        "kind": "db",
+        "name": "proddb_perf_pre_20260729-010719.sql",
+        "label": "perf_pre",
+        "name_ts_utc": "2026-07-29T01:07:19",
+        "mtime_local": "2026-07-29T10:07:19+09:00",
+        "files": 1,
+        "bytes": 352905
+      },
+      {
+        "kind": "files",
+        "name": "ftp_20260729-103659",
+        "label": null,
+        "name_ts": "2026-07-29T10:36:59",
+        "mtime_local": "2026-07-29T10:37:10+09:00",
+        "files": 134,
+        "bytes": 2155359
+      },
+      {
+        "kind": "db",
+        "name": "proddb_audit_pre_20260729-013710.sql",
+        "label": "audit_pre",
+        "name_ts_utc": "2026-07-29T01:37:10",
+        "mtime_local": "2026-07-29T10:37:11+09:00",
+        "files": 1,
+        "bytes": 352895
+      },
+      {
+        "kind": "db",
+        "name": "proddb_drfix_20260729-030527.sql",
+        "label": "drfix",
+        "name_ts_utc": "2026-07-29T03:05:27",
+        "mtime_local": "2026-07-29T12:05:28+09:00",
+        "files": 1,
+        "bytes": 465594
+      }
+    ],
+    "C21_summary": {
+      "file_backups": 8,
+      "db_backups": 15,
+      "other_sql": 1,
+      "first_local": "2026-07-23T13:19:38+09:00",
+      "last_local": "2026-07-29T12:05:28+09:00",
+      "total_bytes": 16866320
+    },
+    "C21_intervals": {
+      "db": {
+        "n": 15,
+        "gaps_hours": [
+          1.2,
+          0.16,
+          94.91,
+          0.95,
+          0.38,
+          0.26,
+          0.53,
+          1.23,
+          1.27,
+          21.16,
+          17.07,
+          1.68,
+          0.5,
+          1.47
+        ],
+        "min_h": 0.16,
+        "max_h": 94.91,
+        "median_h": 1.23,
+        "span_days": 5.95
+      },
+      "files": {
+        "n": 8,
+        "gaps_hours": [
+          0.98,
+          0.22,
+          1.27,
+          93.81,
+          0.92,
+          41.91,
+          2.18
+        ],
+        "min_h": 0.22,
+        "max_h": 93.81,
+        "median_h": 1.27,
+        "span_days": 5.89
+      }
+    },
+    "C21_labels": [
+      "audit_pre",
+      "drfix",
+      "final",
+      "perf_pre",
+      "precleanup",
+      "r11pre",
+      "r12pre",
+      "r14pre",
+      "r16_pre",
+      "r8pre",
+      "r9pre"
+    ],
+    "C22_pairs": [
+      {
+        "file_backup": "ftp_20260723-131931",
+        "nearest_db_backup": "proddb_20260723-132005.sql",
+        "delta_seconds": 27,
+        "delta_minutes": 0.45
+      },
+      {
+        "file_backup": "ftp_20260723-141807",
+        "nearest_db_backup": "proddb_final_20260723-143151.sql",
+        "delta_seconds": 817,
+        "delta_minutes": 13.62
+      },
+      {
+        "file_backup": "ftp_20260723-143134",
+        "nearest_db_backup": "proddb_final_20260723-143151.sql",
+        "delta_seconds": 10,
+        "delta_minutes": 0.17
+      },
+      {
+        "file_backup": "ftp_20260723-154803",
+        "nearest_db_backup": "proddb_precleanup_20260723-144118.sql",
+        "delta_seconds": -4011,
+        "delta_minutes": -66.85
+      },
+      {
+        "file_backup": "ftp_20260727-133622",
+        "nearest_db_backup": "proddb_r8pre_20260727-043555.sql",
+        "delta_seconds": -34,
+        "delta_minutes": -0.57
+      },
+      {
+        "file_backup": "ftp_20260727-143146",
+        "nearest_db_backup": "proddb_r9pre_20260727-053253.sql",
+        "delta_seconds": 59,
+        "delta_minutes": 0.98
+      },
+      {
+        "file_backup": "ftp_20260729-082624",
+        "nearest_db_backup": "proddb_r16_pre_20260728-232641.sql",
+        "delta_seconds": 10,
+        "delta_minutes": 0.17
+      },
+      {
+        "file_backup": "ftp_20260729-103659",
+        "nearest_db_backup": "proddb_audit_pre_20260729-013710.sql",
+        "delta_seconds": 1,
+        "delta_minutes": 0.02
+      }
+    ],
+    "C22_target_pair": {
+      "file_backup": "ftp_20260729-103659",
+      "db_backup": "proddb_audit_pre_20260729-013710.sql",
+      "file_mtime": "2026-07-29T10:37:10+09:00",
+      "db_mtime": "2026-07-29T10:37:11+09:00",
+      "delta_seconds": 1
+    },
+    "C22b_filename_timezone": {
+      "rows": [
+        {
+          "kind": "files",
+          "name": "ftp_20260723-131931",
+          "filename_ts": "2026-07-23T13:19:31",
+          "written_at_local": "2026-07-23T13:19:38+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260723-141807",
+          "filename_ts": "2026-07-23T14:18:07",
+          "written_at_local": "2026-07-23T14:18:15+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260723-143134",
+          "filename_ts": "2026-07-23T14:31:34",
+          "written_at_local": "2026-07-23T14:31:42+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_final_20260723-143151.sql",
+          "filename_ts": "2026-07-23T14:31:51",
+          "written_at_local": "2026-07-23T14:31:52+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_precleanup_20260723-144118.sql",
+          "filename_ts": "2026-07-23T14:41:18",
+          "written_at_local": "2026-07-23T14:41:19+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260723-154803",
+          "filename_ts": "2026-07-23T15:48:03",
+          "written_at_local": "2026-07-23T15:48:10+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r8pre_20260727-043555.sql",
+          "filename_ts": "2026-07-27T04:35:55",
+          "written_at_local": "2026-07-27T13:35:55+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260727-133622",
+          "filename_ts": "2026-07-27T13:36:22",
+          "written_at_local": "2026-07-27T13:36:29+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260727-143146",
+          "filename_ts": "2026-07-27T14:31:46",
+          "written_at_local": "2026-07-27T14:31:54+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r9pre_20260727-053253.sql",
+          "filename_ts": "2026-07-27T05:32:53",
+          "written_at_local": "2026-07-27T14:32:53+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r9pre_20260727-055540.sql",
+          "filename_ts": "2026-07-27T05:55:40",
+          "written_at_local": "2026-07-27T14:55:40+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r9pre_20260727-061120.sql",
+          "filename_ts": "2026-07-27T06:11:20",
+          "written_at_local": "2026-07-27T15:11:21+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r9pre_20260727-064308.sql",
+          "filename_ts": "2026-07-27T06:43:08",
+          "written_at_local": "2026-07-27T15:43:09+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r11pre_20260727-075706.sql",
+          "filename_ts": "2026-07-27T07:57:06",
+          "written_at_local": "2026-07-27T16:57:07+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r12pre_20260727-091304.sql",
+          "filename_ts": "2026-07-27T09:13:04",
+          "written_at_local": "2026-07-27T18:13:04+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r14pre_20260728-062229.sql",
+          "filename_ts": "2026-07-28T06:22:29",
+          "written_at_local": "2026-07-28T15:22:29+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260729-082624",
+          "filename_ts": "2026-07-29T08:26:24",
+          "written_at_local": "2026-07-29T08:26:32+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_r16_pre_20260728-232641.sql",
+          "filename_ts": "2026-07-28T23:26:41",
+          "written_at_local": "2026-07-29T08:26:42+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_perf_pre_20260729-010719.sql",
+          "filename_ts": "2026-07-29T01:07:19",
+          "written_at_local": "2026-07-29T10:07:19+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "files",
+          "name": "ftp_20260729-103659",
+          "filename_ts": "2026-07-29T10:36:59",
+          "written_at_local": "2026-07-29T10:37:10+09:00",
+          "skew_hours": 0.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_audit_pre_20260729-013710.sql",
+          "filename_ts": "2026-07-29T01:37:10",
+          "written_at_local": "2026-07-29T10:37:11+09:00",
+          "skew_hours": 9.0
+        },
+        {
+          "kind": "db",
+          "name": "proddb_drfix_20260729-030527.sql",
+          "filename_ts": "2026-07-29T03:05:27",
+          "written_at_local": "2026-07-29T12:05:28+09:00",
+          "skew_hours": 9.0
+        }
+      ],
+      "files_backup_skew_h": [
+        0.0
+      ],
+      "db_backup_skew_h": [
+        0.0,
+        9.0
+      ],
+      "sources": {
+        "files": "deploy/backup.sh:10 date +%Y%m%d-%H%M%S (shell, KST)",
+        "db": "deploy/db_dump.php:26 date('Ymd-His') (PHP CLI, UTC)"
+      },
+      "risk": "두 백업군의 파일명 타임스탬프 기준 타임존이 달라, 장애 시 짝이 맞는 파일·DB 백업을 이름만 보고 고르면 최대 9시간 어긋난 조합을 잡게 된다"
+    },
+    "C22c_all_db_backups": {
+      "scanned": 15,
+      "restorable_as_is": 0,
+      "blocked": 15,
+      "with_SET_NAMES": 6,
+      "generator_variants": [
+        "-- EDEN CRM 운영 DB 백업 (R8 006 사전) <ts>",
+        "-- EDEN CRM 운영 DB 백업 (R9 007 사전) <ts>",
+        "-- eden_crm 운영 백업 <ts> (N tables)",
+        "-- eden_crm 운영 백업 <ts> · N tables (prefix edencrm_)"
+      ],
+      "rows": [
+        {
+          "name": "proddb_20260723-132005.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-23T04:20:05+00:00 (39 tables)",
+          "create_tables": 39,
+          "insert_rows": 296,
+          "has_generated_column": true,
+          "blocked_inserts": 2,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_final_20260723-143151.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-23T05:31:51+00:00 (39 tables)",
+          "create_tables": 39,
+          "insert_rows": 317,
+          "has_generated_column": true,
+          "blocked_inserts": 2,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_precleanup_20260723-144118.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-23T05:41:18+00:00 (39 tables)",
+          "create_tables": 39,
+          "insert_rows": 317,
+          "has_generated_column": true,
+          "blocked_inserts": 2,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_r8pre_20260727-043555.sql",
+          "generator_header": "-- EDEN CRM 운영 DB 백업 (R8 006 사전) 2026-07-27T04:35:55+00:00",
+          "create_tables": 39,
+          "insert_rows": 461,
+          "has_generated_column": true,
+          "blocked_inserts": 3,
+          "has_SET_NAMES": true
+        },
+        {
+          "name": "proddb_r9pre_20260727-053253.sql",
+          "generator_header": "-- EDEN CRM 운영 DB 백업 (R9 007 사전) 2026-07-27T05:32:53+00:00",
+          "create_tables": 41,
+          "insert_rows": 502,
+          "has_generated_column": true,
+          "blocked_inserts": 3,
+          "has_SET_NAMES": true
+        },
+        {
+          "name": "proddb_r9pre_20260727-055540.sql",
+          "generator_header": "-- EDEN CRM 운영 DB 백업 (R9 007 사전) 2026-07-27T05:55:40+00:00",
+          "create_tables": 43,
+          "insert_rows": 528,
+          "has_generated_column": true,
+          "blocked_inserts": 3,
+          "has_SET_NAMES": true
+        },
+        {
+          "name": "proddb_r9pre_20260727-061120.sql",
+          "generator_header": "-- EDEN CRM 운영 DB 백업 (R9 007 사전) 2026-07-27T06:11:20+00:00",
+          "create_tables": 43,
+          "insert_rows": 541,
+          "has_generated_column": true,
+          "blocked_inserts": 4,
+          "has_SET_NAMES": true
+        },
+        {
+          "name": "proddb_r9pre_20260727-064308.sql",
+          "generator_header": "-- EDEN CRM 운영 DB 백업 (R9 007 사전) 2026-07-27T06:43:08+00:00",
+          "create_tables": 43,
+          "insert_rows": 541,
+          "has_generated_column": true,
+          "blocked_inserts": 4,
+          "has_SET_NAMES": true
+        },
+        {
+          "name": "proddb_r11pre_20260727-075706.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-27T07:57:06+00:00 · 43 tables (prefix edencrm_)",
+          "create_tables": 43,
+          "insert_rows": 589,
+          "has_generated_column": true,
+          "blocked_inserts": 7,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_r12pre_20260727-091304.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-27T09:13:04+00:00 · 43 tables (prefix edencrm_)",
+          "create_tables": 43,
+          "insert_rows": 622,
+          "has_generated_column": true,
+          "blocked_inserts": 9,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_r14pre_20260728-062229.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-28T06:22:29+00:00 · 43 tables (prefix edencrm_)",
+          "create_tables": 43,
+          "insert_rows": 766,
+          "has_generated_column": true,
+          "blocked_inserts": 11,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_r16_pre_20260728-232641.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-28T23:26:41+00:00 · 45 tables (prefix edencrm_)",
+          "create_tables": 45,
+          "insert_rows": 1018,
+          "has_generated_column": true,
+          "blocked_inserts": 11,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_perf_pre_20260729-010719.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-29T01:07:19+00:00 · 46 tables (prefix edencrm_)",
+          "create_tables": 46,
+          "insert_rows": 1102,
+          "has_generated_column": true,
+          "blocked_inserts": 11,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_audit_pre_20260729-013710.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-29T01:37:10+00:00 · 46 tables (prefix edencrm_)",
+          "create_tables": 46,
+          "insert_rows": 1102,
+          "has_generated_column": true,
+          "blocked_inserts": 11,
+          "has_SET_NAMES": false
+        },
+        {
+          "name": "proddb_drfix_20260729-030527.sql",
+          "generator_header": "-- eden_crm 운영 백업 2026-07-29T03:05:27+00:00 · 46 tables (prefix edencrm_)",
+          "create_tables": 46,
+          "insert_rows": 1102,
+          "has_generated_column": true,
+          "blocked_inserts": 11,
+          "has_SET_NAMES": true
+        }
+      ],
+      "verdict": "차단 INSERT 가 0인 DB 백업이 하나도 없으면, 보유한 DB 백업 전체가 무보정 복구 불가 상태다"
+    },
+    "C23_failure_domain": {
+      "backups_gitignored": true,
+      "gitignore_rule": ".gitignore:15:database/backups/\tdatabase/backups/",
+      "git_tracked_backup_files": [],
+      "git_remotes": [],
+      "copies_found_under_home": [],
+      "time_machine_destinations": "tmutil: No destinations configured.",
+      "backup_volume": "/dev/disk3s5   460Gi   247Gi   192Gi    57%    3.5M  2.0G    0%   /System/Volumes/Data",
+      "cron_or_launchd_refs": "(no crontab entries)",
+      "launchd_refs": "(none)"
+    }
+  },
+  "verdicts": {
+    "1_file_inventory": "PASS",
+    "2_required_areas": "PASS",
+    "3_uploads_vs_db": "PASS",
+    "4_runtime_dirs": "PASS",
+    "5_symlinks": "PASS (0 links)",
+    "6_secrets_in_backup": "FAIL",
+    "7_git_drift": "PASS",
+    "8_modes": "WARN (dir mode = local umask, not remote)",
+    "9_dump_integrity": "PASS",
+    "10_table_set": "PASS",
+    "11_row_total": "PASS",
+    "12_per_table_rows": "PASS",
+    "13_ddl_clauses": "PASS",
+    "14_error_traces": "PASS",
+    "15_charset_preamble": "FAIL",
+    "16_drop_table_risk": "WARN (46 DROP TABLE IF EXISTS, 안전핀 없음)",
+    "17_atomicity": "FAIL (non-atomic)",
+    "18_mysql_compat": "FAIL",
+    "19_binary_risk": "PASS (blob/binary 컬럼 0개)",
+    "20_password_hashes": "PASS",
+    "21_schedule_rpo": "FAIL (스케줄 없음 · 수동 릴리스 게이트 전용)",
+    "22_pair_skew": "PASS (대상 쌍 1초) / WARN (파일명 TZ 불일치 9h)",
+    "23_failure_domain": "FAIL (단일 장애점: 로컬 PC 1곳)"
+  }
+}

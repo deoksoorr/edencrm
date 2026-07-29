@@ -13,3 +13,9 @@ deploy/*.log
 deploy/*.local.txt
 deploy/ADMIN_CREDENTIALS.local.txt
 database/backups/
+
+# QA 도구 의존성 — 51MB·4천여 파일. 재설치 가능하므로 커밋하지 않는다.
+node_modules/
+
+# DR 자동 복구검증 산출물(주간 생성) — git status 소음 방지
+docs/audit/dr/auto_verify/
