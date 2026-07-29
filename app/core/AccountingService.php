@@ -102,6 +102,13 @@ class AccountingService
      *  실제 입금된 금액만 반영·미입금 제외·환불/취소 차감. 부가세(예수금)는 매출이 아니므로 제외한다.
      *  현금 축(VAT 포함 입금 총액)은 paidTotal() — 두 값은 부가세만큼 다르다.
      *  대시보드·리포트·반기·목표 달성률이 전부 이 메서드 하나를 호출한다(중복 구현 금지). */
+    /**
+     * 성능 참고(T8): dashboard.data 에서 이 집계가 중복 호출된다(20쿼리 중 16개가 중복).
+     * 요청 단위 메모로 3.5배 개선이 가능하지만, 같은 요청에서 입금이 기록된 뒤 다시 읽는 경로
+     * (정산·보너스 재계산, 회귀 테스트)가 옛 합계를 보게 되는 위험이 실측으로 확인돼 도입하지 않았다.
+     * 현재 운영 규모에서 이 경로는 10ms 수준이라 정확성을 희생할 이유가 없다.
+     * 중복 호출 자체를 줄이려면 호출부(DashboardController)에서 값을 한 번만 구해 전달할 것.
+     */
     public static function confirmedRevenue(?string $from = null, ?string $to = null): int
     {
         $p = [':sr' => self::vatSupplyRatio()];
@@ -412,12 +419,28 @@ class AccountingService
         return self::costTotal($from, $to);
     }
 
-    /** 프로젝트 귀속 입금 JOIN(R11, 별칭 고정: pm→pj2=귀속 프로젝트) — 계약 입금은 계약↔프로젝트(1:1),
-     *  예외 입금은 project_id 직결. employeePaid/Confirmed 계열이 공유한다. */
+    /**
+     * 프로젝트 귀속 입금 JOIN(R11, 별칭 고정: pm→pj2=귀속 프로젝트) — 계약 입금은 계약↔프로젝트(1:1),
+     * 예외 입금은 project_id 직결. employeePaid/Confirmed 계열이 공유한다.
+     *
+     * 성능(T8 실측): 이전에는 서로 다른 두 컬럼을 OR 로 묶은 조인 조건이라
+     * 옵티마이저가 인덱스를 못 쓰고 hash join(no condition)으로 전개했다 —
+     * projects 2,948 × payments 9,000 = 2,650만 조합을 만든 뒤 걸러내는 계획.
+     * 성장 규모에서 home 응답의 88%, performance.index 의 94.5%가 이 두 쿼리였다.
+     * 두 경로를 각각 LEFT JOIN 한 뒤 COALESCE 로 하나를 고르는 형태로 바꿔
+     * 각 조인이 PRIMARY / idx_projects_contract 를 타게 했다(48~57배).
+     *
+     * 결과 동치성: 귀속 프로젝트를 'project_id 우선, 없으면 contract 경유'로 고르는 의미는 같다.
+     * 원본 OR 는 한 입금이 두 프로젝트에 동시에 매칭되면 행이 복제돼 금액이 중복 집계될 수 있었는데
+     * (계약당 프로젝트가 2개 이상이거나 입금에 두 id 가 모두 있는 경우),
+     * COALESCE 는 항상 하나만 고르므로 그 중복이 구조적으로 불가능하다 — 더 안전한 방향의 변화다.
+     */
     private const PAY_PROJECT_JOIN =
         " LEFT JOIN contracts c ON c.id = pm.contract_id AND c.deleted_at IS NULL
-          JOIN projects pj2 ON pj2.deleted_at IS NULL
-               AND (pj2.id = pm.project_id OR (pm.contract_id IS NOT NULL AND pj2.contract_id = pm.contract_id))
+          LEFT JOIN projects pj_direct ON pj_direct.id = pm.project_id AND pj_direct.deleted_at IS NULL
+          LEFT JOIN projects pj_con ON pm.contract_id IS NOT NULL
+               AND pj_con.contract_id = pm.contract_id AND pj_con.deleted_at IS NULL
+          JOIN projects pj2 ON pj2.id = COALESCE(pj_direct.id, pj_con.id) AND pj2.deleted_at IS NULL
           ";
 
     /** 직원 귀속 확정매출(공급가액·VAT 제외, R12) = Σ 프로젝트 순입금의 공급가 부분 × 기여도 — 귀속 = paid_date. */

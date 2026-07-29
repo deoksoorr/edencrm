@@ -11,13 +11,19 @@ class ProcessService
     public const WAITING_KEY = 'waiting';
 
     /** '대기중' 단계 ID. 시드 누락 시 예외. */
+    /** 요청 단위 메모 — 공정 마스터는 한 요청 안에서 바뀌지 않는데 보드/전환 경로에서 반복 호출된다. */
+    private static ?int $waitingStageIdCache = null;
+
     public static function waitingStageId(): int
     {
+        if (self::$waitingStageIdCache !== null) {
+            return self::$waitingStageIdCache;
+        }
         $id = Db::val("SELECT id FROM process_stages WHERE stage_key = :k", [':k' => self::WAITING_KEY]);
         if (!$id) {
             throw new RuntimeException("process_stages 에 'waiting' 단계가 없습니다 (r3_kernel 마이그레이션 필요)");
         }
-        return (int) $id;
+        return self::$waitingStageIdCache = (int) $id;
     }
 
     /** stage_key 로 공정 단계 ID 조회(없으면 null). */
