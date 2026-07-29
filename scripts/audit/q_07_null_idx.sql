@@ -38,24 +38,24 @@ SELECT id, project_no, is_exception, customer_id, customer_name_snapshot, delete
 -- @I-1 중복/중첩 인덱스 후보(같은 선두 컬럼 인덱스 2개 이상)
 SELECT s.TABLE_NAME, s.COLUMN_NAME AS first_col, GROUP_CONCAT(DISTINCT s.INDEX_NAME) AS indexes, COUNT(DISTINCT s.INDEX_NAME) AS n
 FROM information_schema.STATISTICS s
-WHERE s.TABLE_SCHEMA='<DB_ACCOUNT>' AND s.TABLE_NAME LIKE 'edencrm\_%' AND s.SEQ_IN_INDEX=1
+WHERE s.TABLE_SCHEMA=DATABASE() AND s.TABLE_NAME LIKE 'edencrm\_%' AND s.SEQ_IN_INDEX=1
 GROUP BY s.TABLE_NAME, s.COLUMN_NAME HAVING COUNT(DISTINCT s.INDEX_NAME)>1
 ---
 -- @I-2 테이블 크기·인덱스 크기
 SELECT TABLE_NAME, TABLE_ROWS, ROUND(DATA_LENGTH/1024) AS data_kb, ROUND(INDEX_LENGTH/1024) AS idx_kb
-FROM information_schema.TABLES WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME LIKE 'edencrm\_%' AND INDEX_LENGTH>DATA_LENGTH ORDER BY INDEX_LENGTH DESC
+FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'edencrm\_%' AND INDEX_LENGTH>DATA_LENGTH ORDER BY INDEX_LENGTH DESC
 ---
 -- @I-3 payments/costs 집계 핫패스 인덱스 존재 여부 확인
-SELECT 'payments(paid_date)' AS need, IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='paid_date'),'있음','없음') AS status
-UNION ALL SELECT 'payments(status,paid_date) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_payments' AND INDEX_NAME IN (SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='paid_date' AND SEQ_IN_INDEX=2)),'있음','없음')
-UNION ALL SELECT 'payments(contract_id,status) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='status' AND SEQ_IN_INDEX=2),'있음','없음')
-UNION ALL SELECT 'payments(kind)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='kind'),'있음','없음')
-UNION ALL SELECT 'projects(status,deleted_at) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='deleted_at' AND SEQ_IN_INDEX=2),'있음','없음')
-UNION ALL SELECT 'contracts(status,deleted_at) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_contracts' AND COLUMN_NAME='deleted_at' AND SEQ_IN_INDEX=2),'있음','없음')
-UNION ALL SELECT 'costs(spent_date,type,cost_status) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_costs' AND COLUMN_NAME='spent_date' AND SEQ_IN_INDEX>1),'있음','없음')
-UNION ALL SELECT 'projects(contract_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='contract_date'),'있음','없음')
-UNION ALL SELECT 'projects(actual_end_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='actual_end_date'),'있음','없음')
-UNION ALL SELECT 'contracts(contract_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='<DB_ACCOUNT>' AND TABLE_NAME='edencrm_contracts' AND COLUMN_NAME='contract_date'),'있음','없음')
+SELECT 'payments(paid_date)' AS need, IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='paid_date'),'있음','없음') AS status
+UNION ALL SELECT 'payments(status,paid_date) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_payments' AND INDEX_NAME IN (SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='paid_date' AND SEQ_IN_INDEX=2)),'있음','없음')
+UNION ALL SELECT 'payments(contract_id,status) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='status' AND SEQ_IN_INDEX=2),'있음','없음')
+UNION ALL SELECT 'payments(kind)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_payments' AND COLUMN_NAME='kind'),'있음','없음')
+UNION ALL SELECT 'projects(status,deleted_at) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='deleted_at' AND SEQ_IN_INDEX=2),'있음','없음')
+UNION ALL SELECT 'contracts(status,deleted_at) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_contracts' AND COLUMN_NAME='deleted_at' AND SEQ_IN_INDEX=2),'있음','없음')
+UNION ALL SELECT 'costs(spent_date,type,cost_status) 복합', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_costs' AND COLUMN_NAME='spent_date' AND SEQ_IN_INDEX>1),'있음','없음')
+UNION ALL SELECT 'projects(contract_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='contract_date'),'있음','없음')
+UNION ALL SELECT 'projects(actual_end_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_projects' AND COLUMN_NAME='actual_end_date'),'있음','없음')
+UNION ALL SELECT 'contracts(contract_date)', IF(EXISTS(SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='edencrm_contracts' AND COLUMN_NAME='contract_date'),'있음','없음')
 ---
 -- @I-4 uq_projects_contract 가 소프트삭제 프로젝트로 점유된 계약(재생성 불가)
 SELECT p.id AS proj_id, p.project_no, p.contract_id, p.deleted_at AS proj_deleted, c.contract_no, c.status AS contract_status, c.deleted_at AS contract_deleted

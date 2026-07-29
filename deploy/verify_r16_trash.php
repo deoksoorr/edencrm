@@ -6,9 +6,8 @@
  */
 if (PHP_SAPI !== 'cli') { exit(1); }
 
-$BASE = '<SERVICE_URL>/index.php';
-$ID   = 'qa_r16_verify';
-$PW   = trim(@file_get_contents('/tmp/r16_verify_pw.txt') ?: '');
+$ID = 'qa_r16_verify';
+$PW = trim(@file_get_contents('/tmp/r16_verify_pw.txt') ?: '');
 if ($PW === '') { fwrite(STDERR, "검수 계정 비밀번호 없음\n"); exit(1); }
 
 $env = [];
@@ -18,6 +17,11 @@ foreach (file(__DIR__ . '/cafe24.env', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_L
     [$k, $v] = explode('=', $l, 2);
     $env[trim($k)] = trim($v);
 }
+
+// 서비스 URL 은 env 에서 읽는다. 예전에는 하드코딩돼 있어 저장소에 운영 도메인과
+// 계정명이 그대로 남았다(카페24는 계정명 = FTP 계정명이라 자격증명의 절반이다).
+if (empty($env['SERVICE_URL'])) { fwrite(STDERR, "SERVICE_URL 누락\n"); exit(1); }
+$BASE = rtrim($env['SERVICE_URL'], '/') . '/index.php';
 $pdo = new PDO(
     "mysql:host={$env['DB_HOST']};port={$env['DB_PORT']};dbname={$env['DB_NAME']};charset=utf8mb4",
     $env['DB_USER'], $env['DB_PASSWORD'],

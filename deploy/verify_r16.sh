@@ -5,7 +5,13 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-B="<SERVICE_URL>/index.php"
+# 서비스 URL 은 cafe24.env 에서 읽는다. 예전에는 하드코딩돼 있어서
+# 저장소에 운영 도메인·계정명이 그대로 남았다(계정명 = FTP 계정명이라 자격증명의 절반).
+ENV_FILE="${EDEN_ENV_FILE:-deploy/cafe24.env}"
+[ -f "$ENV_FILE" ] || { echo "환경파일 없음: $ENV_FILE"; exit 1; }
+SERVICE_URL=$(grep -E '^SERVICE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d ' \r')
+[ -n "$SERVICE_URL" ] || { echo "SERVICE_URL 누락"; exit 1; }
+B="${SERVICE_URL%/}/index.php"
 # 검수 전용 임시 계정(qa_r16_verify) 사용 — 사장 계정 비밀번호는 사장이 관리하므로 건드리지 않는다.
 # 비밀번호는 /tmp 파일에서만 읽고 출력에 남기지 않으며, 검수 후 계정을 삭제한다.
 ADMIN_ID="${R16_VERIFY_ID:-qa_r16_verify}"
