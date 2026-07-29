@@ -4,6 +4,35 @@
 
 ---
 
+## 작업 흐름 (로컬 → git → 운영)
+
+```
+1. 로컬에서 개발·테스트
+2. python3 scripts/dr/scrub_secrets.py --check     ← 비밀값 검사(필수)
+3. git commit · git push
+4. git diff <직전배포커밋>..HEAD -- app/ public/   ← 무엇이 바뀌는지 검토
+5. ./deploy/deploy.sh                              ← dry-run
+6. CONFIRM=yes ./deploy/deploy.sh                  ← 실제 배포(파일만, DB 미접촉)
+7. bash deploy/verify_parity.sh                    ← 로컬 = 운영 실측 확인
+8. bash deploy/verify.sh                           ← HTTP 정상 동작 확인
+```
+
+**4번을 `git diff` 로 하는 이유**: `deploy.sh` 는 `--ignore-time` 을 쓰지 않으므로
+변경이 없어도 전 파일을 재전송한다(약 114개·2.3MB). 카페24 FTP 가 **MFMT 를
+지원하지 않아**(FEAT 실측: MDTM 만 있음) 업로드 후 원격 mtime 이 항상 달라지기 때문이다.
+그래서 dry-run 목록으로는 "무엇이 실제로 바뀌었는지" 알 수 없다.
+
+이 트레이드오프는 의도한 것이다. 크기만 비교하면(`--ignore-time`) 같은 바이트 길이
+변경이 조용히 누락되는데(실제로 뷰 8개가 그렇게 빠졌다), **누락되는 것보다 더 보내는
+쪽이 안전**하다. 변경 검토는 `git diff` 가 파일 목록보다 정확하고, 실제 반영 여부는
+7번 `verify_parity.sh` 가 바이트 단위로 확인한다.
+
+**DB 는 배포 경로에 없다.** `deploy.sh` 는 mysql/PDO 호출이 0건이고
+`--exclude database/` 이며, 호출하는 스크립트(`gen_config_production.php`)도 DB 에
+접속하지 않는다. 스키마 변경은 별도 수동 절차다.
+
+---
+
 ## 현재 상태 (푸시 준비 완료)
 
 | 항목 | 값 |
