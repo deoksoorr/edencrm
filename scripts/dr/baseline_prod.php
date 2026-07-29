@@ -72,7 +72,9 @@ $result['meta'] = [
 // 트랜잭션은 커밋하지 않고 되돌린다(읽기 전용이라 변경분은 없지만 명시적으로 정리).
 $pdo->rollBack();
 
-$outFile = $root . '/docs/audit/dr/baseline_prod.json';
+// 출력 경로를 인자로 받는다. 주간 자동 복구검증이 이 스크립트를 돌릴 때
+// 2026-07-29 DR 테스트의 증거 파일을 덮어쓰지 않게 하기 위함이다.
+$outFile = $argv[1] ?? ($root . '/docs/audit/dr/baseline_prod.json');
 file_put_contents($outFile, json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
 // ── 콘솔 요약 ─────────────────────────────────────────────────────────────

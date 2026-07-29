@@ -66,7 +66,14 @@ foreach ($colStmt->fetchAll() as $c) {
 $pdo->exec('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
 $pdo->exec('START TRANSACTION WITH CONSISTENT SNAPSHOT');
 
-$out = dirname(__DIR__) . '/database/backups/proddb_' . $label . '_' . date('Ymd-His') . '.sql';
+// DUMP_TS 를 주입하면 파일 백업(backup.sh 의 BACKUP_TS)과 타임스탬프를 맞출 수 있다.
+// 그러면 파일명만 보고 짝이 자명해져, 장애 상황에서 어긋난 백업쌍을 고를 여지가 사라진다.
+$ts = getenv('DUMP_TS') ?: date('Ymd-His');
+if (!preg_match('/^\d{8}-\d{6}$/', $ts)) {
+    fwrite(STDERR, "DUMP_TS 형식 오류(YYYYMMDD-HHMMSS): {$ts}\n");
+    exit(1);
+}
+$out = dirname(__DIR__) . '/database/backups/proddb_' . $label . '_' . $ts . '.sql';
 $fh = fopen($out, 'w');
 fwrite($fh, "-- eden_crm 운영 백업 " . date('c') . " · " . count($tables) . " tables (prefix {$prefix})\n");
 fwrite($fh, "-- 일관 스냅샷(REPEATABLE READ) · 생성컬럼 제외 명시적 INSERT\n");
