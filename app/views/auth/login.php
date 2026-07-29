@@ -18,8 +18,11 @@
       </label>
       <button type="submit" class="btn btn-primary btn-block">로그인</button>
     </form>
+    <?php /* 개발 편의용 안내 — 운영에서는 계정 정보를 절대 노출하지 않는다(계정 열거·표적 대입 방지). */ ?>
+    <?php if (($GLOBALS['config']['APP_ENV'] ?? 'local') !== 'production'): ?>
     <div class="auth-foot">
-      <span>테스트 계정: <b>admin / password123!</b></span>
+      <span>개발 환경 · 테스트 계정: <b>admin / password123!</b></span>
     </div>
+    <?php endif; ?>
   </div>
 </div>
