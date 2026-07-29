@@ -283,9 +283,11 @@ $viewScript = <<<JS
         var a = data.activity;
         var div = document.createElement('div');
         div.className = 'timeline-item ' + a.activity_type;
-        div.innerHTML = '<div class="timeline-time">' + a.activity_at + ' · ' + (a.user_name || '') + '</div>' +
-          '<div class="timeline-body"><span class="timeline-tag">[' + (actLabels[a.activity_type] || a.activity_type) + ']</span> ' +
-          (a.content || '').replace(/</g,'&lt;') + '</div>';
+        // 사용자 입력(작성자명·내용)은 전부 이스케이프한 뒤 마크업에 넣는다.
+        var esc = EDEN.esc;
+        div.innerHTML = '<div class="timeline-time">' + esc(a.activity_at) + ' · ' + esc(a.user_name || '') + '</div>' +
+          '<div class="timeline-body"><span class="timeline-tag">[' + esc(actLabels[a.activity_type] || a.activity_type) + ']</span> ' +
+          esc(a.content || '') + '</div>';
         var tl = document.getElementById('activityTimeline');
         var empty = tl.querySelector('.empty');
         if (empty) empty.remove();

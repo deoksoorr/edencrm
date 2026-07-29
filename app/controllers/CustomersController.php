@@ -469,6 +469,36 @@ class CustomersController
         Response::redirect('customers.show', ['id' => $keepId], '고객이 병합되었습니다.');
     }
 
+    /**
+     * 소프트삭제 차단 사유 — 없으면 null.
+     * 살아있는 자식(영업기회·견적·계약·프로젝트)이 참조 중인 고객을 지우면
+     * 목록에 삭제된 고객명이 그대로 남고 집계가 어긋난다(실측: 삭제 고객을 참조하는
+     * 살아있는 견적·리드가 운영에 존재). 견적·계약·프로젝트 삭제 패턴과 동일하게 차단한다.
+     */
+    public static function deleteBlockReason(int $customerId): ?string
+    {
+        $refs = [];
+        foreach ([
+            'leads'     => '영업기회',
+            'quotes'    => '견적',
+            'contracts' => '계약',
+            'projects'  => '프로젝트',
+        ] as $table => $label) {
+            $n = (int) Db::val(
+                "SELECT COUNT(*) FROM `$table` WHERE customer_id = :c AND deleted_at IS NULL",
+                [':c' => $customerId]
+            );
+            if ($n > 0) {
+                $refs[] = "{$label} {$n}건";
+            }
+        }
+        if (!$refs) {
+            return null;
+        }
+        return '이 고객을 참조하는 ' . implode(' · ', $refs) . ' 이(가) 있습니다. '
+             . '먼저 해당 데이터를 삭제(휴지통)한 뒤 고객을 삭제하세요.';
+    }
+
     public function delete(): void
     {
         $id = Util::postInt('id', 0);
@@ -476,6 +506,10 @@ class CustomersController
         $before = Db::one("SELECT c.* FROM customers c WHERE c.id=:id AND c.deleted_at IS NULL AND $scopeSql", [':id' => $id] + $scopeParams);
         if (!$before) {
             Response::error('삭제할 고객을 찾을 수 없습니다.', 404);
+        }
+        $reason = self::deleteBlockReason((int) $id);
+        if ($reason !== null) {
+            Response::error($reason, 409);
         }
         Db::update('customers', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
         Audit::log('customer.delete', 'customers', $id, $before, null);

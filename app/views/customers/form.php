@@ -197,7 +197,9 @@ $viewScript = <<<JS
     try {
       var data = await api('customers.dupcheck', {phone: p, email: em, id: {$custId}}, {method:'GET'});
       if (data.candidates && data.candidates.length) {
-        warnBox.innerHTML = '중복 의심 고객: ' + data.candidates.map(function(c){
+        // 저장형 XSS 방지: 고객명·회사명은 사용자 입력이므로 innerHTML 로 넣지 않는다.
+        // (형제 요소 bizDupBox 와 동일하게 textContent 사용)
+        warnBox.textContent = '중복 의심 고객: ' + data.candidates.map(function(c){
           return (c.name || '') + (c.company_name ? '('+c.company_name+')' : '') + ' ' + (c.phone || c.email || '');
         }).join(', ');
         warnBox.classList.remove('hidden');

@@ -283,3 +283,17 @@
     document.addEventListener('mouseup', onUp);
   });
 })();
+
+/**
+ * HTML 이스케이프 — 사용자 입력을 innerHTML/속성값으로 넣어야 할 때 반드시 통과시킨다.
+ * 가능하면 textContent 를 쓰고, 마크업을 조립해야 하는 곳에서만 이 함수를 사용한다.
+ * EDEN.esc(값) 형태로 전역 사용.
+ */
+(function () {
+  window.EDEN = window.EDEN || {};
+  var MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  window.EDEN.esc = function (v) {
+    if (v === null || v === undefined) { return ''; }
+    return String(v).replace(/[&<>"']/g, function (c) { return MAP[c]; });
+  };
+})();

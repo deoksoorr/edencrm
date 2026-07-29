@@ -255,7 +255,8 @@ class QuotesController
         }
 
         $vatRate = (float) setting('vat_rate', 10);
-        [$subtotal, $vat, $total] = $this->computeTotals($items, $discount, $vatRate);
+        // $discount 는 상한이 적용된 값으로 되돌려받는다(저장값과 총액 계산 근거를 일치시킴)
+        [$subtotal, $vat, $total, $discount] = $this->computeTotals($items, $discount, $vatRate);
 
         $before = $id ? Db::one("SELECT * FROM quotes WHERE id=:id", [':id' => $id]) : null;
 
@@ -536,6 +537,12 @@ class QuotesController
         return $out;
     }
 
+    /**
+     * 합계 계산. 할인은 공급가+VAT 를 넘을 수 없다 —
+     * 넘으면 총액이 음수가 되어 매출·미수금 집계를 오염시킨다
+     * (실측: 운영에 discount 32,000,000 / subtotal 0 인 총액 −32,000,000 견적 존재).
+     * 음수 할인도 허용하지 않는다(할증 우회 방지).
+     */
     private function computeTotals(array $items, float $discount, float $vatRate): array
     {
         $subtotal = 0.0;
@@ -544,8 +551,12 @@ class QuotesController
         }
         $subtotal = round($subtotal, 0);
         $vat = round($subtotal * $vatRate / 100, 0);
+
+        $discount = max(0.0, $discount);              // 음수 할인 차단
+        $discount = min($discount, $subtotal + $vat); // 총액이 음수가 되지 않도록 상한
+
         $total = $subtotal + $vat - $discount;
-        return [$subtotal, $vat, $total];
+        return [$subtotal, $vat, $total, $discount];
     }
 
     /** 견적번호: Q + YYYYMMDD + '-' + 일련(3자리). 예: Q20260722-001 */

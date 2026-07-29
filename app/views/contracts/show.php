@@ -289,11 +289,12 @@
       '<input type="hidden" name="id" value="' + (pm.id || 0) + '">' +
       '<div class="form-grid">' +
       '<div class="field"><label class="field-label">구분</label><select name="pay_type" class="select">' + opts + '</select></div>' +
-      '<div class="field"><label class="field-label">금액</label><input type="text" inputmode="decimal" name="amount" class="input" value="' + (pm.amount || '') + '"></div>' +
-      '<div class="field"><label class="field-label">예정일</label><input type="date" name="due_date" class="input" value="' + (pm.due || '') + '"></div>' +
-      '<div class="field"><label class="field-label">입금일</label><input type="date" name="paid_date" class="input" value="' + (pm.paid || '') + '"></div>' +
+      // 속성값 컨텍스트 — 사용자 입력(메모 등)은 반드시 이스케이프한다(따옴표 탈출 방지).
+      '<div class="field"><label class="field-label">금액</label><input type="text" inputmode="decimal" name="amount" class="input" value="' + EDEN.esc(pm.amount || '') + '"></div>' +
+      '<div class="field"><label class="field-label">예정일</label><input type="date" name="due_date" class="input" value="' + EDEN.esc(pm.due || '') + '"></div>' +
+      '<div class="field"><label class="field-label">입금일</label><input type="date" name="paid_date" class="input" value="' + EDEN.esc(pm.paid || '') + '"></div>' +
       '<div class="field"><label class="field-label">상태</label><select name="status" class="select">' + statusOpts + '</select></div>' +
-      '<div class="field"><label class="field-label">메모</label><input type="text" name="memo" class="input" value="' + (pm.memo || '') + '"></div>' +
+      '<div class="field"><label class="field-label">메모</label><input type="text" name="memo" class="input" value="' + EDEN.esc(pm.memo || '') + '"></div>' +
       '</div>' +
       '<div class="ta-r mt-8"><button type="submit" class="btn btn-primary">저장</button></div>' +
       '</form>';

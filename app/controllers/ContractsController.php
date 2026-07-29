@@ -901,11 +901,33 @@ class ContractsController
             $result['created'] ? '프로젝트로 전환되었습니다.' : '연결된 프로젝트가 이미 존재합니다.');
     }
 
-    /** 소프트삭제 차단 사유(프로젝트로 전환된 계약) — 없으면 null. */
+    /**
+     * 소프트삭제 차단 사유 — 없으면 null.
+     *
+     * ① 프로젝트로 전환된 계약
+     * ② 입금(paid)이 기록된 계약 — 삭제하면 확정매출·입금 집계에서 조용히 빠져
+     *    대시보드·분석 금액이 사유 없이 줄어든다(실측: 운영에서 입금 달린 계약이
+     *    아무 경고 없이 삭제된 이력 있음). 입금을 먼저 무효 처리하게 안내한다.
+     */
     public static function deleteBlockReason(int $contractId): ?string
     {
         $pid = Db::val("SELECT id FROM projects WHERE contract_id = :c AND deleted_at IS NULL LIMIT 1", [':c' => $contractId]);
-        return $pid !== null ? '프로젝트로 전환된 계약입니다. 먼저 해당 프로젝트를 삭제(휴지통)하세요.' : null;
+        if ($pid !== null) {
+            return '프로젝트로 전환된 계약입니다. 먼저 해당 프로젝트를 삭제(휴지통)하세요.';
+        }
+        $paid = Db::one(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total
+               FROM payments WHERE contract_id = :c AND status = 'paid'",
+            [':c' => $contractId]
+        );
+        if ($paid && (int) $paid['n'] > 0) {
+            return sprintf(
+                '입금 %d건(%s원)이 기록된 계약입니다. 삭제하면 확정매출·입금 집계에서 제외됩니다. '
+                . '먼저 입금 내역을 무효 처리한 뒤 삭제하세요.',
+                (int) $paid['n'], number_format((float) $paid['total'])
+            );
+        }
+        return null;
     }
 
     /** 소프트 삭제(휴지통) — 프로젝트로 전환된 계약은 차단(견적 delete 패턴 준용). */
