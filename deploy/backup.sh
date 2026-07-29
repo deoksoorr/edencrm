@@ -140,9 +140,26 @@ add_warn() { [ "$WARN" = "-" ] && WARN="$1" || WARN="$WARN; $1"; }
 PREV=$(ls -1td "$BK"/ftp_* 2>/dev/null | head -1)
 if [ -n "${PREV:-}" ] && [ -d "$PREV" ]; then
     PCODE=$(cnt_code "$PREV"); PUP=$(cnt_up "$PREV"); PBYTES=$(sum_bytes "$PREV")
-    # V5: 코드 영역은 구조적으로 줄어들 수 없다 — deploy.sh 가 원격 삭제(--delete)를
-    #     하지 않으므로 원격 코드 파일은 단조 증가한다. 줄었다면 전송 누락이다.
-    [ "$CODE" -lt "$PCODE" ] && bail 4 "코드 파일 감소 $PCODE → $CODE (직전 $(basename "$PREV"))"
+    # V5: 코드 파일 감소.
+    #
+    # 처음에는 "deploy.sh 가 원격 삭제를 하지 않으므로 코드 파일은 단조 증가한다"는
+    # 전제로 어떤 감소든 FAIL 로 잡았다. 그런데 2026-07-29 에 deploy.sh 에 --delete 를
+    # 넣으면서 그 전제가 깨졌다 — 로컬에서 지운 파일이 운영에서도 지워지므로 감소는
+    # 정상 동작이 됐다(실제로 dashboard 뷰 4개 삭제 직후 이 규칙이 오탐을 냈다).
+    #
+    # 그래도 규칙 자체는 살려둔다. 목적은 "전송 누락으로 파일이 대량 유실된 백업"을
+    # 잡는 것이고, 그건 여전히 유효한 위험이다. 그래서 판정 기준만 바꾼다:
+    #   대량 감소(10% 초과 또는 15개 초과) = FAIL — 배포 삭제로 보기엔 과하다
+    #   소량 감소                          = WARN — 의도한 삭제일 가능성이 높다
+    DROP=$((PCODE - CODE))
+    if [ "$DROP" -gt 0 ]; then
+        LIMIT=$((PCODE / 10))
+        [ "$LIMIT" -gt 15 ] && LIMIT=15
+        if [ "$DROP" -gt "$LIMIT" ]; then
+            bail 4 "코드 파일 대량 감소 $PCODE → $CODE (${DROP}개, 허용 ${LIMIT}개 · 직전 $(basename "$PREV"))"
+        fi
+        add_warn "코드파일 ${DROP}개 감소 ${PCODE}→${CODE}(배포 삭제 여부 확인)"
+    fi
     # V6: uploads 는 휴지통 정리로 정상 감소한다 → FAIL 로 잡으면 오탐이 쌓여
     #     알림 자체를 무시하게 된다. 경고로만 남긴다.
     # 변수명은 반드시 ${} 로 감싼다. `$PUP→$UP` 처럼 멀티바이트 문자가 공백 없이 붙으면

@@ -5,7 +5,13 @@
 #   ./deploy/deploy.sh                → 검사 + dry-run(전송 목록만, 업로드 없음)
 #   CONFIRM=yes ./deploy/deploy.sh    → 실제 업로드
 # 전제: deploy/cafe24.env (git 제외), lftp 설치, 001/002 마이그레이션은 별도 선행(T12).
-# 비밀번호는 어떤 출력에도 나타나지 않는다.
+#
+# 이 스크립트는 **파일만** 다룬다. DB 에는 접속하지 않으며 어떤 쿼리도 실행하지 않는다.
+# (DB 백업은 deploy/db_dump.php, 마이그레이션은 별도 절차)
+#
+# 비밀번호 취급: 이전 버전은 "비밀번호는 어떤 출력에도 나타나지 않는다"고 적어 두었으나
+# 실제로는 lftp 가 자체 출력에 접속 URL(ftp://user:pass@host)을 그대로 찍어 로그에
+# 평문으로 남았다(2026-07-29 실측, 로그 14개에 잔존). 아래 mask_secrets 로 차단한다.
 # ============================================================================
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,11 +42,34 @@ find "$PROJECT_DIR" -name '*.php' \
   | while IFS= read -r -d '' f; do php -l "$f" >/dev/null || { echo "문법 오류: $f"; exit 1; }; done
 echo "  문법 이상 없음"
 
-echo "== 업로드 (mirror --reverse, --delete 미사용$( [ -n "$DRY_FLAG" ] && echo ' · dry-run')) =="
+# lftp 출력에서 접속 URL의 비밀값을 가린다. lftp 는 mkdir/open 등을 자체 출력할 때
+# ftp://user:pass@host 형태를 그대로 찍는다 — 이게 로그에 평문으로 남던 원인이다.
+mask_secrets() {
+    sed -e "s|ftp://[^@ ]*@|ftp://***:***@|g" \
+        -e "s|${FTP_PASSWORD}|***|g" \
+        -e "s|-u ${FTP_USER},[^ ]*|-u ***,***|g"
+}
+
+echo "== 업로드 (mirror --reverse --delete$( [ -n "$DRY_FLAG" ] && echo ' · dry-run')) =="
 LOG="$SCRIPT_DIR/deploy_$(date +%Y%m%d-%H%M%S).log"
 LFTP_SCRIPT="$(mktemp)"; chmod 600 "$LFTP_SCRIPT"
 trap 'rm -f "$LFTP_SCRIPT"' EXIT
 # 제외 목록: 개발 전용·비밀·DB 산출물 전부. app/config/config.local.php(로컬 비밀) 제외 필수.
+#
+# --ignore-time 을 뺀 이유 (2026-07-29):
+#   이 옵션은 lftp 가 **크기만** 비교하게 만든다. 그래서 바이트 수가 같은 변경은
+#   영원히 배포되지 않았다. 실제로 커밋 3d35593(버튼 문구 통일)의 뷰 8개가
+#   `작성`→`등록`, `조회`→`검색` 처럼 UTF-8 길이가 같아 전부 누락된 채 남아 있었다.
+#   앞으로도 `>`→`>=`, 상태 문자열 교체 같은 동일 길이 수정이 조용히 빠질 수 있다.
+#   제거하면 시각까지 비교하므로 매번 전량에 가깝게 재전송되지만, 전체가 2.3MB 라
+#   수 초면 끝난다. "빠뜨리지 않는 것"이 "덜 보내는 것"보다 중요하다.
+#
+# --delete 를 넣은 이유:
+#   로컬에서 삭제된 파일이 운영에 계속 남아 있었다(예: app/views/dashboard/boss.php 등
+#   커밋 28deb85 에서 지운 4개). 로컬과 운영을 동일하게 유지하려면 삭제도 반영해야 한다.
+#   위 --exclude 대상(storage/uploads/, storage/logs/, app/config/config.local.php,
+#   database/, deploy/ …)은 mirror 범위 밖이라 --delete 의 삭제 대상이 되지 않는다.
+#   업로드 파일·운영 설정·로그는 안전하다. 반드시 dry-run 으로 삭제 목록을 먼저 확인할 것.
 cat > "$LFTP_SCRIPT" <<LFTP
 set ftp:ssl-allow no
 set ftp:passive-mode true
@@ -49,7 +78,7 @@ set net:timeout 25
 set mirror:parallel-transfer-count 3
 open -p $FTP_PORT -u $FTP_USER,$FTP_PASSWORD $FTP_HOST
 mkdir -f -p $FTP_REMOTE_PATH
-mirror --reverse --verbose --no-perms --ignore-time $DRY_FLAG \
+mirror --reverse --verbose --no-perms --delete $DRY_FLAG \
   --exclude-glob .git/ --exclude .gitignore \
   --exclude deploy/ --exclude database/ --exclude scripts/ --exclude docs/ \
   --exclude .superpowers/ --exclude .devdb/ --exclude .claude/ --exclude .vscode/ \
@@ -68,7 +97,18 @@ if [ -n "$DRY_FLAG" ]; then
   # dry-run 에서는 mirror 목록만 의미 있음 — put/mkdir 는 실제 수행되므로 제거
   sed -i '' -e '/^mkdir -f -p .*storage/d' -e '/^put /d' "$LFTP_SCRIPT"
 fi
-lftp -f "$LFTP_SCRIPT" 2>&1 | tee "$LOG" | grep -viE 'Transferring|already' || true
+# 마스킹은 tee 앞에 둔다 — 로그 파일에도 평문이 남지 않아야 한다.
+lftp -f "$LFTP_SCRIPT" 2>&1 | mask_secrets | tee "$LOG" | grep -viE 'Transferring|already' || true
+chmod 600 "$LOG" 2>/dev/null || true
+
+echo "== 전송 요약 =="
+printf "  업로드 %s건 · 삭제 %s건\n" \
+    "$(grep -ci '^Transferring file' "$LOG" || true)" \
+    "$(grep -ciE '^Removing old file|^rm ' "$LOG" || true)"
+if grep -qiE '^Removing old file|^rm ' "$LOG"; then
+    echo "  삭제 대상:"
+    grep -iE '^Removing old file|^rm ' "$LOG" | sed 's/^/    /'
+fi
 echo "== 완료($MODE). 로그: $LOG =="
 if [ -z "$DRY_FLAG" ]; then
   echo "운영 config(app/config/config.local.php) 업로드 완료. 서비스: $SERVICE_URL"
