@@ -388,7 +388,7 @@ class QuotesController
             Response::error('이미 계약으로 전환된 견적은 삭제할 수 없습니다.', 400);
         }
         Db::update('quotes', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
-        Audit::log('quote_delete', 'quotes', $id, $quote, null);
+        Audit::log('trash_move', 'quotes', $id, $quote, null);
         if (Response::wantsJson()) {
             Response::json(['id' => $id]);
         }
@@ -443,7 +443,7 @@ class QuotesController
             Response::redirect('quotes.index', ['trash' => 1], $reason, 'error');
         }
         self::purgeQuote($id);
-        Audit::log('quote_purge', 'quotes', $id, $row, null);
+        Audit::log('trash_purge', 'quotes', $id, $row, null);
         Response::redirect('quotes.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
@@ -457,7 +457,7 @@ class QuotesController
             Response::redirect('quotes.index', ['trash' => 1], '휴지통에 있는 견적만 복원할 수 있습니다.', 'error');
         }
         Db::update('quotes', ['deleted_at' => null], 'id = :id', [':id' => $id]);
-        Audit::log('quote_restore', 'quotes', $id, $row, null);
+        Audit::log('trash_restore', 'quotes', $id, $row, null);
         Response::redirect('quotes.index', ['trash' => 1], '견적이 복원되었습니다.');
     }
 

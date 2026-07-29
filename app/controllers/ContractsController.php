@@ -943,7 +943,7 @@ class ContractsController
             Response::redirect('contracts.show', ['id' => $id], $reason, 'error');
         }
         Db::update('contracts', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
-        Audit::log('contract_delete', 'contracts', $id, $contract, null);
+        Audit::log('trash_move', 'contracts', $id, $contract, null);
         Response::redirect('contracts.index', [], '계약이 휴지통으로 이동되었습니다.');
     }
 
@@ -982,7 +982,7 @@ class ContractsController
             Response::redirect('contracts.index', ['trash' => 1], $reason, 'error');
         }
         Db::run("DELETE FROM contracts WHERE id = :id", [':id' => $id]); // 상태 이력(contract_status_history)은 FK CASCADE
-        Audit::log('contract_purge', 'contracts', $id, $row, null);
+        Audit::log('trash_purge', 'contracts', $id, $row, null);
         Response::redirect('contracts.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
@@ -996,7 +996,7 @@ class ContractsController
             Response::redirect('contracts.index', ['trash' => 1], '휴지통에 있는 계약만 복원할 수 있습니다.', 'error');
         }
         Db::update('contracts', ['deleted_at' => null], 'id = :id', [':id' => $id]);
-        Audit::log('contract_restore', 'contracts', $id, $row, null);
+        Audit::log('trash_restore', 'contracts', $id, $row, null);
         Response::redirect('contracts.index', ['trash' => 1], '계약이 복원되었습니다.');
     }
 

@@ -512,7 +512,7 @@ class CustomersController
             Response::error($reason, 409);
         }
         Db::update('customers', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
-        Audit::log('customer.delete', 'customers', $id, $before, null);
+        Audit::log('trash_move', 'customers', $id, $before, null);
 
         if (Response::wantsJson()) {
             Response::json(['id' => $id]);

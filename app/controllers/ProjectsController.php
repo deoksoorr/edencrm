@@ -771,7 +771,7 @@ class ProjectsController
             Response::redirect('projects.index', [], '프로젝트를 찾을 수 없습니다.', 'error');
         }
         Db::update('projects', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
-        Audit::log('project_delete', 'project', $id, $before, null);
+        Audit::log('trash_move', 'projects', $id, $before, null);
         Response::redirect('projects.index', [], '프로젝트가 휴지통으로 이동되었습니다.');
     }
 
@@ -830,7 +830,7 @@ class ProjectsController
             Response::redirect('projects.index', ['trash' => 1], $reason, 'error');
         }
         Db::run("DELETE FROM projects WHERE id = :id", [':id' => $id]); // 이력·게이지·메모는 FK CASCADE
-        Audit::log('project_purge', 'project', $id, $row, null);
+        Audit::log('trash_purge', 'projects', $id, $row, null);
         Response::redirect('projects.index', ['trash' => 1], '완전삭제되었습니다.');
     }
 
@@ -848,7 +848,7 @@ class ProjectsController
             Response::redirect('projects.index', ['trash' => 1], $reason, 'error');
         }
         Db::update('projects', ['deleted_at' => null], 'id = :id', [':id' => $id]);
-        Audit::log('project_restore', 'project', $id, $row, null);
+        Audit::log('trash_restore', 'projects', $id, $row, null);
         Response::redirect('projects.index', ['trash' => 1], '프로젝트가 복원되었습니다.');
     }
 

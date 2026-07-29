@@ -373,7 +373,7 @@ class PipelineController
         $this->assertAccess($lead);
 
         Db::update('leads', ['deleted_at' => date('Y-m-d H:i:s')], 'id = :id', [':id' => $id]);
-        Audit::log('lead.delete', 'leads', $id, $lead, null);
+        Audit::log('trash_move', 'leads', $id, $lead, null);
 
         if (Response::wantsJson()) { Response::json(['id' => $id]); }
         Response::redirect('pipeline.index', [], '영업기회가 휴지통으로 이동되었습니다.');
