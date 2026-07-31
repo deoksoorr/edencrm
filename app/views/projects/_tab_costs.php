@@ -159,8 +159,10 @@
           <option value="draft">임시 저장</option>
           <option value="pending">확인 대기</option>
         </select></div>
-      <div class="field"><label class="field-label">내용/자재명</label>
-        <input type="text" name="item_name" class="input" placeholder="예: 수성 외부용 상도 페인트 / 현장 시공(도장)"></div>
+      <div class="field"><label class="field-label">내용/자재명<span class="req">*</span></label>
+        <input type="text" name="item_name" class="input" required
+               placeholder="예: 수성 외부용 상도 페인트 / 현장 시공(도장)"
+               title="무엇에 쓴 비용인지 — 목록·CSV·증빙 대조의 기준이 됩니다"></div>
       <div class="field"><label class="field-label">규격</label>
         <input type="text" name="spec" class="input" placeholder="예: KCC 숲으로 18L"></div>
       <div class="field"><label class="field-label">공급처 <span class="muted">(자재비)</span></label>
@@ -184,8 +186,9 @@
         <div class="flex items-center gap-8">
           <input type="number" name="work_days" class="input" step="0.5" min="0" placeholder="일수" title="작업 일수 — 일수×일당 자동계산">
           <input type="number" name="work_hours" class="input" step="0.5" min="0" placeholder="시간" title="작업 시간 — 일수 없을 때 시간×시급 자동계산"></div></div>
-      <div class="field"><label class="field-label">금액 <span class="muted">(자동계산 — 수동 입력 시 사유 필요)</span></label>
-        <input type="number" name="amount" class="input" min="0" placeholder="수량×단가 또는 일수×일당" title="자재비 = 수량×단가, 인건비 = 일수(시간)×단가. 비워두면 자동계산값 저장"></div>
+      <div class="field"><label class="field-label">금액<span class="req">*</span> <span class="muted">(또는 수량×단가 입력 시 자동계산)</span></label>
+        <input type="number" name="amount" class="input" min="0" placeholder="수량×단가 또는 일수×일당"
+               title="금액을 직접 넣거나, 자재비는 수량×단가 · 인건비는 일수(시간)×단가를 넣으면 자동계산됩니다. 둘 다 비우면 저장되지 않습니다."></div>
       <div class="field" id="adjustReasonField" style="display:none"><label class="field-label">조정 사유<span class="req">*</span></label>
         <input type="text" name="adjust_reason" class="input" placeholder="자동계산과 다른 금액인 이유"></div>
       <div class="field"><label class="field-label">증빙 첨부 <span class="muted">(영수증·세금계산서)</span></label>

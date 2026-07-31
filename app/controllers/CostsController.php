@@ -17,11 +17,15 @@ class CostsController
      * 취소(cancelled)된 건은 제외해 '취소 후 같은 값으로 재등록' 흐름을 막지 않는다.
      */
     public static function findRecentDuplicateCost(
-        int $projectId, string $category, string $itemName, $amount, ?string $spentDate
+        int $projectId, string $category, ?string $itemName, $amount, ?string $spentDate
     ): ?int {
+        // itemName 은 null 일 수 있다(내용 미입력). non-nullable 타입힌트였던 탓에
+        // 내용 없이 저장하면 TypeError 로 500 이 났다(2026-07-31 운영 장애).
+        // 비교도 = 가 아니라 <=> 를 써야 한다 — NULL = NULL 은 참이 아니라 NULL 이라
+        // 내용 없는 지출끼리는 중복 판정이 아예 동작하지 않았다.
         $row = Db::one(
             "SELECT id FROM costs
-              WHERE project_id = :p AND category = :c AND item_name = :i
+              WHERE project_id = :p AND category = :c AND (item_name <=> :i)
                 AND amount = :a AND (spent_date <=> :d)
                 AND cost_status <> 'cancelled'
                 AND created_at > DATE_SUB(NOW(), INTERVAL :sec SECOND)
@@ -87,6 +91,16 @@ class CostsController
         }
         if (!isset(CostService::CATEGORIES[$category])) {
             $this->fail($projectId, '비용 구분을 선택하세요 (자재비/인건비/외주비/장비비/운송비/식비/폐기물 처리비/기타).');
+        }
+        // 발생일은 화면에서 required 인데 서버 검증이 없었다. 브라우저를 우회하면
+        // 날짜 없는 지출이 저장되고, 그러면 기간 필터·월별 집계에서 통째로 빠진다.
+        if ($spentDate === null) {
+            $this->fail($projectId, '발생일을 입력하세요.');
+        }
+        // 내용/자재명 필수 — 없으면 나중에 이 지출이 무엇이었는지 아무도 알 수 없다.
+        // 목록·CSV 에 "-" 로만 남고 증빙 대조도 불가능하다(운영 기존 4건이 그 상태였다).
+        if ($itemName === null) {
+            $this->fail($projectId, '내용/자재명을 입력하세요. (예: 수성 외부용 상도 페인트 / 현장 시공)');
         }
         if (!in_array($costStatus, self::SAVABLE_STATUSES, true)) {
             $this->fail($projectId, '비용 상태는 임시 저장/확인 대기/확정 중 하나여야 합니다 (취소는 취소 버튼 사용).');
