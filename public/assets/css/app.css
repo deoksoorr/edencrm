@@ -593,8 +593,9 @@ a.ws-card:hover{text-decoration:none;border-color:#cbd5e1;box-shadow:var(--shado
   .att-name{grid-row:1;grid-column:1}
   .att-meta{grid-row:1;grid-column:2}
   .att-bar{grid-row:2;grid-column:1/-1}
-  /* 프로젝트 상세 요약 금액 블록 — 2칸 고정(150px×2 + 28px 패딩)이 정보 블록을 밀어냄 */
-  .proj-summary.ps-grouped{flex-direction:column}
+  /* 프로젝트 상세 요약 금액 블록 — 2칸 고정(150px×2 + 28px 패딩)이 정보 블록을 밀어냄.
+     세로 스택 전환은 r6-uifix 절(.proj-summary.ps-grouped 기본 선언 바로 뒤)에서 한다 —
+     미디어쿼리는 우선순위를 올리지 않아 여기서 display 를 바꿔 봐야 뒤쪽 선언에 덮인다. */
   .ps-grouped .ps-money{grid-template-columns:repeat(2,minmax(0,1fr));border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
   /* 3칸 반기 배치는 태블릿에서 2칸(1100 규칙이 있으나 사이드바 폭을 감안해 앞당김) */
   .fin-flex{grid-template-columns:minmax(0,1fr)}
@@ -889,9 +890,34 @@ a.kanban-card.kc-link:hover{box-shadow:var(--shadow-hover);border-color:#cbd5e1}
 .ps-grouped .ps-info{flex:1 1 400px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;align-content:start}
 .ps-grouped .ps-money{flex:0 1 auto;display:grid;grid-template-columns:repeat(2,minmax(150px,auto));gap:14px 28px;padding-left:28px;border-left:1px solid var(--line);align-content:start}
 .ps-money .kv{align-items:flex-end;text-align:right}
+/* 1024 이하 세로 스택 — flex-direction:column 이 아니라 grid 로 쌓는다.
+   세로 flex 로 접으면 주축이 가로→세로로 바뀌면서 위 .ps-info 의 flex-basis:400px 가
+   '최소 폭'이 아니라 '최소 높이'로 해석돼, 내용이 155px 인데도 블록이 375~400px 를
+   차지했다(실측 빈 공간 220px — 상세 화면 중간이 통째로 비어 보이던 원인).
+   grid 는 행 높이가 기본 auto(=내용 높이)라 이 부류의 오해석이 아예 생기지 않는다.
+   ※ 이 블록은 반드시 위 기본 선언(.proj-summary.ps-grouped{display:flex…})보다 뒤에 와야
+     한다 — 미디어쿼리는 우선순위를 올리지 않으므로 앞쪽에 두면 그대로 덮인다. */
+@media(max-width:1024px){
+  .proj-summary.ps-grouped{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+}
 @media(max-width:720px){
-  .proj-summary.ps-grouped{flex-direction:column}
-  .ps-grouped .ps-money{grid-template-columns:minmax(0,1fr);border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
+  .ps-grouped .ps-money{grid-template-columns:minmax(0,1fr);gap:0;border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:4px}
+  /* 좁은 화면에서는 라벨과 금액을 한 줄에 둔다(영수증 형태).
+     세로로 쌓으면 4개 항목이 8줄이 되고, 값만 오른쪽 끝에 떨어져 바로 위 정보 블록(왼쪽 정렬)과
+     축이 어긋나 "제각각"으로 보인다. 한 줄 배치는 높이도 221→약 140px 로 줄어든다. */
+  .ps-grouped .ps-money .kv{flex-direction:row;align-items:baseline;justify-content:space-between;
+    gap:12px;padding:9px 0;border-bottom:1px dashed var(--line-2);text-align:left}
+  .ps-grouped .ps-money .kv:last-child{border-bottom:0}
+  .ps-grouped .ps-money .kv-value{font-size:15px;text-align:right}
+  /* 상세 헤더 액션 — flex 줄바꿈은 라벨 길이대로 폭이 제각각이라 들쭉날쭉하게 접힌다.
+     auto-fit 그리드로 칸을 균등하게 나눠 폭에 맞는 개수만큼 가지런히 놓는다.
+     form 은 display:contents 로 껍데기만 빼서 안의 '삭제' 버튼이 직접 칸을 차지하게 한다. */
+  .detail-head{gap:10px}
+  /* align-items 를 명시한다 — 기본(normal)이면 <button> 만 행 안에서 11px 아래로 내려앉아
+     같은 줄의 <a class="btn"> 와 어긋난다(실측). 높이가 확정된 버튼들이라 stretch 로 충분하다. */
+  .detail-head .page-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;width:100%;align-items:stretch}
+  .detail-head .page-actions form{display:contents}
+  .detail-head .page-actions .btn{width:100%;padding:0 10px}
 }
 
 /* === r6-attend === */
@@ -1112,6 +1138,11 @@ button.pc-ct-badge:hover{background:var(--warn);color:#fff}
     display:inline-block;min-width:40px;padding-top:11px;padding-bottom:11px;margin-top:-11px;margin-bottom:-11px}
   /* 정렬 링크는 아이콘과 함께 배치되므로 flex 유지 */
   table.data th a{display:inline-flex}
+  /* 버튼형 링크(a.btn)는 이미 44px 히트영역을 갖는다. 그런데 위 인라인 링크 확장 규칙이
+     .detail-head a · table.data a · .kv-value a 로 이들까지 잡아 padding 11px + margin -11px 를
+     덧씌웠고, 그 결과 같은 줄의 <button> 보다 11px 위로 떠서 버튼 줄이 어긋났다(실측).
+     상세 헤더에서 '목록으로'·'수정'만 위로 밀려 보이던 원인이다. 버튼은 원래 규격대로 둔다. */
+  a.btn{display:inline-flex;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0}
   /* 줄바꿈 셀(.wrap)은 행 높이가 가변이라 확장폭을 줄여 겹침을 막는다 */
   table.data td.wrap a{padding-top:8px;padding-bottom:8px;margin-top:-8px;margin-bottom:-8px}
 
