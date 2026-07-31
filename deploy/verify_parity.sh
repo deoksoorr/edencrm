@@ -46,7 +46,9 @@ if [ -z "$SNAP" ]; then
         echo "운영 파일 수신 실패(rc=$RC) — 대조 불가" >&2
         exit 2
     fi
-    SNAP=$(echo "$OUT" | grep -m1 '^RESULT ' | sed -n 's/.*dest=\([^ ]*\).*/\1/p')
+    # 경로에 공백이 있다("…/claude code/…"). [^ ]* 로 뽑으면 첫 공백에서 잘리므로
+    # dest= 뒤부터 다음 키(" files=") 직전까지를 통째로 취한다.
+    SNAP=$(echo "$OUT" | grep -m1 '^RESULT ' | sed -n 's/.*dest=\(.*\) files=.*/\1/p')
     [ -d "${SNAP:-}" ] || { echo "스냅샷 경로 확인 실패" >&2; exit 2; }
     echo "  수신: $(basename "$SNAP")"
 fi
