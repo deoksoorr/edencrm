@@ -53,7 +53,8 @@ mask_secrets() {
 echo "== 업로드 (mirror --reverse --delete$( [ -n "$DRY_FLAG" ] && echo ' · dry-run')) =="
 LOG="$SCRIPT_DIR/deploy_$(date +%Y%m%d-%H%M%S).log"
 LFTP_SCRIPT="$(mktemp)"; chmod 600 "$LFTP_SCRIPT"
-trap 'rm -f "$LFTP_SCRIPT"' EXIT
+TMP_RM="$(mktemp)"; TMP_TX="$(mktemp)"; TMP_DEL="$(mktemp)"   # 전송 요약 계산용
+trap 'rm -f "$LFTP_SCRIPT" "$TMP_RM" "$TMP_TX" "$TMP_DEL"' EXIT
 # 제외 목록: 개발 전용·비밀·DB 산출물 전부. app/config/config.local.php(로컬 비밀) 제외 필수.
 #
 # --ignore-time 을 뺀 이유 (2026-07-29):
@@ -102,12 +103,22 @@ lftp -f "$LFTP_SCRIPT" 2>&1 | mask_secrets | tee "$LOG" | grep -viE 'Transferrin
 chmod 600 "$LOG" 2>/dev/null || true
 
 echo "== 전송 요약 =="
-printf "  업로드 %s건 · 삭제 %s건\n" \
-    "$(grep -ci '^Transferring file' "$LOG" || true)" \
-    "$(grep -ciE '^Removing old file|^rm ' "$LOG" || true)"
-if grep -qiE '^Removing old file|^rm ' "$LOG"; then
-    echo "  삭제 대상:"
-    grep -iE '^Removing old file|^rm ' "$LOG" | sed 's/^/    /'
+# lftp 는 **덮어쓰기** 때도 "Removing old file" 을 먼저 찍는다(기존 파일을 지우고 올림).
+# 그래서 그 줄을 그대로 세면 이번처럼 3개 파일을 갱신했을 뿐인데 "삭제 3건"이 된다.
+# 삭제 목록은 배포 전 사람이 마지막으로 눈으로 확인하는 관문이라, 매번 덮어쓰기가 섞여
+# 나오면 곧 안 읽게 되고 진짜 삭제 1건이 그 속에 묻힌다 — 관문 자체가 무력해진다.
+# 따라서 "지웠는데 다시 올리지 않은 경로"만 진짜 삭제로 본다.
+lpath() { sed -nE "s/^[^\`]*\`(.*)'.*$/\1/p"; }
+grep -iE '^Removing old file' "$LOG" | lpath | sort -u > "$TMP_RM"
+grep -iE '^Transferring file|^(get|put) '  "$LOG" | lpath | sort -u > "$TMP_TX"
+comm -23 "$TMP_RM" "$TMP_TX" > "$TMP_DEL"
+NTX=$(grep -ci '^Transferring file' "$LOG" || true)
+NDEL=$(grep -c . "$TMP_DEL" || true)
+NOVR=$(comm -12 "$TMP_RM" "$TMP_TX" | grep -c . || true)
+printf "  업로드 %s건(덮어쓰기 %s) · 삭제 %s건\n" "$NTX" "$NOVR" "$NDEL"
+if [ "$NDEL" -gt 0 ]; then
+    echo "  삭제 대상(운영에서 사라짐):"
+    sed 's/^/    /' "$TMP_DEL"
 fi
 echo "== 완료($MODE). 로그: $LOG =="
 if [ -z "$DRY_FLAG" ]; then
