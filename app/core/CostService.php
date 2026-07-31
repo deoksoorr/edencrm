@@ -22,6 +22,49 @@ class CostService
         'etc'         => '기타',
     ];
 
+    /**
+     * 구분별 입력 가이드 — 화면 안내와 서버 오류 문구가 같은 문장을 쓰도록 여기 한 곳에 둔다.
+     * 따로 관리하면 한쪽만 바뀌어 "화면은 이렇게 하라는데 서버는 다른 걸 요구"하는
+     * 상태가 된다(2026-07-31 지출 장애가 정확히 그 형태였다).
+     *
+     * qty_label  : 수량 칸에 무엇을 넣는지
+     * unit_label : 단가 칸에 무엇을 넣는지
+     * example    : 실제 입력 예시
+     * hint       : 한 줄 요약(구분 선택 시 화면에 표시)
+     */
+    public const CATEGORY_GUIDE = [
+        'material'    => ['qty_label' => '자재 수량', 'unit_label' => '자재 단가',
+                          'example'   => '페인트 2말 × 45,000원',
+                          'hint'      => '수량 × 단가 — 자재를 몇 개 샀고 개당 얼마인지'],
+        'labor'       => ['qty_label' => '작업 일수(또는 시간)', 'unit_label' => '일당(또는 시급)',
+                          'example'   => '3일 × 200,000원',
+                          'hint'      => '일수 × 일당 — 수량 대신 아래 「일수/시간」 칸을 채우세요'],
+        'outsourcing' => ['qty_label' => '건수(보통 1)', 'unit_label' => '건당 금액',
+                          'example'   => '도장 외주 1식 × 5,000,000원',
+                          'hint'      => '건수 × 건당 금액 — 일괄 계약이면 수량 1, 단가에 총액'],
+        'equipment'   => ['qty_label' => '대수 또는 일수', 'unit_label' => '대당·일당 임대료',
+                          'example'   => '고소작업대 2일 × 150,000원',
+                          'hint'      => '대수(또는 일수) × 단가'],
+        'transport'   => ['qty_label' => '운행 횟수', 'unit_label' => '회당 운임',
+                          'example'   => '자재 운반 3회 × 50,000원',
+                          'hint'      => '횟수 × 회당 운임'],
+        'meal'        => ['qty_label' => '인원수', 'unit_label' => '1인당 금액',
+                          'example'   => '인부 4명 × 12,000원',
+                          'hint'      => '인원 × 1인당 금액'],
+        'waste'       => ['qty_label' => '처리 수량(보통 1)', 'unit_label' => '처리 단가',
+                          'example'   => '폐페인트 처리 1식 × 300,000원',
+                          'hint'      => '수량 × 단가 — 일괄 처리면 수량 1, 단가에 총액'],
+        'etc'         => ['qty_label' => '수량(보통 1)', 'unit_label' => '단가',
+                          'example'   => '기타 비용 1건 × 80,000원',
+                          'hint'      => '수량 × 단가 — 단건이면 수량 1, 단가에 총액'],
+    ];
+
+    /** 구분의 입력 가이드. 알 수 없는 구분이면 기타 기준으로 돌려준다. */
+    public static function guide(string $category): array
+    {
+        return self::CATEGORY_GUIDE[$category] ?? self::CATEGORY_GUIDE['etc'];
+    }
+
     /** 비용 상태 키 → 한글 라벨. 원가 총액에는 confirmed 만 포함. */
     public const STATUSES = [
         'draft'     => '임시 저장',

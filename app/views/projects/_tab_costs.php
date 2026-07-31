@@ -153,6 +153,12 @@
             <option value="<?= e($ck) ?>"><?= e($cl) ?></option>
           <?php endforeach; ?>
         </select></div>
+      <?php /* 구분을 고르면 무엇을 어떻게 넣는지 한 줄로 안내한다. 문구는 서버 오류 메시지와
+              같은 출처(CostService::CATEGORY_GUIDE)를 써서 화면과 서버가 어긋나지 않게 한다. */ ?>
+      <div class="field col-span-2" id="catGuide" style="display:none">
+        <div class="muted" style="padding:8px 12px;background:#f1f5f9;border-radius:6px;line-height:1.5">
+          <b id="catGuideHint"></b> <span id="catGuideExample"></span>
+        </div></div>
       <div class="field"><label class="field-label">상태</label>
         <select name="cost_status" class="select" title="지출 총액에는 확정만 포함됩니다">
           <option value="confirmed">확정</option>
@@ -167,12 +173,12 @@
         <input type="text" name="spec" class="input" placeholder="예: KCC 숲으로 18L"></div>
       <div class="field"><label class="field-label">공급처 <span class="muted">(자재비)</span></label>
         <input type="text" name="vendor" class="input" placeholder="예: 페인트나라"></div>
-      <div class="field"><label class="field-label">수량</label>
+      <div class="field"><label class="field-label">수량<span class="req" id="qtyStar">*</span> <span class="muted" id="qtyHint"></span></label>
         <input type="number" name="qty" class="input" step="0.01" min="0" placeholder="자재 수량"></div>
       <div class="field"><label class="field-label">단위</label>
         <input type="text" name="unit" class="input" placeholder="말/EA/㎡/식"></div>
-      <div class="field"><label class="field-label">단가 <span class="muted">(인건비는 일당/시급)</span></label>
-        <input type="number" name="unit_price" class="input" min="0" placeholder="원"></div>
+      <div class="field"><label class="field-label">단가<span class="req">*</span> <span class="muted" id="unitPriceHint">(인건비는 일당/시급)</span></label>
+        <input type="number" name="unit_price" class="input" min="0" placeholder="원" required></div>
       <div class="field"><label class="field-label">작업자(직원) <span class="muted">(인건비)</span></label>
         <select name="worker_id" class="select">
           <option value="">— 직원 선택 —</option>
@@ -182,15 +188,24 @@
         </select></div>
       <div class="field"><label class="field-label">작업자명(직접 입력) <span class="muted">(외부 인력)</span></label>
         <input type="text" name="worker_name" class="input" placeholder="직원 미선택 시 이름 입력"></div>
-      <div class="field"><label class="field-label">일수 / 시간 <span class="muted">(인건비)</span></label>
+      <div class="field"><label class="field-label">일수 / 시간<span class="req" id="daysStar" style="display:none">*</span> <span class="muted">(인건비)</span></label>
         <div class="flex items-center gap-8">
           <input type="number" name="work_days" class="input" step="0.5" min="0" placeholder="일수" title="작업 일수 — 일수×일당 자동계산">
           <input type="number" name="work_hours" class="input" step="0.5" min="0" placeholder="시간" title="작업 시간 — 일수 없을 때 시간×시급 자동계산"></div></div>
-      <div class="field"><label class="field-label">금액<span class="req">*</span> <span class="muted">(또는 수량×단가 입력 시 자동계산)</span></label>
-        <input type="number" name="amount" class="input" min="0" placeholder="수량×단가 또는 일수×일당"
-               title="금액을 직접 넣거나, 자재비는 수량×단가 · 인건비는 일수(시간)×단가를 넣으면 자동계산됩니다. 둘 다 비우면 저장되지 않습니다."></div>
+      <?php /* 금액은 기본 잠금이다. costs.amount 는 projects.actual_cost 로 합산되어
+              확정 순이익과 직원 보너스까지 이어지므로, 근거(수량×단가) 없이 임의로
+              적히면 그 연쇄가 통째로 검증 불가능해진다. 영수증 실액이 계산과 다를 때만
+              체크로 열고 사유를 남긴다. */ ?>
+      <div class="field"><label class="field-label">금액 <span class="muted">(수량 × 단가 자동계산)</span></label>
+        <input type="number" name="amount" class="input" min="0" readonly
+               style="background:#f1f5f9;font-weight:600"
+               placeholder="수량과 단가를 입력하면 자동 계산됩니다"
+               title="수량 × 단가(인건비는 일수 × 일당)로 자동 계산됩니다. 영수증 금액이 다르면 아래를 체크하세요.">
+        <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
+          <input type="checkbox" id="amountManual"> 영수증 금액이 계산값과 다름 (직접 입력)
+        </label></div>
       <div class="field" id="adjustReasonField" style="display:none"><label class="field-label">조정 사유<span class="req">*</span></label>
-        <input type="text" name="adjust_reason" class="input" placeholder="자동계산과 다른 금액인 이유"></div>
+        <input type="text" name="adjust_reason" class="input" placeholder="예: 부가세 포함 / 현장 할인 / 배송비 별도"></div>
       <div class="field"><label class="field-label">증빙 첨부 <span class="muted">(영수증·세금계산서)</span></label>
         <input type="file" name="receipt" class="input" accept="image/*,.pdf,.xls,.xlsx,.hwp,.zip"></div>
       <div class="field col-span-2"><label class="field-label">메모</label>
@@ -218,15 +233,51 @@
         if (q > 0) return Math.round(q * u);
         return null;
       }
+      // 구분별 입력 가이드 — 서버 CostService::CATEGORY_GUIDE 와 같은 출처를 쓴다.
+      var GUIDE = <?= json_encode(\CostService::CATEGORY_GUIDE, JSON_UNESCAPED_UNICODE) ?>;
+      var manualBox = document.getElementById('amountManual');
+      var qtyStar = document.getElementById('qtyStar'), daysStar = document.getElementById('daysStar');
+      var qtyHint = document.getElementById('qtyHint'), upHint = document.getElementById('unitPriceHint');
+      var gWrap = document.getElementById('catGuide'),
+          gHint = document.getElementById('catGuideHint'), gEx = document.getElementById('catGuideExample');
+
+      /** 구분에 따라 안내·별표·placeholder 를 바꾼다. 인건비만 수량 대신 일수/시간을 쓴다. */
+      function applyGuide() {
+        var g = GUIDE[catEl.value] || GUIDE.etc;
+        var isLabor = catEl.value === 'labor';
+        gWrap.style.display = '';
+        gHint.textContent = g.hint;
+        gEx.textContent = ' · 예: ' + g.example;
+        qtyStar.style.display = isLabor ? 'none' : '';
+        daysStar.style.display = isLabor ? '' : 'none';
+        qtyHint.textContent = isLabor ? '(인건비는 일수/시간 사용)' : '(' + g.qty_label + ')';
+        upHint.textContent = '(' + g.unit_label + ')';
+        qty.placeholder = isLabor ? '인건비는 아래 일수/시간 입력' : g.qty_label;
+        qty.required = !isLabor;
+      }
       function toggleReason() {
         var a = autoAmount();
-        var manual = a !== null && amt.value !== '' && Number(amt.value) !== a;
+        // 수동 입력을 켰고 자동계산값과 실제로 다를 때만 사유를 요구한다.
+        var manual = manualBox.checked && a !== null && amt.value !== '' && Number(amt.value) !== a;
         reasonField.style.display = manual ? '' : 'none';
         reason.required = manual;
+        if (!manual) reason.value = '';
+      }
+      /** 금액 잠금/해제. 잠글 때는 자동계산값으로 되돌려 임의 값이 남지 않게 한다. */
+      function applyLock() {
+        amt.readOnly = !manualBox.checked;
+        amt.style.background = manualBox.checked ? '' : '#f1f5f9';
+        if (!manualBox.checked) {
+          var a = autoAmount();
+          if (a !== null) amt.value = a;
+        }
+        toggleReason();
       }
       function refresh() {
         var a = autoAmount();
-        if (a !== null) amt.value = a; // 원천 값 변경 시 자동계산값으로 갱신
+        // 잠긴 상태에서는 원천 값이 바뀔 때마다 자동계산값을 그대로 반영한다.
+        if (a !== null && !manualBox.checked) amt.value = a;
+        applyGuide();
         toggleReason();
       }
       [catEl, qty, up, days, hours].forEach(function (el) {
@@ -234,6 +285,9 @@
         el.addEventListener('change', refresh);
       });
       amt.addEventListener('input', toggleReason);
+      manualBox.addEventListener('change', applyLock);
+      applyGuide();
+      applyLock();
       // 목록 '수정' → 폼 채우기
       document.querySelectorAll('[data-cost-edit]').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -243,6 +297,14 @@
             .forEach(function (k) { var el = $(k); if (el) el.value = (c[k] === null || c[k] === undefined) ? '' : c[k]; });
           document.getElementById('costFormTitle').textContent = '비용 수정 (#' + c.id + ')';
           document.getElementById('costFormReset').style.display = '';
+          // 저장된 금액이 자동계산값과 다르면(수동으로 넣은 건) 잠금을 풀어 둔다.
+          // 그러지 않으면 폼을 여는 순간 자동계산값으로 덮여 기존 금액이 조용히 바뀐다.
+          applyGuide();
+          var savedAmt = Number(c.amount), autoNow = autoAmount();
+          manualBox.checked = (autoNow === null) || (savedAmt !== autoNow);
+          amt.readOnly = !manualBox.checked;
+          amt.style.background = manualBox.checked ? '' : '#f1f5f9';
+          amt.value = (c.amount === null || c.amount === undefined) ? '' : c.amount;
           toggleReason();
           f.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
@@ -253,7 +315,9 @@
         $('id').value = '';
         document.getElementById('costFormTitle').textContent = '비용 등록';
         resetBtn.style.display = 'none';
-        toggleReason();
+        manualBox.checked = false;   // 등록 모드로 돌아오면 금액은 다시 잠근다
+        applyGuide();
+        applyLock();
       });
     })();
     </script>

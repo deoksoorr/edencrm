@@ -102,6 +102,26 @@ class CostsController
         if ($itemName === null) {
             $this->fail($projectId, '내용/자재명을 입력하세요. (예: 수성 외부용 상도 페인트 / 현장 시공)');
         }
+
+        // ── 산출 근거 필수 ────────────────────────────────────────────────
+        // costs.amount 는 통계용 숫자가 아니다. projects.actual_cost 로 합산되어
+        // 확정 순이익(공급가액 − 실제원가)을 만들고, 그 순이익에 기여도를 곱해
+        // 직원 반기 보너스까지 이어진다. 근거 없이 금액만 적히면 그 연쇄가 통째로
+        // 검증 불가능해지므로 단가와 수량(인건비는 일수/시간)을 요구한다.
+        // 안내 문구는 CostService::CATEGORY_GUIDE 를 쓴다 — 화면에 뜨는 설명과
+        // 서버가 거절할 때의 설명이 같아야 사용자가 헷갈리지 않는다.
+        $guide = CostService::guide($category);
+        $catLabel = CostService::CATEGORIES[$category];
+        if ($unitPrice === null || $unitPrice <= 0) {
+            $this->fail($projectId, "{$catLabel}는 「{$guide['unit_label']}」를 입력하세요. ({$guide['hint']} · 예: {$guide['example']})");
+        }
+        if ($category === 'labor') {
+            if (($workDays === null || $workDays <= 0) && ($workHours === null || $workHours <= 0)) {
+                $this->fail($projectId, "인건비는 작업 일수 또는 시간을 입력하세요. ({$guide['hint']} · 예: {$guide['example']})");
+            }
+        } elseif ($qty === null || $qty <= 0) {
+            $this->fail($projectId, "{$catLabel}는 「{$guide['qty_label']}」을 입력하세요. ({$guide['hint']} · 예: {$guide['example']})");
+        }
         if (!in_array($costStatus, self::SAVABLE_STATUSES, true)) {
             $this->fail($projectId, '비용 상태는 임시 저장/확인 대기/확정 중 하나여야 합니다 (취소는 취소 버튼 사용).');
         }
