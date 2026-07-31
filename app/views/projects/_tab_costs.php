@@ -153,18 +153,20 @@
             <option value="<?= e($ck) ?>"><?= e($cl) ?></option>
           <?php endforeach; ?>
         </select></div>
-      <?php /* 구분을 고르면 무엇을 어떻게 넣는지 한 줄로 안내한다. 문구는 서버 오류 메시지와
-              같은 출처(CostService::CATEGORY_GUIDE)를 써서 화면과 서버가 어긋나지 않게 한다. */ ?>
-      <div class="field col-span-2" id="catGuide" style="display:none">
-        <div class="muted" style="padding:8px 12px;background:#f1f5f9;border-radius:6px;line-height:1.5">
-          <b id="catGuideHint"></b> <span id="catGuideExample"></span>
-        </div></div>
       <div class="field"><label class="field-label">상태</label>
         <select name="cost_status" class="select" title="지출 총액에는 확정만 포함됩니다">
           <option value="confirmed">확정</option>
           <option value="draft">임시 저장</option>
           <option value="pending">확인 대기</option>
         </select></div>
+      <?php /* 구분을 고르면 무엇을 어떻게 넣는지 한 줄로 안내한다. 문구는 서버 오류 메시지와
+              같은 출처(CostService::CATEGORY_GUIDE)를 써서 화면과 서버가 어긋나지 않게 한다.
+              전체 폭(3칸)을 쓴다 — 2칸이면 첫 행 셋째 칸이 비고 안내가 상태와 나란히 놓여
+              라벨 높이가 어긋난다. 행 하나를 통째로 쓰면 아래 입력 규칙의 머리말로 읽힌다. */ ?>
+      <div class="col-span-3" id="catGuide" style="display:none">
+        <div class="form-note">
+          <b id="catGuideHint"></b> <span class="ex" id="catGuideExample"></span>
+        </div></div>
       <div class="field"><label class="field-label">내용/자재명<span class="req">*</span></label>
         <input type="text" name="item_name" class="input" required
                placeholder="예: 수성 외부용 상도 페인트 / 현장 시공(도장)"
@@ -197,11 +199,10 @@
               적히면 그 연쇄가 통째로 검증 불가능해진다. 영수증 실액이 계산과 다를 때만
               체크로 열고 사유를 남긴다. */ ?>
       <div class="field"><label class="field-label">금액 <span class="muted">(수량 × 단가 자동계산)</span></label>
-        <input type="number" name="amount" class="input" min="0" readonly
-               style="background:#f1f5f9;font-weight:600"
-               placeholder="수량과 단가를 입력하면 자동 계산됩니다"
+        <input type="number" name="amount" class="input is-locked" min="0" readonly
+               placeholder="자동 계산됩니다"
                title="수량 × 단가(인건비는 일수 × 일당)로 자동 계산됩니다. 영수증 금액이 다르면 아래를 체크하세요.">
-        <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer">
+        <label class="check mt-8">
           <input type="checkbox" id="amountManual"> 영수증 금액이 계산값과 다름 (직접 입력)
         </label></div>
       <div class="field" id="adjustReasonField" style="display:none"><label class="field-label">조정 사유<span class="req">*</span></label>
@@ -264,9 +265,12 @@
         if (!manual) reason.value = '';
       }
       /** 금액 잠금/해제. 잠글 때는 자동계산값으로 되돌려 임의 값이 남지 않게 한다. */
+      function setLocked(locked) {
+        amt.readOnly = locked;
+        amt.classList.toggle('is-locked', locked);
+      }
       function applyLock() {
-        amt.readOnly = !manualBox.checked;
-        amt.style.background = manualBox.checked ? '' : '#f1f5f9';
+        setLocked(!manualBox.checked);
         if (!manualBox.checked) {
           var a = autoAmount();
           if (a !== null) amt.value = a;
@@ -302,8 +306,7 @@
           applyGuide();
           var savedAmt = Number(c.amount), autoNow = autoAmount();
           manualBox.checked = (autoNow === null) || (savedAmt !== autoNow);
-          amt.readOnly = !manualBox.checked;
-          amt.style.background = manualBox.checked ? '' : '#f1f5f9';
+          setLocked(!manualBox.checked);
           amt.value = (c.amount === null || c.amount === undefined) ? '' : c.amount;
           toggleReason();
           f.scrollIntoView({ behavior: 'smooth', block: 'center' });

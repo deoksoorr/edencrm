@@ -94,7 +94,9 @@ async function messageOf(client, res, projectId) {
     ['발생일 누락', { category: 'material', item_name: `${MARK}자재`, amount: '10000' }, /발생일/],
     ['비용구분 누락', { spent_date: '2026-07-31', item_name: `${MARK}자재`, amount: '10000' }, /비용 구분/],
     ['내용 누락', { category: 'material', spent_date: '2026-07-31', amount: '10000' }, /내용|자재명/],
-    ['금액·자동계산 모두 없음', { category: 'material', spent_date: '2026-07-31', item_name: `${MARK}자재` }, /금액/],
+    // 2차에서 규칙이 바뀌었다: 금액은 더 이상 단독으로 못 넣고 수량×단가가 근거다.
+    // 그래서 "금액이 없다"가 아니라 "단가가 없다"를 안내하는 게 맞다.
+    ['산출 근거(단가) 없음', { category: 'material', spent_date: '2026-07-31', item_name: `${MARK}자재` }, /단가/],
   ];
   for (const [label, payload, pattern] of required) {
     const r = await post(payload);
@@ -107,13 +109,14 @@ async function messageOf(client, res, projectId) {
   // ══ 3. 정상 저장 (회귀) ══════════════════════════════════════════════════
   section('정상 저장');
   {
+    // 2차 규칙: 금액은 수량×단가로만 들어간다. 실제 화면이 보내는 형태 그대로 검증한다.
     const r = await post({
       category: 'material', spent_date: '2026-07-31',
-      item_name: `${MARK}수성 상도 페인트`, amount: '490000',
+      item_name: `${MARK}수성 상도 페인트`, qty: '10', unit_price: '49000', amount: '490000',
     });
     const row = sql(`SELECT id, item_name, amount, cost_status FROM \`${P}costs\`
                       WHERE item_name='${MARK}수성 상도 페인트' ORDER BY id DESC LIMIT 1`);
-    chk('금액 직접 입력 저장', row.includes('490000'), row.split('\n').pop() || '(저장 안 됨)');
+    chk('수량×단가 저장', row.includes('490000'), row.split('\n').pop() || '(저장 안 됨)');
     chk('저장 후 500 아님', r.status !== 500, `HTTP ${r.status}`);
   }
   {
@@ -140,7 +143,7 @@ async function messageOf(client, res, projectId) {
   {
     const payload = {
       category: 'material', spent_date: '2026-07-31',
-      item_name: `${MARK}중복테스트`, amount: '77000',
+      item_name: `${MARK}중복테스트`, qty: '7', unit_price: '11000', amount: '77000',
     };
     await post(payload);
     const n1 = Number(sql1(`SELECT COUNT(*) FROM \`${P}costs\` WHERE item_name='${MARK}중복테스트'`));
@@ -149,7 +152,7 @@ async function messageOf(client, res, projectId) {
     chk('동일 지출 연타 시 1건만', n1 === 1 && n2 === 1, `1회차 ${n1}건 → 2회차 ${n2}건`);
 
     // 금액이 다르면 별개 지출이므로 막으면 안 된다
-    await post({ ...payload, amount: '88000' });
+    await post({ ...payload, qty: '8', amount: '88000' });
     const n3 = Number(sql1(`SELECT COUNT(*) FROM \`${P}costs\` WHERE item_name='${MARK}중복테스트'`));
     chk('금액 다르면 별건 저장', n3 === 2, `${n3}건`);
   }
